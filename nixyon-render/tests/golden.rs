@@ -131,9 +131,8 @@ fn docx_holds_the_three_package_parts_and_the_same_bytes_every_time() {
 }
 
 #[test]
-fn json_export_reads_back_to_the_same_transcript() {
-    let t = sample();
-    assert_eq!(from_json(&render_json(&t).unwrap()).unwrap(), t);
+fn json_export_matches_golden_in_the_task_format() {
+    check("export.json", &render_json(&sample()).unwrap());
 }
 
 struct Cue {
