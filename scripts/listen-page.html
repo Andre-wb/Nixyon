@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Проверка спикеров</title>
+<style>
+:root {
+  --bg: #f5f5f7; --card: #fff; --text: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7;
+  --s1: #0a84ff; --s2: #ff9f0a; --s3: #30d158; --s4: #bf5af2; --s5: #ff375f; --s6: #64d2ff; --s7: #a2845e; --s8: #8e8e93;
+  --cursor: #ff3b30;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #000; --card: #1c1c1e; --text: #f5f5f7; --muted: #98989d; --line: #38383a; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+.card { background: var(--card); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+select, button { font: inherit; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); min-height: 40px; cursor: pointer; }
+button.primary { background: var(--cursor); color: #fff; border-color: transparent; }
+audio { width: 100%; margin-top: 10px; }
+.time { font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 600; }
+.hint { color: var(--muted); font-size: 13px; }
+.lane { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: center; margin: 6px 0; }
+.lane b { font-size: 15px; }
+.track { position: relative; height: 34px; background: var(--bg); border-radius: 6px; overflow: hidden; cursor: pointer; }
+.track.over { height: 14px; }
+.seg { position: absolute; top: 0; bottom: 0; color: #fff; font-size: 12px; font-weight: 600; padding: 0 4px; white-space: nowrap; overflow: hidden; line-height: 34px; border-right: 1px solid var(--card); }
+.cur { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--cursor); pointer-events: none; }
+.win { position: absolute; top: 0; bottom: 0; border: 2px solid var(--text); border-radius: 3px; pointer-events: none; }
+.ticks { position: relative; height: 16px; margin-left: 48px; font-size: 11px; color: var(--muted); }
+.ticks span { position: absolute; transform: translateX(-50%); }
+.now { display: grid; grid-template-columns: 40px 1fr; gap: 8px; margin: 8px 0; }
+.now .txt { max-height: 4.4em; overflow: hidden; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 10px; color: #fff; font-weight: 600; font-size: 13px; margin-right: 6px; }
+textarea { width: 100%; min-height: 140px; font: 14px/1.4 ui-monospace, Menlo, monospace; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.live { min-height: 150px; font-size: 26px; line-height: 1.5; font-weight: 500; display: flex; flex-wrap: wrap; align-content: flex-end; gap: 0 8px; overflow: hidden; }
+.w { display: inline-flex; align-items: baseline; gap: 8px; opacity: 0; transform: translateY(10px); filter: blur(4px); transition: opacity .45s ease, transform .45s ease, filter .45s ease, color .3s ease; }
+.w.in { opacity: 1; transform: none; filter: none; }
+.w.now { color: var(--text); }
+.w.past { color: var(--muted); }
+.w.out { opacity: 0; transform: translateY(-10px); filter: blur(4px); transition-duration: 1.2s; }
+.w .chip { font-size: 14px; transform: translateY(-3px); }
+.w.brk { flex-basis: 100%; height: 0; }
+@media (prefers-reduced-motion: reduce) { .w { transition: none; transform: none; filter: none; } }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <div class="row">
+      <select id="rec"></select>
+      <span class="time" id="clock">00:00</span>
+      <span class="hint">Пробел: пауза. Стрелки влево и вправо: 5 с. M: отметить ошибку.</span>
+    </div>
+    <audio id="audio" controls preload="metadata"></audio>
+    <div class="row hint" id="fallback" hidden>
+      Браузер не открыл файл из Загрузок. Выберите его вручную:
+      <input type="file" id="pick" accept="audio/*">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <span class="hint">Текст по ходу записи, цвет спикера по сочетанию:</span>
+      <select id="liveCombo"></select>
+    </div>
+    <div class="live" id="live"></div>
+  </div>
+
+  <div class="card">
+    <div class="hint">Вся запись (рамка: показанное ниже окно)</div>
+    <div id="overview"></div>
+    <div class="row" style="margin-top:10px">
+      <span class="hint">Окно:</span>
+      <select id="zoom">
+        <option value="30">30 с</option>
+        <option value="60" selected>1 мин</option>
+        <option value="180">3 мин</option>
+        <option value="600">10 мин</option>
+      </select>
+    </div>
+    <div id="lanes"></div>
+    <div class="ticks" id="ticks"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="card">
+    <div class="hint">Что сейчас у каждого сочетания</div>
+    <div id="now"></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button class="primary" id="mark">Отметить ошибку (M)</button>
+      <button id="copy">Скопировать отметки</button>
+      <span class="hint" id="copied"></span>
+    </div>
+    <p class="hint">Отметка ставит текущее время. Допишите после него, что не так, например: «здесь Лена, а у всех S1». Отметки хранятся в этом браузере отдельно для каждой записи.</p>
+    <textarea id="notes" spellcheck="false"></textarea>
+  </div>
+</main>
+<script>
+const DATA = __DATA__;
+const COLORS = ["--s1","--s2","--s3","--s4","--s5","--s6","--s7","--s8"];
+const color = s => `var(${COLORS[(s - 1) % COLORS.length]})`;
+const $ = id => document.getElementById(id);
+const audio = $("audio");
+let rec = null, name = "";
+
+const fmt = t => {
+  t = Math.max(0, Math.floor(t));
+  const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+  const mm = String(m).padStart(2, "0"), ss = String(s).padStart(2, "0");
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+};
+const store = {
+  get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+
+for (const r of Object.keys(DATA.records)) {
+  const o = document.createElement("option");
+  o.value = r; o.textContent = r; $("rec").appendChild(o);
+}
+$("legend").innerHTML = Object.entries(DATA.combos).map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("");
+
+function drawTrack(el, turns, from, to, labels) {
+  const span = to - from;
+  el.innerHTML = "";
+  for (const [s, e, spk] of turns) {
+    if (e < from || s > to) continue;
+    const d = document.createElement("div");
+    d.className = "seg";
+    const a = Math.max(s, from), b = Math.min(e, to);
+    d.style.left = ((a - from) / span * 100) + "%";
+    d.style.width = Math.max(0.2, (b - a) / span * 100) + "%";
+    d.style.background = color(spk);
+    if (labels) d.textContent = "S" + spk;
+    el.appendChild(d);
+  }
+  const c = document.createElement("div");
+  c.className = "cur"; el.appendChild(c);
+  el.onclick = ev => {
+    const r = el.getBoundingClientRect();
+    audio.currentTime = from + (ev.clientX - r.left) / r.width * span;
+  };
+  return c;
+}
+
+let winFrom = -1, curEls = [], overCurs = [], winBox = null;
+
+function build() {
+  name = $("rec").value; rec = DATA.records[name];
+  $("fallback").hidden = true;
+  audio.src = rec.audio;
+  $("notes").value = store.get("notes:" + name);
+  const ov = $("overview"); ov.innerHTML = ""; overCurs = [];
+  for (const [k, turns] of Object.entries(rec.lanes)) {
+    const l = document.createElement("div"); l.className = "lane";
+    l.innerHTML = `<b>${k}</b>`;
+    const t = document.createElement("div"); t.className = "track over";
+    l.appendChild(t); ov.appendChild(l);
+    overCurs.push(drawTrack(t, turns, 0, rec.duration, false));
+  }
+  winBox = document.createElement("div"); winBox.className = "win";
+  ov.querySelector(".track").appendChild(winBox);
+  winFrom = -1; resetLive(); update();
+}
+
+function drawWindow(from) {
+  const w = +$("zoom").value, to = from + w;
+  const lanes = $("lanes"); lanes.innerHTML = ""; curEls = [];
+  for (const [k, turns] of Object.entries(rec.lanes)) {
+    const l = document.createElement("div"); l.className = "lane";
+    l.innerHTML = `<b>${k}</b>`;
+    const t = document.createElement("div"); t.className = "track";
+    l.appendChild(t); lanes.appendChild(l);
+    curEls.push(drawTrack(t, turns, from, to, true));
+  }
+  const step = w <= 60 ? 5 : w <= 180 ? 15 : 60;
+  let html = "";
+  for (let x = Math.ceil(from / step) * step; x <= to; x += step)
+    html += `<span style="left:${(x - from) / w * 100}%">${fmt(x)}</span>`;
+  $("ticks").innerHTML = html;
+  winBox.style.left = (from / rec.duration * 100) + "%";
+  winBox.style.width = (w / rec.duration * 100) + "%";
+  winFrom = from;
+}
+
+function update() {
+  if (!rec) return;
+  const t = audio.currentTime || 0, w = +$("zoom").value;
+  if (winFrom < 0 || t < winFrom || t > winFrom + w * 0.85) drawWindow(Math.max(0, t - w * 0.15));
+  for (const c of curEls) c.style.left = ((t - winFrom) / w * 100) + "%";
+  for (const c of overCurs) c.style.left = (t / rec.duration * 100) + "%";
+  $("clock").textContent = fmt(t);
+  let html = "";
+  for (const [k, turns] of Object.entries(rec.lanes)) {
+    const cur = turns.find(x => x[0] <= t && t <= x[1]);
+    html += `<div class="now"><b>${k}</b><div class="txt">` +
+      (cur ? `<span class="chip" style="background:${color(cur[2])}">S${cur[2]}</span>${fmt(cur[0])}-${fmt(cur[1])}` : `<span class="hint">тишина</span>`) +
+      `</div></div>`;
+  }
+  const k = Object.keys(DATA.combos)[liveCombo];
+  const b = rec.lanes[k] && rec.lanes[k].find(x => x[0] <= t && t <= x[1]);
+  if (b) html += `<p class="hint">Текст реплики ${k}: ${b[3].replace(/</g, "&lt;").slice(0, 600)}</p>`;
+  $("now").innerHTML = html;
+}
+
+const SHOW_SEC = 9, FADE_SEC = 6;
+let liveEls = new Map(), liveCombo = 1;
+for (const [i, k] of Object.keys(DATA.combos).entries()) {
+  const o = document.createElement("option");
+  o.value = i; o.textContent = k; if (i === DATA.liveCombo) o.selected = true;
+  $("liveCombo").appendChild(o);
+}
+liveCombo = +$("liveCombo").value;
+function resetLive() { liveEls = new Map(); $("live").innerHTML = ""; }
+function firstWordAfter(t) {
+  const w = rec.words; let lo = 0, hi = w.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (w[m][0] < t) lo = m + 1; else hi = m; }
+  return lo;
+}
+function live() {
+  if (!rec || !rec.words) return;
+  const t = audio.currentTime || 0, box = $("live");
+  const from = firstWordAfter(t - SHOW_SEC), to = firstWordAfter(t + 0.001);
+  for (const [i, el] of liveEls) {
+    if (i < from || i >= to) { el.remove(); liveEls.delete(i); }
+  }
+  let prev = null;
+  for (let i = from; i < to; i++) {
+    const [s, e, text, spks] = rec.words[i];
+    const spk = spks[liveCombo];
+    let el = liveEls.get(i);
+    if (!el) {
+      el = document.createElement("span");
+      el.className = "w";
+      const before = i > 0 ? rec.words[i - 1] : null;
+      const newSpeaker = !before || before[3][liveCombo] !== spk || s - before[1] > 1.5;
+      if (newSpeaker && i !== from) {
+        const br = document.createElement("span"); br.className = "w brk"; el.brk = br;
+      }
+      el.innerHTML = (newSpeaker ? `<span class="chip" style="background:${spk ? color(spk) : "var(--muted)"}">${spk ? "S" + spk : "?"}</span>` : "") +
+        `<span>${text.replace(/</g, "&lt;")}</span>`;
+      let next = null;
+      for (let j = i + 1; j < to; j++) if (liveEls.has(j)) { next = liveEls.get(j); break; }
+      const anchor = next ? (next.brk || next) : null;
+      if (el.brk) box.insertBefore(el.brk, anchor);
+      box.insertBefore(el, anchor);
+      liveEls.set(i, el);
+      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("in")));
+    }
+    el.classList.toggle("now", s <= t && t <= e + 0.3);
+    el.classList.toggle("past", t > e + 0.3);
+    el.classList.toggle("out", s < t - FADE_SEC);
+    prev = el;
+  }
+  for (const b of box.querySelectorAll(".brk")) {
+    if (![...liveEls.values()].some(x => x.brk === b)) b.remove();
+  }
+}
+function loop() { live(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+$("liveCombo").onchange = () => { liveCombo = +$("liveCombo").value; resetLive(); };
+audio.onseeked = () => resetLive();
+
+function mark() {
+  const ta = $("notes");
+  const line = fmt(audio.currentTime) + " ";
+  ta.value = (ta.value && !ta.value.endsWith("\n") ? ta.value + "\n" : ta.value) + line;
+  store.set("notes:" + name, ta.value);
+  ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+
+$("rec").onchange = build;
+$("zoom").onchange = () => { winFrom = -1; update(); };
+audio.ontimeupdate = update;
+audio.onerror = () => { if (audio.error && audio.readyState === 0) $("fallback").hidden = false; };
+audio.onloadedmetadata = () => { $("fallback").hidden = true; };
+$("pick").onchange = e => { const f = e.target.files[0]; if (f) { audio.src = URL.createObjectURL(f); $("fallback").hidden = true; } };
+$("mark").onclick = mark;
+$("notes").oninput = () => store.set("notes:" + name, $("notes").value);
+$("copy").onclick = async () => {
+  const text = "# " + name + "\n" + $("notes").value;
+  try { await navigator.clipboard.writeText(text); $("copied").textContent = "Скопировано"; }
+  catch (e) { $("notes").select(); document.execCommand("copy"); $("copied").textContent = "Скопировано"; }
+};
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
+  if (e.code === "Space") { e.preventDefault(); audio.paused ? audio.play() : audio.pause(); }
+  else if (e.code === "ArrowLeft") audio.currentTime -= 5;
+  else if (e.code === "ArrowRight") audio.currentTime += 5;
+  else if (e.code === "KeyM") { e.preventDefault(); mark(); }
+});
+setInterval(() => { if (!audio.paused) update(); }, 200);
+build();
+</script>
+</body>
+</html>

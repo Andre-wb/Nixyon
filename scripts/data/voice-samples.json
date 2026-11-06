@@ -1,0 +1,46 @@
+{
+  "samples": [
+    {
+      "name": "gav",
+      "clips": [
+        "voxforge/gav-20170207-bfb/wav/ru_0043.wav",
+        "voxforge/gav-20170207-bfb/wav/ru_0044.wav"
+      ]
+    },
+    {
+      "name": "kalan",
+      "clips": [
+        "voxforge/kalan-20100212-ddg/wav/ru_0060.wav",
+        "voxforge/kalan-20100212-ddg/wav/ru_0061.wav"
+      ]
+    },
+    {
+      "name": "polazhenko",
+      "clips": [
+        "voxforge/polazhenko-20140825-cvh/wav/ru_0003.wav",
+        "voxforge/polazhenko-20140825-cvh/wav/ru_0004.wav"
+      ]
+    },
+    {
+      "name": "snoop",
+      "clips": [
+        "voxforge/snoop-20110506-chl/wav/ru_0034.wav",
+        "voxforge/snoop-20110506-chl/wav/ru_0035.wav"
+      ]
+    },
+    {
+      "name": "uvgeek",
+      "clips": [
+        "voxforge/uvgeek-20150518-rib/wav/ru_0032.wav",
+        "voxforge/uvgeek-20150518-rib/wav/ru_0033.wav"
+      ]
+    },
+    {
+      "name": "zend",
+      "clips": [
+        "voxforge/zend-20110502-qab/wav/ru_0049.wav",
+        "voxforge/zend-20110502-qab/wav/ru_0050.wav"
+      ]
+    }
+  ]
+}
