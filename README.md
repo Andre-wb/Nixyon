@@ -203,6 +203,30 @@ Nixyon расшифровывает записи встреч на русско�
 В JSON хранится номер спикера. Подпись «Спикер N» или «Speaker N» подставляют рендеры
 на языке интерфейса, если у спикера нет имени.
 
+### Экспорт JSON
+
+Файл, который даёт экспорт в JSON, это не файл расшифровки, а формат из задания
+хакатона ([`nixyon-render/src/json.rs`](nixyon-render/src/json.rs), эталон
+[`nixyon-render/tests/golden/export.json`](nixyon-render/tests/golden/export.json)):
+
+```json
+{
+  "transcript": [
+    { "speaker_id": "speaker_1", "start_ms": 1250, "end_ms": 4380, "text": "Добрый день!" }
+  ]
+}
+```
+
+- одна запись на реплику, других полей нет;
+- `speaker_id`: `speaker_` и номер спикера из расшифровки; имя спикера в файл не идёт,
+  поэтому после переименования номер тот же, а после слияния номера могут идти с пропуском;
+- `start_ms`, `end_ms`: целые миллисекунды от начала записи, округление до ближайшего;
+  отрицательное время даёт 0, конец не раньше начала;
+- `text`: текст реплики без пробелов по краям;
+- реплики по времени начала, при равном начале в порядке расшифровки.
+
+Файл расшифровки на устройстве по-прежнему хранится во внутреннем формате выше.
+
 ## Архитектура
 
 Два Cargo-воркспейса. Корневой ([`Cargo.toml`](Cargo.toml)) содержит ядро и утилиты.
@@ -413,14 +437,11 @@ Nixyon расшифровывает записи встреч на русско�
 | Роль | Файл в `models/ort/` | Источник |
 |---|---|---|
 | `redimnet2` | `redimnet2-b6.onnx` | ReDimNet2-B6 в выгрузке [soniqo/ReDimNet2-B6-ONNX-FP32](https://huggingface.co/soniqo/ReDimNet2-B6-ONNX-FP32), вход ровно 6 с |
-| `redimnet2_b0`, `redimnet2_b1`, `redimnet2_b2`, `redimnet2_b3`, `redimnet2_b3_vb2`, `redimnet2_b6_dyn` | `redimnet2-b0.onnx` и т. д. | выгрузки весов [PalabraAI/redimnet2](https://github.com/PalabraAI/redimnet2) v1.0.0 с входом любой длины, из релиза `models-redimnet2-v1` приватного репозитория `Andre-wb/demo` |
+| `redimnet2_b0`, `redimnet2_b1`, `redimnet2_b2`, `redimnet2_b3`, `redimnet2_b3_vb2`, `redimnet2_b6_dyn` | `redimnet2-b0.onnx` и т. д. | выгрузки весов [PalabraAI/redimnet2](https://github.com/PalabraAI/redimnet2) v1.0.0 с входом любой длины, из релиза [`models-redimnet2-v1`](https://github.com/Andre-wb/Nixyon/releases/tag/models-redimnet2-v1) этого репозитория (MIT) |
 | `sortformer_int8`, `sortformer_int8_data` | `sortformer.onnx`, `sortformer.data` | [DimQ1/sortformer-4spk-v2-onnx-int8-cpu](https://huggingface.co/DimQ1/sortformer-4spk-v2-onnx-int8-cpu) |
 | `sortformer_fp32` | `sortformer-fp32.onnx` | [DimQ1/sortformer-4spk-v2-onnx-fp32-cpu](https://huggingface.co/DimQ1/sortformer-4spk-v2-onnx-fp32-cpu), 492 МБ, только при `NIXYON_SORTFORMER_FP32=1` |
 
-- Ревизии на Hugging Face и номера файлов в релизе GitHub закреплены в скрипте.
-- Файлы из приватного релиза качаются через API GitHub с токеном: `GITHUB_TOKEN`, `GH_TOKEN`
-  или `gh auth token`. Токен нужен, только когда этих файлов ещё нет на диске. Сам токен
-  не печатается и передаётся curl через stdin.
+- Ревизии на Hugging Face и релиз GitHub закреплены в скрипте вместе с SHA-256 каждого файла.
 - В основной набор и в APK из `models/ort/` попадает только `redimnet2-b6.onnx`: это модель
   голоса приложения на Android. Остальное нужно для замеров (`eval`, `quality_eval`) и
   тестов с моделями.
@@ -479,8 +500,6 @@ Zenodo. Если сумма не совпала, скрипт удаляет с�
 - Rust 1.95 через rustup, с компонентами `rustfmt` и `clippy`;
 - `curl`, `bzip2`, `tar`, `python3`;
 - `sha256sum` или `shasum`;
-- для `fetch-models.sh`: токен GitHub с доступом к приватному репозиторию `Andre-wb/demo`
-  (`GITHUB_TOKEN`, `GH_TOKEN` или вход в `gh`), пока файлы набора `models/ort/` не скачаны.
 
 Компилятор C++ нужен, потому что статическая sherpa-onnx линкуется с libstdc++.
 
@@ -611,7 +630,7 @@ scripts/build-demo-apk.sh
 
 ```sh
 NIXYON_UID=$(id -u) NIXYON_GID=$(id -g) docker compose build
-GH_TOKEN=$(gh auth token) docker compose run --rm fetch   # sherpa-onnx, llama.cpp, модели, языковая модель, записи для тестов
+docker compose run --rm fetch   # sherpa-onnx, llama.cpp, модели, языковая модель, записи для тестов
 docker compose run --rm check          # fmt, clippy и тесты ядра
 docker compose run --rm test-models    # тесты с моделями (нужны models/ и models/dialogs/)
 docker compose run --rm transcribe models models/example.wav out.json [число спикеров]
@@ -626,8 +645,6 @@ docker compose run --rm apk            # APK с моделями внутри (a
     `linux/amd64`, потому что Google выпускает Android SDK и NDK для Linux только под
     x86_64; на Apple Silicon образ работает через эмуляцию. Эмулятор Android в контейнере не
     запускается, APK ставится с хоста через `adb`.
-- **Токен GitHub.** Сервис `fetch` берёт `GH_TOKEN` из окружения хоста; `GITHUB_TOKEN` в
-  контейнер не передаётся, `gh` в образе нет.
 - **ONNX Runtime для Linux.** Сервисы ядра задают `ORT_LIB_LOCATION=/cache/target/ort-lib`:
   библиотека для Linux лежит в томе сборки, а не в смонтированном `third_party/`, где
   библиотека хоста.
@@ -729,7 +746,7 @@ cd nixyon-app/src-tauri/gen/android
 Шаги по порядку:
 
 1. Библиотеки и модели: `fetch-sherpa.sh`, `fetch-llama-cpp.sh`, `fetch-models.sh`,
-   `fetch-test-audio.sh`. Шаг получает `GITHUB_TOKEN` для набора `models/ort/`.
+   `fetch-test-audio.sh`.
 2. Форматирование ядра и приложения.
 3. Тесты скриптов.
 4. Clippy ядра.
@@ -1163,11 +1180,6 @@ scripts/llm-meeting-eval.sh <llama-server> <папка результатов> <
 `scripts/fetch-sherpa.sh`, либо сборка идёт на платформе, для которой скрипт не качает
 библиотеку (например, Windows). На такой платформе сам скрипт падает с ошибкой
 `для ... нет статических библиотек sherpa-onnx`.
-
-**`для моделей ReDimNet2 из Andre-wb/demo нужен токен GitHub`.** `fetch-models.sh` не нашёл
-токен для файлов приватного релиза. Задайте `GITHUB_TOKEN` или `GH_TOKEN` либо войдите в
-`gh auth login`; в Docker передайте `GH_TOKEN=$(gh auth token)`. Нужен доступ к
-репозиторию.
 
 **`нет роли redimnet2` в логе телефона.** На телефоне лежит набор моделей без модели голоса.
 Запустите `scripts/fetch-models.sh` и `scripts/push-models.sh` заново.

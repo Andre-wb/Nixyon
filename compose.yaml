@@ -72,12 +72,6 @@ services:
 
   fetch:
     <<: *core
-    # Токен GitHub из окружения хоста: fetch-models.sh качает им модели ReDimNet2 из релиза
-    # приватного репозитория (например GH_TOKEN=$(gh auth token) docker compose run fetch).
-    # Свой environment заменяет общий целиком, поэтому ORT_LIB_LOCATION повторён.
-    environment:
-      ORT_LIB_LOCATION: /cache/target/ort-lib
-      GH_TOKEN: ${GH_TOKEN:-}
     command:
       - sh
       - -c
