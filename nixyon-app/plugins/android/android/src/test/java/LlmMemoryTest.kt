@@ -8,14 +8,17 @@ class LlmMemoryTest {
     private val model = 2_740L shl 20
 
     @Test
-    fun modelRunsOnlyWhenTheWholeFileAndHeadroomFitIntoFreeMemory() {
-        assertTrue(LlmMemory.isEnough(model + LlmMemory.HEADROOM_BYTES, false, model))
-        assertFalse(LlmMemory.isEnough(model + LlmMemory.HEADROOM_BYTES - 1, false, model))
-        assertFalse(LlmMemory.isEnough(1_800L shl 20, false, model))
+    fun modelRunsWhenLlamaBuffersFitEvenIfTheWholeFileDoesNot() {
+        assertTrue(LlmMemory.isEnough(LlmMemory.WORKING_BYTES, false))
+        assertFalse(LlmMemory.isEnough(LlmMemory.WORKING_BYTES - 1, false))
+        // Телефон с 8 ГБ, приложения закрыты: свободно около 2,5 ГБ, меньше файла модели.
+        val phone8gb = 2_500L shl 20
+        assertTrue(phone8gb < model)
+        assertTrue(LlmMemory.isEnough(phone8gb, false))
     }
 
     @Test
     fun lowMemorySignalFromTheSystemStopsTheModelEvenWithEnoughBytes() {
-        assertFalse(LlmMemory.isEnough(8_000L shl 20, true, model))
+        assertFalse(LlmMemory.isEnough(8_000L shl 20, true))
     }
 }

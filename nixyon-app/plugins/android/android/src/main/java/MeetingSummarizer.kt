@@ -38,7 +38,7 @@ class MeetingSummarizer(private val context: Context, private val freeMemory: ()
         }
         try {
             val opened = locator.locate().use { model ->
-                checkMemory(model.size)
+                checkMemory()
                 MeetingLlmNative.nativeOpen(model.fd, model.offset, CONTEXT_TOKENS, threads())
             }
             synchronized(lock) {
@@ -71,14 +71,16 @@ class MeetingSummarizer(private val context: Context, private val freeMemory: ()
         }
     }
 
-    private fun checkMemory(modelBytes: Long) {
-        val enough = { memory: MemorySnapshot -> LlmMemory.isEnough(memory.availableBytes, memory.lowMemory, modelBytes) }
+    // Файл модели целиком в свободной памяти не нужен: llama.cpp отображает веса из файла,
+    // проверяется только то, что он выделит сам (LlmMemory).
+    private fun checkMemory() {
+        val enough = { memory: MemorySnapshot -> LlmMemory.isEnough(memory.availableBytes, memory.lowMemory) }
         val (memory, freed) = DeviceMemory.check({ DeviceMemory.read(context) }, enough, freeMemory)
         if (freed) Log.i(TAG, "для языковой модели отпущены модели речи: свободно ${memory.availableBytes shr 20} МБ")
         if (!enough(memory)) {
             throw LlmException(
                 LlmException.NO_MEMORY,
-                "свободно ${memory.availableBytes shr 20} МБ, нужно ${(modelBytes + LlmMemory.HEADROOM_BYTES) shr 20} МБ",
+                "свободно ${memory.availableBytes shr 20} МБ, нужно ${LlmMemory.WORKING_BYTES shr 20} МБ",
             )
         }
     }
