@@ -1,0 +1,43 @@
+[package]
+name = "nixyon-eval"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+nixyon-audio = { workspace = true }
+nixyon-core = { workspace = true }
+nixyon-metrics = { workspace = true }
+nixyon-pipeline = { workspace = true }
+nixyon-sherpa = { workspace = true }
+nixyon-ort = { workspace = true }
+sherpa-onnx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+symphonia = { workspace = true }
+thiserror = { workspace = true }
+
+[[bin]]
+name = "eval"
+path = "src/bin/eval.rs"
+
+[[bin]]
+name = "stream_eval"
+path = "src/bin/stream_eval.rs"
+
+[[bin]]
+name = "quality_eval"
+path = "src/bin/quality_eval.rs"
+
+[[bin]]
+name = "voice_traits_eval"
+path = "src/bin/voice_traits_eval.rs"
+
+[[bin]]
+name = "child_adult_eval"
+path = "src/bin/child_adult_eval.rs"
+
+[lints]
+workspace = true
