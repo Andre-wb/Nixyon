@@ -12,7 +12,5 @@ workspace = true
 [dependencies]
 nixyon-core = { workspace = true }
 serde = { workspace = true }
-zip = { workspace = true }
-
-[dev-dependencies]
 serde_json = { workspace = true }
+zip = { workspace = true }
