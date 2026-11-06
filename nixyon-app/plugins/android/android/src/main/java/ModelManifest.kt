@@ -1,0 +1,55 @@
+package dev.demo.nixyon.speech
+
+import org.json.JSONException
+import org.json.JSONObject
+
+class ModelFile(val path: String, val size: Long, val sha256: String) {
+    companion object {
+        // Имя файла из манифеста: только внутри папки моделей, без каталогов и «.» в начале.
+        fun isSafePath(path: String): Boolean =
+            path.isNotEmpty() && !path.contains('/') && !path.contains('\\') && !path.startsWith(".")
+    }
+}
+
+class ModelManifest(val version: String, val files: Map<ModelRole, ModelFile>) {
+    fun file(role: ModelRole): ModelFile = files.getValue(role)
+
+    val hasLiveModel: Boolean
+        get() = ModelRole.LIVE.all { it in files }
+
+    val hasDenoiser: Boolean
+        get() = ModelRole.DENOISER in files
+    val hasAgeGender: Boolean
+        get() = ModelRole.AGE_GENDER in files
+
+    companion object {
+        fun parse(text: String): ModelManifest {
+            try {
+                val root = JSONObject(text)
+                val version = root.getString("version")
+                val filesJson = root.getJSONObject("files")
+                val present = ModelRole.entries.filter { role ->
+                    if (!filesJson.has(role.key) && !role.optional) {
+                        throw ModelsException(ModelsException.BAD_MANIFEST, "нет роли ${role.key}")
+                    }
+                    filesJson.has(role.key)
+                }
+                val live = ModelRole.LIVE.count { it in present }
+                if (live != 0 && live != ModelRole.LIVE.size) {
+                    throw ModelsException(ModelsException.BAD_MANIFEST, "у живой модели есть не все файлы")
+                }
+                val files = present.associateWith { role ->
+                    val entry = filesJson.getJSONObject(role.key)
+                    val path = entry.getString("path")
+                    if (!ModelFile.isSafePath(path)) {
+                        throw ModelsException(ModelsException.BAD_MANIFEST, "недопустимый путь у роли ${role.key}")
+                    }
+                    ModelFile(path, entry.getLong("size"), entry.getString("sha256").lowercase())
+                }
+                return ModelManifest(version, files)
+            } catch (e: JSONException) {
+                throw ModelsException(ModelsException.BAD_MANIFEST, "models.json не читается: ${e.message}", e)
+            }
+        }
+    }
+}

@@ -1,0 +1,7 @@
+# В приложении крейт ort собирается только под Android и линкуется с libonnxruntime.so из
+# aar sherpa-onnx: та же библиотека попадает в APK, второй копии рантайма нет. Папку
+# заполняет scripts/fetch-sherpa.sh. force: переменная хоста из корневого конфига или
+# окружения сюда не годится, там статическая библиотека под другую платформу.
+[env]
+ORT_LIB_LOCATION = { value = "../third_party/sherpa-onnx/ort-lib-android", relative = true, force = true }
+ORT_PREFER_DYNAMIC_LINK = { value = "1", force = true }

@@ -1,0 +1,28 @@
+[package]
+name = "nixyon-android"
+description = "Tauri-плагин Nixyon для Android: запись, импорт, sherpa-onnx, экспорт"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish.workspace = true
+exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
+links = "nixyon-android"
+
+[dependencies]
+tauri = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+nixyon-core = { workspace = true }
+
+# Модель голоса через JNI считается только на Android: сборка под хост не требует ONNX Runtime.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { workspace = true }
+nixyon-ort = { workspace = true }
+
+[build-dependencies]
+tauri-plugin = { workspace = true }
+
+[lints]
+workspace = true

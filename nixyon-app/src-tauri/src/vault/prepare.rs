@@ -1,0 +1,142 @@
+//! Подготовка хранилища при первом обращении после запуска, до любой работы с файлами:
+//! остатки временных файлов удаляются, открытые файлы от прежних версий шифруются,
+//! файлы под потерянным ключом удаляются. Имена файлов записей не личные, их можно в лог.
+
+use std::path::Path;
+
+use super::files_store::FilesStore;
+use super::sealed_file::{first_chunk_opens, is_sealed, seal_in_place};
+
+/// Файлы с личными данными в `files`.
+pub const PRIVATE_FILES: [&str; 5] = [
+    "last_transcript.json",
+    "last_summary.json",
+    "last_centers.json",
+    "voices.json",
+    "settings.json",
+];
+/// Папка исходных записей Kotlin-плагина (`RecordingsDir.kt`).
+pub const RECORDINGS_DIR: &str = "recordings";
+/// Папка записей образцов голоса (`SamplesDir.kt`): образец нужен только до сохранения
+/// голоса, после перезапуска он уже не нужен.
+pub const SAMPLES_DIR: &str = "samples";
+/// Папка файлов экспорта (`exporting.rs`): файл нужен, только пока его сохраняют или
+/// отправляют; открытым до следующего экспорта он лежать не должен.
+pub const EXPORTS_DIR: &str = "exports";
+const TEMP_PREFIX: &str = "nixyon-";
+
+pub fn prepare(store: &FilesStore, cache: &Path) {
+    sweep(cache, |name| name.starts_with(TEMP_PREFIX));
+    sweep(&cache.join(EXPORTS_DIR), |_| true);
+    sweep(&store.dir().join(SAMPLES_DIR), |_| true);
+    for name in PRIVATE_FILES {
+        remove_quietly(&store.dir().join(format!("{name}.part")));
+        secure(store, &store.dir().join(name));
+    }
+    let recordings = store.dir().join(RECORDINGS_DIR);
+    sweep(&recordings, |name| name.ends_with(".part"));
+    if let Ok(entries) = std::fs::read_dir(&recordings) {
+        for entry in entries.flatten() {
+            if entry.file_type().is_ok_and(|t| t.is_file()) {
+                secure(store, &entry.path());
+            }
+        }
+    }
+}
+
+fn secure(store: &FilesStore, path: &Path) {
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    match is_sealed(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => log::error!("файл {name} не читается: {e}"),
+        Ok(true) => match first_chunk_opens(path, store.key()) {
+            Ok(true) => {}
+            Ok(false) => {
+                log::warn!("файл {name} не расшифровывается этим ключом, удаляю");
+                remove_quietly(path);
+            }
+            Err(e) => log::error!("файл {name} не проверен: {e}"),
+        },
+        Ok(false) => match seal_in_place(path, store.key()) {
+            Ok(()) => log::info!("файл {name} зашифрован"),
+            Err(e) => log::error!("файл {name} не зашифрован: {e}"),
+        },
+    }
+}
+
+fn sweep(dir: &Path, matches: impl Fn(&str) -> bool) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let is_file = entry.file_type().is_ok_and(|t| t.is_file());
+        if is_file && matches(&entry.file_name().to_string_lossy()) {
+            remove_quietly(&entry.path());
+        }
+    }
+}
+
+fn remove_quietly(path: &Path) {
+    if let Err(e) = std::fs::remove_file(path)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        log::warn!("файл не удалён: {e}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::super::data_key::test_key;
+    use super::super::files_store::test_store;
+    use super::super::sealed_file::{read_bytes, write_atomic};
+    use super::*;
+
+    #[test]
+    fn plain_files_get_sealed_leftovers_go_and_files_under_a_lost_key_are_removed() {
+        let store = test_store("prepare");
+        let cache = store.dir().join("cache");
+        let rec = store.dir().join(RECORDINGS_DIR);
+        std::fs::create_dir_all(&cache).unwrap();
+        std::fs::create_dir_all(cache.join("exports")).unwrap();
+        std::fs::write(cache.join("exports/ru2.txt"), b"plain transcript").unwrap();
+        std::fs::create_dir_all(store.dir().join(SAMPLES_DIR)).unwrap();
+        std::fs::write(store.dir().join("samples/smp-1.wav"), b"sample").unwrap();
+        std::fs::create_dir_all(&rec).unwrap();
+        std::fs::write(cache.join("nixyon-1.wav"), b"pcm").unwrap();
+        std::fs::write(cache.join("nixyon-1.segments.json"), b"[]").unwrap();
+        std::fs::write(cache.join("other.bin"), b"x").unwrap();
+        std::fs::write(store.dir().join("last_transcript.json"), b"{\"t\":1}").unwrap();
+        std::fs::write(store.dir().join("voices.json.part"), b"{").unwrap();
+        std::fs::write(rec.join("rec-1.wav"), b"RIFF-plain").unwrap();
+        std::fs::write(rec.join("rec-2.wav.part"), b"RIFF").unwrap();
+        write_atomic(
+            &store.dir().join("settings.json"),
+            &Arc::new(test_key(7)),
+            b"{}",
+        )
+        .unwrap();
+        write_atomic(&store.dir().join("voices.json"), store.key(), b"{\"v\":[]}").unwrap();
+
+        prepare(&store, &cache);
+
+        assert!(!cache.join("nixyon-1.wav").exists());
+        assert!(!cache.join("nixyon-1.segments.json").exists());
+        assert!(cache.join("other.bin").exists());
+        assert!(cache.join("exports").is_dir());
+        assert!(!cache.join("exports/ru2.txt").exists());
+        assert!(!store.dir().join("samples/smp-1.wav").exists());
+        assert!(!store.dir().join("voices.json.part").exists());
+        assert!(!rec.join("rec-2.wav.part").exists());
+        for (path, plain) in [
+            (store.dir().join("last_transcript.json"), &b"{\"t\":1}"[..]),
+            (rec.join("rec-1.wav"), &b"RIFF-plain"[..]),
+            (store.dir().join("voices.json"), &b"{\"v\":[]}"[..]),
+        ] {
+            assert!(is_sealed(&path).unwrap(), "{}", path.display());
+            assert_eq!(read_bytes(&path, store.key()).unwrap(), plain);
+        }
+        assert!(!store.dir().join("settings.json").exists());
+    }
+}

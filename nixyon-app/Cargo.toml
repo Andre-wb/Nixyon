@@ -1,0 +1,49 @@
+# Отдельный workspace приложения: исключён из корневого, собирается под Android.
+[workspace]
+resolver = "2"
+members = ["src-tauri", "plugins/android"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+authors = ["BorisMalts"]
+publish = false
+
+# Все версии только здесь.
+[workspace.dependencies]
+nixyon-core = { path = "../nixyon-core" }
+nixyon-audio = { path = "../nixyon-audio" }
+nixyon-pipeline = { path = "../nixyon-pipeline" }
+nixyon-render = { path = "../nixyon-render" }
+nixyon-locales = { path = "../nixyon-locales" }
+nixyon-ort = { path = "../nixyon-ort" }
+nixyon-android = { path = "plugins/android" }
+# Та же версия, что уже приходит через tauri; плагину нужна для своих функций JNI.
+jni = "=0.21.1"
+tauri = "2.12.5"
+tauri-build = "2.7.4"
+tauri-plugin = { version = "2.7.2", features = ["build"] }
+tauri-plugin-log = "2.10.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+aes-gcm = { version = "0.11.1", features = ["zeroize"] }
+log = "0.4"
+thiserror = "2"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
+debug-assertions = false
+overflow-checks = false
+incremental = false

@@ -1,0 +1,115 @@
+# Сборка и проверки в контейнерах. Исходники монтируются, кэши живут в томах.
+#   docker compose build                  собрать образы
+#   docker compose run --rm check         fmt, clippy и тесты ядра
+#   docker compose run --rm test-models   тесты с моделями (нужны models/ и models/dialogs/)
+#   docker compose run --rm fetch         скачать sherpa-onnx, llama.cpp, модели, языковую модель и записи для тестов
+#   docker compose run --rm transcribe models models/example.wav out.json [число спикеров]
+#   docker compose run --rm app-check     fmt и clippy приложения, в том числе под Android
+#   docker compose run --rm apk           собрать APK со всеми моделями внутри (arm64), нужны models/ из fetch
+# UID и GID передаются, чтобы созданные файлы принадлежали владельцу репозитория:
+#   NIXYON_UID=$(id -u) NIXYON_GID=$(id -g) docker compose build
+
+x-core: &core
+  build:
+    context: docker/core
+    args:
+      UID: ${NIXYON_UID:-1000}
+      GID: ${NIXYON_GID:-1000}
+  image: nixyon-core:dev
+  # Библиотека ONNX Runtime для крейта ort: своя для Linux, в томе сборки, а не в
+  # смонтированном third_party/, где лежит библиотека хоста.
+  environment:
+    ORT_LIB_LOCATION: /cache/target/ort-lib
+  volumes:
+    - .:/work
+    - cargo-core:/cache/cargo
+    - target-core:/cache/target
+  cpus: ${NIXYON_CPUS:-8}
+  mem_limit: ${NIXYON_CORE_MEMORY:-8g}
+
+x-android: &android
+  build:
+    context: docker/android
+    args:
+      UID: ${NIXYON_UID:-1000}
+      GID: ${NIXYON_GID:-1000}
+  image: nixyon-android:dev
+  platform: linux/amd64
+  volumes:
+    - .:/work
+    - cargo-android:/cache/cargo
+    - target-android:/cache/target
+    - gradle:/home/builder/.gradle
+    # Отладочный ключ подписи с хоста: APK из контейнера и с машины разработчика
+    # подписаны одинаково и ставятся поверх друг друга. Монтируется папка, а не файл:
+    # если ключа нет, scripts/build-demo-apk.sh создаёт его здесь, и он остаётся на хосте.
+    - ${HOME}/.android:/home/builder/.android
+  cpus: ${NIXYON_CPUS:-8}
+  mem_limit: ${NIXYON_ANDROID_MEMORY:-12g}
+
+services:
+  check:
+    <<: *core
+    command:
+      - sh
+      - -c
+      - >-
+        cargo fmt --all --check
+        && cargo clippy --workspace --all-targets -j "$(nproc)" -- -D warnings
+        && cargo test --workspace -j "$(nproc)"
+
+  test-models:
+    <<: *core
+    environment:
+      MODELS_DIR: models
+      ORT_LIB_LOCATION: /cache/target/ort-lib
+    volumes:
+      - .:/work
+      - ./models:/work/models:ro
+      - cargo-core:/cache/cargo
+      - target-core:/cache/target
+    command: ["sh", "-c", "cargo test --workspace --release -j \"$(nproc)\" -- --ignored"]
+
+  fetch:
+    <<: *core
+    # Токен GitHub из окружения хоста: fetch-models.sh качает им модели ReDimNet2 из релиза
+    # приватного репозитория (например GH_TOKEN=$(gh auth token) docker compose run fetch).
+    # Свой environment заменяет общий целиком, поэтому ORT_LIB_LOCATION повторён.
+    environment:
+      ORT_LIB_LOCATION: /cache/target/ort-lib
+      GH_TOKEN: ${GH_TOKEN:-}
+    command:
+      - sh
+      - -c
+      - scripts/fetch-sherpa.sh && scripts/fetch-llama-cpp.sh && scripts/fetch-models.sh && scripts/fetch-llm.sh && scripts/fetch-test-audio.sh
+
+  transcribe:
+    <<: *core
+    volumes:
+      - .:/work
+      - ./models:/work/models:ro
+      - cargo-core:/cache/cargo
+      - target-core:/cache/target
+    entrypoint: ["cargo", "run", "--quiet", "--release", "-p", "nixyon-sherpa", "--bin", "transcribe", "--"]
+
+  app-check:
+    <<: *android
+    command:
+      - sh
+      - -c
+      - >-
+        cargo fmt --all --check
+        && cargo clippy --workspace --all-targets -j "$(nproc)" -- -D warnings
+        && cargo clippy --workspace --all-targets --target aarch64-linux-android -j "$(nproc)" -- -D warnings
+        && cargo test --workspace -j "$(nproc)"
+
+  apk:
+    <<: *android
+    command: ["../scripts/build-demo-apk.sh"]
+
+volumes:
+  cargo-core:
+  target-core:
+  cargo-android:
+  target-android:
+  gradle:

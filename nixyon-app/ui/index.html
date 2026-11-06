@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Nixyon</title>
+  <script src="js/theme-early.js"></script>
+  <link rel="stylesheet" href="styles.css">
+  <script src="js/app.js" type="module"></script>
+</head>
+<body>
+  <main>
+    <section class="screen" id="screen-home" aria-labelledby="home-title" hidden>
+      <header class="bar">
+        <h1 id="home-title" class="title">Nixyon</h1>
+        <button class="icon-button" id="open-settings" type="button" data-i18n-label="settings.open">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+      </header>
+
+      <div class="group">
+        <h2 class="group-title" id="count-title" data-i18n="home.count_label"></h2>
+        <div class="count" role="group" aria-labelledby="count-title">
+          <button class="chip" id="count-unknown" type="button" aria-pressed="true" data-i18n="home.count_unknown"></button>
+          <div class="stepper">
+            <button class="icon-button" id="count-less" type="button" data-i18n-label="home.count_less">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+            </button>
+            <output class="count-value" id="count-value" aria-live="polite">2</output>
+            <button class="icon-button" id="count-more" type="button" data-i18n-label="home.count_more">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="recorder">
+        <div class="record-wrap">
+          <span class="level-ring" id="level-ring" aria-hidden="true"></span>
+          <button class="record" id="record" type="button" aria-describedby="record-label">
+            <svg class="icon icon-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+            <svg class="icon icon-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+          </button>
+        </div>
+        <p class="record-label" id="record-label" data-i18n="home.record"></p>
+        <p class="timer" id="timer" hidden></p>
+        <div class="live" id="home-live" hidden>
+          <div class="live-lines"></div>
+          <p class="live-note" data-i18n="live.draft"></p>
+        </div>
+      </div>
+
+      <button class="button button-secondary wide" id="import" type="button" data-i18n="home.import"></button>
+
+      <button class="last card" id="open-voices" type="button">
+        <span class="last-file" data-i18n="home.voices"></span>
+        <span class="meta" id="voices-summary"></span>
+      </button>
+
+      <div class="notice" id="home-notice" role="status" hidden>
+        <p id="home-notice-text"></p>
+        <button class="button button-plain" id="open-app-settings" type="button" data-i18n="error.open_settings" hidden></button>
+        <button class="button button-plain" id="recovered-transcribe" type="button" data-i18n="recording.recovered_transcribe" hidden></button>
+      </div>
+
+      <button class="last card" id="last" type="button" hidden>
+        <span class="last-label" data-i18n="home.last"></span>
+        <span class="last-file" id="last-file"></span>
+        <span class="meta" id="last-meta"></span>
+      </button>
+
+      <p class="hint" data-i18n="home.offline"></p>
+    </section>
+
+    <section class="screen" id="screen-processing" aria-labelledby="processing-phase" hidden>
+      <div class="processing">
+        <h1 class="title" id="processing-phase"></h1>
+        <div class="progress" id="progress" role="progressbar" aria-labelledby="processing-phase" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span class="progress-fill" id="progress-fill"></span>
+        </div>
+        <p class="meta" id="processing-time" aria-live="polite"></p>
+        <button class="button button-secondary wide" id="cancel" type="button" data-i18n="common.cancel"></button>
+        <div class="live" id="processing-live" hidden>
+          <div class="live-lines"></div>
+          <p class="live-note" data-i18n="live.draft_processing"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-transcript" aria-labelledby="transcript-file" hidden>
+      <header class="bar">
+        <button class="back" id="back" type="button">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          <span data-i18n="transcript.back"></span>
+        </button>
+        <button class="button button-plain" id="open-export" type="button" data-i18n="export_sheet.button"></button>
+      </header>
+      <h1 class="title transcript-title" id="transcript-file"></h1>
+      <p class="meta" id="transcript-meta"></p>
+      <p class="warning" id="transcript-warning" role="note" hidden data-i18n="transcript.clipping"></p>
+      <p class="meta" id="playback-note" role="status" hidden></p>
+      <h2 class="group-title" data-i18n="transcript.participants"></h2>
+      <ul class="card speakers" id="speakers"></ul>
+      <h2 class="group-title" id="timeline-title" data-i18n="timeline.title"></h2>
+      <div class="card timeline">
+        <div class="timeline-lanes" id="timeline-lanes"></div>
+      </div>
+      <button class="button button-secondary wide" id="open-stats" type="button" data-i18n="stats.button"></button>
+      <button class="button button-secondary wide" id="open-summary" type="button" data-i18n="summary.button" hidden></button>
+      <button class="button button-secondary wide" id="open-names" type="button" data-i18n="names.button" hidden></button>
+      <div class="search" role="search">
+        <input class="search-input" id="search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-i18n-label="search.label">
+        <button class="icon-button" id="search-prev" type="button" data-i18n-label="search.previous" disabled>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg>
+        </button>
+        <button class="icon-button" id="search-next" type="button" data-i18n-label="search.next" disabled>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg>
+        </button>
+      </div>
+      <p class="meta search-count" id="search-count" aria-live="polite"></p>
+      <ol class="turns" id="turns"></ol>
+      <div class="player" id="player" hidden>
+        <button class="icon-button player-toggle" id="player-toggle" type="button">
+          <svg class="icon" id="player-icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>
+          <svg class="icon" id="player-icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>
+        </button>
+        <span class="player-time" id="player-time"></span>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-voices" aria-labelledby="voices-title" hidden>
+      <header class="bar">
+        <button class="back" id="voices-back" type="button">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          <span data-i18n="transcript.back"></span>
+        </button>
+      </header>
+      <h1 class="title" id="voices-title" data-i18n="voices.title"></h1>
+      <p class="meta" data-i18n="voices.hint"></p>
+      <ul class="card speakers" id="voices-list"></ul>
+      <p class="meta" id="voices-empty" data-i18n="voices.empty" hidden></p>
+      <button class="button button-primary wide" id="voice-add" type="button" data-i18n="voices.add"></button>
+      <p class="error" id="voices-error" role="alert"></p>
+    </section>
+  </main>
+
+  <dialog class="sheet" id="speaker-sheet" aria-labelledby="speaker-sheet-title">
+    <form method="dialog" class="sheet-body" id="speaker-form">
+      <div class="sheet-head">
+        <h2 id="speaker-sheet-title" data-i18n="speaker.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="hint" id="speaker-age" hidden></p>
+      <label class="field">
+        <span data-i18n="speaker.name_label"></span>
+        <input id="speaker-name" type="text" maxlength="64" autocomplete="off" enterkeyhint="done">
+      </label>
+      <p class="hint" data-i18n="speaker.name_hint"></p>
+      <button class="button button-primary wide" id="speaker-save" type="button" data-i18n="speaker.rename"></button>
+      <div class="sheet-group" id="remember-block">
+        <button class="button button-secondary wide" id="speaker-remember" type="button" data-i18n="speaker.remember"></button>
+        <p class="hint" data-i18n="speaker.remember_hint"></p>
+        <p class="status" id="speaker-remember-status" role="status"></p>
+      </div>
+      <p class="error" id="speaker-error" role="alert"></p>
+      <div id="merge-block">
+        <h3 class="group-title" data-i18n="speaker.merge_title"></h3>
+        <p class="hint" data-i18n="speaker.merge_hint"></p>
+        <ul class="card speakers" id="merge-targets"></ul>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="voice-sheet" aria-labelledby="voice-sheet-title">
+    <form method="dialog" class="sheet-body" id="voice-form">
+      <div class="sheet-head">
+        <h2 id="voice-sheet-title" data-i18n="voice_sheet.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <label class="field">
+        <span data-i18n="voice_sheet.name"></span>
+        <input id="voice-name" type="text" maxlength="64" autocomplete="off" enterkeyhint="done">
+      </label>
+      <p class="meta" id="voice-hint"></p>
+      <button class="button button-secondary wide" id="voice-record" type="button"></button>
+      <p class="meta" id="voice-timer" aria-live="polite"></p>
+      <button class="button button-primary wide" id="voice-save" type="button" data-i18n="voice_sheet.save" disabled></button>
+      <p class="error" id="voice-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <dialog class="alert" id="voice-delete-confirm" aria-labelledby="voice-delete-text">
+    <p id="voice-delete-text"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="voice-delete-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="voice-delete-yes" type="button" data-i18n="voices.delete_do"></button>
+    </div>
+  </dialog>
+
+  <dialog class="alert" id="merge-confirm" aria-labelledby="merge-confirm-text">
+    <p id="merge-confirm-text"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="merge-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="merge-yes" type="button" data-i18n="speaker.merge_do"></button>
+    </div>
+  </dialog>
+
+  <template id="edit-icon">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>
+  </template>
+
+  <dialog class="sheet" id="turn-sheet" aria-labelledby="turn-sheet-title">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="turn-sheet-title" data-i18n="turn_sheet.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="meta" id="turn-sheet-meta"></p>
+      <label class="field">
+        <span data-i18n="turn_sheet.label"></span>
+        <textarea id="turn-text-input" rows="6" autocomplete="off" enterkeyhint="done"></textarea>
+      </label>
+      <p class="hint" data-i18n="turn_sheet.hint"></p>
+      <button class="button button-primary wide" id="turn-save" type="button" data-i18n="turn_sheet.save"></button>
+      <p class="error" id="turn-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="stats-sheet" aria-labelledby="stats-title">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="stats-title" data-i18n="stats.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <dl class="card stats-list" id="stats-summary"></dl>
+      <ul class="stats-speakers" id="stats-speakers"></ul>
+      <p class="error" id="stats-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="summary-sheet" aria-labelledby="summary-title">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="summary-title" data-i18n="summary.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="hint" data-i18n="summary.hint"></p>
+      <div class="sheet-group" id="summary-running" hidden>
+        <p class="meta" id="summary-phase" aria-live="polite"></p>
+        <div class="progress" id="summary-progress" role="progressbar" aria-labelledby="summary-phase" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span class="progress-fill" id="summary-progress-fill"></span>
+        </div>
+        <button class="button button-secondary wide" id="summary-cancel" type="button" data-i18n="common.cancel"></button>
+      </div>
+      <div class="card summary-text" id="summary-text" hidden></div>
+      <button class="button button-primary wide" id="summary-start" type="button" data-i18n="summary.start"></button>
+      <p class="error" id="summary-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="names-sheet" aria-labelledby="names-title">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="names-title" data-i18n="names.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="hint" data-i18n="names.hint"></p>
+      <div class="sheet-group" id="names-running" hidden>
+        <p class="meta" id="names-phase" aria-live="polite" data-i18n="names.searching"></p>
+        <div class="progress" id="names-progress" role="progressbar" aria-labelledby="names-phase" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span class="progress-fill" id="names-progress-fill"></span>
+        </div>
+        <button class="button button-secondary wide" id="names-cancel" type="button" data-i18n="common.cancel"></button>
+      </div>
+      <ul class="name-suggestions" id="names-list" aria-live="polite"></ul>
+      <p class="meta" id="names-none" role="status" data-i18n="names.none" hidden></p>
+      <button class="button button-primary wide" id="names-start" type="button" data-i18n="names.button"></button>
+      <p class="error" id="names-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="export-sheet" aria-labelledby="export-title">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="export-title" data-i18n="export_sheet.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <div>
+        <h3 class="group-title" id="format-title" data-i18n="export_sheet.format"></h3>
+        <div class="card choices" role="radiogroup" aria-labelledby="format-title">
+          <label class="choice"><input type="radio" name="format" value="txt"><span data-i18n="export_sheet.format_txt"></span></label>
+          <label class="choice"><input type="radio" name="format" value="md"><span data-i18n="export_sheet.format_md"></span></label>
+          <label class="choice"><input type="radio" name="format" value="srt"><span data-i18n="export_sheet.format_srt"></span></label>
+          <label class="choice"><input type="radio" name="format" value="json"><span data-i18n="export_sheet.format_json"></span></label>
+          <label class="choice"><input type="radio" name="format" value="docx"><span data-i18n="export_sheet.format_docx"></span></label>
+          <label class="choice"><input type="radio" name="format" value="pdf"><span data-i18n="export_sheet.format_pdf"></span></label>
+        </div>
+      </div>
+      <button class="button button-primary wide" id="export-save" type="button" data-i18n="export_sheet.save"></button>
+      <button class="button button-secondary wide" id="export-share" type="button" data-i18n="export_sheet.share"></button>
+      <p class="status" id="export-status" role="status"></p>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="settings-sheet" aria-labelledby="settings-title">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="settings-title" data-i18n="settings.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <div>
+        <h3 class="group-title" id="theme-title" data-i18n="settings.theme"></h3>
+        <div class="card choices" role="radiogroup" aria-labelledby="theme-title">
+          <label class="choice"><input type="radio" name="theme" value="auto"><span data-i18n="settings.theme_auto"></span></label>
+          <label class="choice"><input type="radio" name="theme" value="light"><span data-i18n="settings.theme_light"></span></label>
+          <label class="choice"><input type="radio" name="theme" value="dark"><span data-i18n="settings.theme_dark"></span></label>
+        </div>
+      </div>
+      <div>
+        <h3 class="group-title" id="language-title" data-i18n="settings.language"></h3>
+        <div class="card choices" role="radiogroup" aria-labelledby="language-title">
+          <label class="choice"><input type="radio" name="language" value="auto"><span data-i18n="settings.language_auto"></span></label>
+          <label class="choice"><input type="radio" name="language" value="ru"><span data-i18n="settings.language_ru"></span></label>
+          <label class="choice"><input type="radio" name="language" value="en"><span data-i18n="settings.language_en"></span></label>
+        </div>
+      </div>
+      <label class="field">
+        <span data-i18n="settings.hotwords"></span>
+        <textarea id="hotwords" rows="5" autocomplete="off" spellcheck="false"></textarea>
+      </label>
+      <p class="meta" data-i18n="settings.hotwords_hint"></p>
+      <button class="button button-secondary wide" id="hotwords-save" type="button" data-i18n="settings.hotwords_save"></button>
+      <p class="status" id="hotwords-status" role="status"></p>
+    </form>
+  </dialog>
+</body>
+</html>

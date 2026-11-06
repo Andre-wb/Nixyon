@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Через FileProvider другим приложениям доступна только папка экспорта: туда кладётся
+     последний файл расшифровки перед «Поделиться». -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+  <cache-path name="exports" path="exports/" />
+</paths>

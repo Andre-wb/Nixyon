@@ -1,0 +1,33 @@
+[package]
+name = "nixyon"
+description = "Nixyon: офлайн-расшифровка разговоров"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "nixyon_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { workspace = true }
+nixyon-locales = { workspace = true }
+
+[dependencies]
+serde_json = { workspace = true }
+serde = { workspace = true }
+log = { workspace = true }
+tauri = { workspace = true }
+tauri-plugin-log = { workspace = true }
+nixyon-android = { workspace = true }
+nixyon-core = { workspace = true }
+nixyon-audio = { workspace = true }
+nixyon-pipeline = { workspace = true }
+nixyon-render = { workspace = true }
+nixyon-locales = { workspace = true }
+aes-gcm = { workspace = true }
+
+[lints]
+workspace = true

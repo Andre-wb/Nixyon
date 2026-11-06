@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Запись разговора с микрофона; спрашивается при первом нажатии «Записать». -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Запись продолжается, когда приложение свёрнуто или экран выключен. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Уведомление «Идёт запись»; спрашивается вместе с микрофоном, отказ запись не блокирует. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <service
+            android:name="dev.demo.nixyon.speech.RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+    </application>
+</manifest>
