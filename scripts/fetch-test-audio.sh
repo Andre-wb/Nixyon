@@ -8,7 +8,7 @@
 # опечатки текстов PROMPTS правятся по scripts/data/voxforge-text-fixes.json.
 # Скачанное хранится в models/_download/test-audio/ и повторно не качается.
 #
-# Суммы VoxForge сняты 2026-10-28 (своих сумм у VoxForge нет); суммы записей
+# Суммы VoxForge сняты при скачивании (своих сумм у VoxForge нет); суммы записей
 # sherpa-onnx взяты из официального checksum.txt релиза.
 set -euo pipefail
 

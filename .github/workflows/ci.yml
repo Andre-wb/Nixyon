@@ -28,10 +28,7 @@ jobs:
 
       # Библиотеки sherpa, исходники llama.cpp и модели живут в кэше раннера между
       # прогонами; скрипты сверяют SHA-256 и ничего не качают заново, если файлы на месте.
-      # Токен нужен fetch-models.sh для моделей ReDimNet2 из релиза этого приватного репозитория.
       - name: Библиотеки и модели
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p /cache/ci/third_party /cache/ci/models
           ln -sfn /cache/ci/third_party third_party

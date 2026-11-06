@@ -37,7 +37,7 @@ import soundfile as sf
 import torch
 import torch.nn.functional as F
 
-# SHA-256 весов, которые показывает релиз v1.0.0 на GitHub (сверено 2026-11-02).
+# SHA-256 весов, которые показывает релиз v1.0.0 на GitHub.
 WEIGHTS = {
     "b0-vox2-lm.pt": "4b5a8c00f813ab0d92fc81ea7c504475d8201bed608fb2c6aaba65be723e9c61",
     "b1-vox2-lm.pt": "9f5b2364524c3ce42f4852b8d9e6c8eb0c14a5a8878dba27f0c93ca500ee37f3",
