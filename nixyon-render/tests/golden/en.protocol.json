@@ -1,0 +1,54 @@
+[
+  {
+    "kind": "title",
+    "text": "Transcript"
+  },
+  {
+    "kind": "fact",
+    "label": "Duration",
+    "value": "1:02:05"
+  },
+  {
+    "kind": "fact",
+    "label": "Participants",
+    "value": "2"
+  },
+  {
+    "kind": "table",
+    "header": [
+      "Participant",
+      "Talk time",
+      "Share"
+    ],
+    "rows": [
+      [
+        "Speaker 1",
+        "0:14",
+        "70%"
+      ],
+      [
+        "Анна | *главная*",
+        "0:06",
+        "30%"
+      ]
+    ]
+  },
+  {
+    "kind": "turn",
+    "speaker": "Speaker 1",
+    "time": "0:05",
+    "text": "Добрый день, давайте начнём."
+  },
+  {
+    "kind": "turn",
+    "speaker": "Анна | *главная*",
+    "time": "0:12",
+    "text": "# план: 1. итоги"
+  },
+  {
+    "kind": "turn",
+    "speaker": "Speaker 1",
+    "time": "1:01:40",
+    "text": "Сегодня обсуждаем расшифровку разговоров на телефоне без интернета, разделение по голосам и экспорт в четыре формата для коллег"
+  }
+]

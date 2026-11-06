@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-28T11:30:00Z",
+  "audio": { "file": "meeting.wav", "duration_sec": 3725.4, "sample_rate": 16000 },
+  "engine": {
+    "vad": "silero_vad",
+    "asr": "sherpa-onnx-nemo-transducer-giga-am-v3-russian-2025-12-16",
+    "embedding": "3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced"
+  },
+  "speakers": [
+    { "id": 1, "name": null, "talk_time_sec": 14.0, "turns": 2, "words": 30 },
+    { "id": 2, "name": "Анна | *главная*", "talk_time_sec": 6.0, "turns": 1, "words": 4 }
+  ],
+  "turns": [
+    {
+      "id": 1, "speaker": 1, "start": 5.2, "end": 7.0,
+      "text": "Добрый день, давайте начнём.",
+      "words": [
+        { "text": "Добрый", "start": 5.2, "end": 5.6 },
+        { "text": "день,", "start": 5.6, "end": 6.0 },
+        { "text": "давайте", "start": 6.1, "end": 6.6 },
+        { "text": "начнём.", "start": 6.6, "end": 7.0 }
+      ],
+      "flags": []
+    },
+    {
+      "id": 2, "speaker": 2, "start": 12.0, "end": 18.0,
+      "text": "# план: 1. итоги",
+      "words": null,
+      "flags": []
+    },
+    {
+      "id": 3, "speaker": 1, "start": 3700.0, "end": 3712.2,
+      "text": "Сегодня обсуждаем расшифровку разговоров на телефоне без интернета, разделение по голосам и экспорт в четыре формата для коллег",
+      "words": null,
+      "flags": ["clipping"]
+    }
+  ]
+}

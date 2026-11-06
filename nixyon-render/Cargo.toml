@@ -1,0 +1,18 @@
+[package]
+name = "nixyon-render"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nixyon-core = { workspace = true }
+serde = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
