@@ -1,0 +1,4 @@
+self-hosted-runner:
+  # Метка раннера на сервере сборок Nixyon.
+  labels:
+    - nixyon

@@ -1,0 +1,94 @@
+# Проверки Nixyon на сервере сборок: раннер с меткой nixyon делит с хабом 14 ядер и
+# 24 ГБ. Каждый шаг идёт через nixyon-ci: вывод виден и здесь, и во вкладке «Тесты» хаба,
+# а тяжёлые шаги не пересекаются со сборкой APK в хабе.
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: [self-hosted, nixyon]
+    timeout-minutes: 180
+    env:
+      MODELS_DIR: models
+      # Инструменты ставятся в кэш раннера; cargo install с той же версией ничего не пересобирает.
+      CI_TOOLS: /cache/ci/tools
+      NEXTEST_VERSION: 0.9.148
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Библиотеки sherpa, исходники llama.cpp и модели живут в кэше раннера между
+      # прогонами; скрипты сверяют SHA-256 и ничего не качают заново, если файлы на месте.
+      # Токен нужен fetch-models.sh для моделей ReDimNet2 из релиза этого приватного репозитория.
+      - name: Библиотеки и модели
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /cache/ci/third_party /cache/ci/models
+          ln -sfn /cache/ci/third_party third_party
+          ln -sfn /cache/ci/models models
+          nixyon-ci step fetch "Библиотеки и модели" -- bash -c \
+            'scripts/fetch-sherpa.sh && scripts/fetch-llama-cpp.sh && scripts/fetch-models.sh && scripts/fetch-test-audio.sh'
+
+      - name: Форматирование
+        run: |
+          nixyon-ci step fmt "Форматирование" -- bash -c \
+            'cargo fmt --all --check && cd nixyon-app && cargo fmt --all --check'
+
+      - name: Тесты скриптов
+        run: nixyon-ci step test-scripts "Тесты скриптов" -- python3 -I -B -m unittest discover -s scripts
+
+      - name: Clippy ядра
+        run: nixyon-ci step clippy-core "Clippy ядра" -- cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Тесты ядра
+        run: nixyon-ci step test-core "Тесты ядра" -- cargo test --workspace
+
+      - name: Инструменты проверок
+        run: |
+          nixyon-ci step tools "Инструменты проверок" -- bash -c \
+            'cargo install cargo-nextest --version "${NEXTEST_VERSION}" --locked --root "${CI_TOOLS}"'
+          echo "${CI_TOOLS}/bin" >> "${GITHUB_PATH}"
+
+      # nextest запускает тесты из разных файлов параллельно, каждый в своём процессе:
+      # тесты с моделями долгие, и cargo test гонял бы их файлы по очереди.
+      - name: Тесты с моделями
+        run: nixyon-ci step test-models "Тесты с моделями" -- cargo nextest run --workspace --release --run-ignored only
+
+      - name: Clippy приложения
+        working-directory: nixyon-app
+        run: nixyon-ci step clippy-app "Clippy приложения" -- cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Clippy приложения под Android
+        working-directory: nixyon-app
+        run: |
+          nixyon-ci step clippy-android "Clippy приложения под Android" -- \
+            cargo clippy --workspace --all-targets --target aarch64-linux-android -- -D warnings
+
+      - name: Тесты приложения
+        working-directory: nixyon-app
+        run: nixyon-ci step test-app "Тесты приложения" -- cargo test --workspace
+
+      - name: Сборка APK
+        working-directory: nixyon-app
+        run: |
+          nixyon-ci step apk "Сборка APK" -- \
+            cargo tauri android build --debug --apk --target aarch64 --ci
+
+      # Модульные тесты Kotlin-плагина; проект Gradle и пути плагинов готовит сборка APK выше.
+      - name: Тесты Kotlin
+        working-directory: nixyon-app/src-tauri/gen/android
+        run: nixyon-ci step test-kotlin "Тесты Kotlin" -- ./gradlew :nixyon-android:testDebugUnitTest
+
+      - name: Итог для хаба
+        if: always()
+        run: nixyon-ci finish "${{ job.status }}"

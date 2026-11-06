@@ -1,0 +1,7 @@
+# Крейт sherpa-onnx берёт готовые библиотеки из этой папки и не ходит в сеть.
+# Папку заполняет scripts/fetch-sherpa.sh.
+[env]
+SHERPA_ONNX_ARCHIVE_DIR = { value = "third_party/sherpa-onnx", relative = true }
+# Крейт ort линкуется с тем же ONNX Runtime, что и sherpa-onnx; библиотеку туда кладёт
+# scripts/fetch-sherpa.sh. Заданная снаружи переменная (в контейнере) важнее этой.
+ORT_LIB_LOCATION = { value = "third_party/sherpa-onnx/ort-lib", relative = true }

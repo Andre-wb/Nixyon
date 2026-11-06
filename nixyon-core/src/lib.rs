@@ -1,0 +1,58 @@
+//! Типы расшифровки (JSON: источник истины), ошибки и граница с движком распознавания.
+//! Не зависит от платформы.
+
+mod audio_info;
+mod block_segmenter;
+mod cancel;
+mod engine_info;
+mod engine_options;
+mod error;
+mod hotwords_line;
+mod json;
+mod par_map;
+mod pool;
+mod sample_speech;
+mod segment_result;
+mod speaker;
+mod speaker_age;
+mod speaker_gender;
+mod speech_edges;
+mod speech_engine;
+mod transcript;
+mod turn;
+mod utc_time;
+mod voice_embedder;
+mod voice_sample;
+mod voice_segmenter;
+mod voice_span;
+mod window_embedding;
+mod window_spec;
+mod word;
+
+pub use audio_info::AudioInfo;
+pub use block_segmenter::BlockSegmenter;
+pub use cancel::CancelFlag;
+pub use engine_info::EngineInfo;
+pub use engine_options::EngineOptions;
+pub use error::CoreError;
+pub use hotwords_line::hotwords_line;
+pub use json::{from_json, to_json};
+pub use par_map::par_map;
+pub use pool::{Pool, PoolPoisoned};
+pub use sample_speech::{MAX_SAMPLE_SEC, MIN_SAMPLE_SPEECH_SEC};
+pub use segment_result::SegmentResult;
+pub use speaker::Speaker;
+pub use speaker_age::SpeakerAge;
+pub use speaker_gender::SpeakerGender;
+pub use speech_edges::SpeechEdges;
+pub use speech_engine::{EngineError, SpeechEngine};
+pub use transcript::{SCHEMA_VERSION, Transcript};
+pub use turn::{OVERLAP_FLAG, Turn};
+pub use utc_time::rfc3339_utc;
+pub use voice_embedder::VoiceEmbedder;
+pub use voice_sample::VoiceSample;
+pub use voice_segmenter::{NEURAL_BLOCK_SEC, VoiceSegmenter};
+pub use voice_span::VoiceSpan;
+pub use window_embedding::WindowEmbedding;
+pub use window_spec::WindowSpec;
+pub use word::Word;
