@@ -4,7 +4,7 @@
 # на телефон её кладёт scripts/push-llm.sh. Скачанное хранится в models/_download/llm/.
 #
 # Qwen3.5-4B Q4_K_M в сборке unsloth (Apache-2.0), ревизия закреплена. Сумма совпала с
-# той, что Hugging Face указывает для файла в этой ревизии (2026-10-30). Сначала файл
+# той, что Hugging Face указывает для файла в этой ревизии. Сначала файл
 # берётся с зеркала на сервере Nixyon Hub (scripts/model-mirror.sh), затем с Hugging Face.
 set -euo pipefail
 

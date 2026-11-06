@@ -1089,7 +1089,7 @@ scripts/llm-meeting-eval.sh <llama-server> <папка результатов> <
 | ReDimNet2 B0-B6 (выгрузки весов PalabraAI) | не сверена, в репозитории не указана | [PalabraAI/redimnet2](https://github.com/PalabraAI/redimnet2) |
 | Sortformer 4spk-v2 (выгрузки DimQ1) | не сверена, в репозитории не указана | [DimQ1/sortformer-4spk-v2-onnx-int8-cpu](https://huggingface.co/DimQ1/sortformer-4spk-v2-onnx-int8-cpu) |
 | T-one (необязательная, для `stream_eval`) | Apache-2.0 (файл `LICENSE` в архиве) | [релизы sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases) |
-| GTCRN (`gtcrn_simple.onnx`), входит в APK: второй VAD для длинных кусков | MIT (файл `LICENSE` в репозитории авторов, 2026-11-04); что файл релиза sherpa-onnx выгружен из этой модели, по документации sherpa-onnx не сверено | [Xiaobin-Rong/gtcrn](https://github.com/Xiaobin-Rong/gtcrn), [релизы sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases) |
+| GTCRN (`gtcrn_simple.onnx`), входит в APK: второй VAD для длинных кусков | MIT (файл `LICENSE` в репозитории авторов); что файл релиза sherpa-onnx выгружен из этой модели, по документации sherpa-onnx не сверено | [Xiaobin-Rong/gtcrn](https://github.com/Xiaobin-Rong/gtcrn), [релизы sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases) |
 | Qwen3.5-4B GGUF (unsloth) | Apache-2.0 | [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) |
 | llama.cpp | MIT (файл `LICENSE` в исходниках) | [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) |
 | VoxForge RU | GPLv3 | [voxforge.org](http://www.repository.voxforge1.org/downloads/Russian/Trunk/Audio/Main/16kHz_16bit) |
@@ -1227,5 +1227,42 @@ build-tools: `zipalign` и `apksigner` берутся из самой новой
 
 ## Nixyon Hub
 
-Nixyon Hub живёт в отдельном репозитории. Это сервер сборок: на нём идёт CI этого
-репозитория, через него собираются APK и смотрятся результаты проверок и отчёты о качестве.
+Nixyon Hub ([nixyon.onyxar.org](https://nixyon.onyxar.org)): сервер сборок и замеров
+команды. Его код лежит в отдельном закрытом репозитории вместе с настройками сервера, а
+вход только по учётной записи: регистрации нет, учётную запись заводит владелец хаба.
+
+Хаб сам ничего не считает. Он клонирует этот репозиторий, запускает его скрипты и утилиты
+замера и показывает их вывод. WER, DER, RTF и остальные числа считают код и утилиты
+отсюда:
+
+- формулы метрик лежат в [`nixyon-metrics`](nixyon-metrics/src): WER
+  ([`wer.rs`](nixyon-metrics/src/wer.rs), выравнивание слов
+  [`word_alignment.rs`](nixyon-metrics/src/word_alignment.rs), нормализация
+  [`normalize.rs`](nixyon-metrics/src/normalize.rs)), WER с учётом говорящих
+  ([`cpwer.rs`](nixyon-metrics/src/cpwer.rs)) и DER с разбивкой на пропуск, ложную речь и
+  путаницу ([`der.rs`](nixyon-metrics/src/der.rs),
+  [`der_breakdown.rs`](nixyon-metrics/src/der_breakdown.rs));
+- прогоны и отчёты делают утилиты [`nixyon-eval`](nixyon-eval/src/bin): `quality_eval`
+  (WER по наборам записей, `report.md` и `summary.json`), `eval` (спикеры, DER и RTF на
+  диалогах), `stream_eval` (живой текст) и `child_adult_eval` (метка «ребёнок или
+  взрослый»);
+- как считается каждая метрика и как запустить замер у себя, описано в разделе
+  [«Замер качества»](#замер-качества).
+
+Вкладки хаба:
+
+| Вкладка | Что там |
+|---|---|
+| Сборки | «Обновить код» и «Собрать APK» с журналом вживую; список APK с датой, коммитом и размером, скачивание и QR-код ссылки; история заданий с журналами |
+| Тесты | прогоны CI из [`.github/workflows/ci.yml`](.github/workflows/ci.yml) на раннере хаба: шаги, время, журналы, ссылка на прогон в GitHub |
+| Качество | запуск `quality_eval` по выбранным наборам записей (у каждого набора выбирается, сколько минут звука взять), ход прогона, отчёт `report.md` прямо на странице, история WER по коммитам, худшие клипы с прослушиванием и ручными пометками; скачивание `report.md`, `summary.json` и клипов |
+| Обучение | обучение классификатора «ребёнок или взрослый» утилитой `child_adult_eval` на выбранных наборах; ход по клипам, журнал, отчёт и веса на скачивание |
+| Terminal | терминал в контейнере сборки |
+| Статистика | время сборок и тестов по дням, доля упавших прогонов, самые долгие шаги, размер APK |
+
+Наборы записей для замеров лежат на сервере хаба: Common Voice 21 (тестовая часть), части
+open_stt с ручной разметкой и выборки с автоматической, подкаст «Подлодка», звонки
+AxonData, диалоги с разметкой спикеров. Для обучения ещё speechocean762, Samrómur, Samrómur
+Children и ChildMandarin. В репозиторий записи не попадают. Хаб также держит зеркало
+моделей: `fetch-models.sh` и другие скрипты загрузки сначала берут файл оттуда по его
+SHA-256 и сверяют сумму, а если зеркало недоступно, качают из исходного места.
