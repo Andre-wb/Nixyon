@@ -131,8 +131,33 @@ fn docx_holds_the_three_package_parts_and_the_same_bytes_every_time() {
 }
 
 #[test]
-fn json_export_matches_golden_in_the_task_format() {
-    check("export.json", &render_json(&sample()).unwrap());
+fn json_export_holds_only_the_transcript_lines() {
+    let t = sample();
+    let value: serde_json::Value = serde_json::from_str(&render_json(&t).unwrap()).unwrap();
+    let root = value.as_object().unwrap();
+    assert_eq!(root.len(), 1, "в корне только transcript: {root:?}");
+    let lines = root["transcript"].as_array().unwrap();
+    assert_eq!(lines.len(), t.turns.len());
+    for (line, turn) in lines.iter().zip(&t.turns) {
+        let line = line.as_object().unwrap();
+        assert_eq!(line.len(), 4, "в реплике только четыре поля: {line:?}");
+        for key in ["speaker_id", "start_ms", "end_ms", "text"] {
+            assert!(line.contains_key(key), "нет поля {key}");
+        }
+        assert_eq!(
+            line["speaker_id"].as_str(),
+            Some(format!("speaker_{}", turn.speaker).as_str())
+        );
+        assert_eq!(
+            line["start_ms"].as_i64(),
+            Some((turn.start * 1000.0).round() as i64)
+        );
+        assert_eq!(
+            line["end_ms"].as_i64(),
+            Some((turn.end * 1000.0).round() as i64)
+        );
+        assert_eq!(line["text"].as_str(), Some(turn.text.as_str()));
+    }
 }
 
 struct Cue {
