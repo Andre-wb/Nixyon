@@ -5,6 +5,7 @@
 pub mod audio_file;
 pub mod backfill;
 pub mod centers_file;
+pub mod delete_meeting;
 pub mod edit_lock;
 mod index;
 mod index_entry;

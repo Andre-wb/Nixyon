@@ -4,6 +4,7 @@
 //! спикера встречи сохраняется под его именем.
 
 mod add_sample;
+mod forget_meeting;
 mod meeting_center;
 mod remember;
 mod store;
@@ -19,12 +20,13 @@ use nixyon_core::{MAX_SAMPLE_SEC, MIN_SAMPLE_SPEECH_SEC, VoiceSample, rfc3339_ut
 use serde::Serialize;
 use tauri::{AppHandle, Runtime};
 
-use crate::meetings::centers_file;
+use crate::meetings::{centers_file, edit_lock};
 use crate::transcription::CommandError;
 use crate::transcription::allowed_path::resolve_input;
 use crate::transcription::temp_files::TempFiles;
 use crate::vault::{FilesStore, Storage};
 use add_sample::add_sample;
+use forget_meeting::forget_meeting;
 use meeting_center::MeetingCenter;
 use remember::remember;
 use voice_record::VoiceRecord;
@@ -251,7 +253,18 @@ pub async fn delete_voice<R: Runtime>(
 
 /// Запоминает голос спикера встречи под его именем: центр голоса с этой встречи
 /// добавляется к голосу с таким именем или становится новым голосом без образца.
+/// Под блокировкой правок встречи: удаление встречи не может пройти между чтением её
+/// центров и записью голоса и оставить в библиотеке центр уже удалённой встречи.
 pub fn remember_speaker(
+    files: &FilesStore,
+    meeting: &str,
+    speaker: u32,
+    remembered_at: String,
+) -> Result<VoicesView, CommandError> {
+    edit_lock::locked(|| remember_unlocked(files, meeting, speaker, remembered_at))
+}
+
+fn remember_unlocked(
     files: &FilesStore,
     meeting: &str,
     speaker: u32,
@@ -284,6 +297,16 @@ pub fn remember_speaker(
         );
         Ok(view(voices))
     })
+}
+
+/// Убирает из библиотеки голосов центры удалённой встречи. Отказ изменения невозможен,
+/// ошибка только у чтения или записи файла.
+pub fn forget_meeting_centers(files: &FilesStore, meeting: &str) -> std::io::Result<()> {
+    store::update(files, |voices| {
+        forget_meeting(voices, meeting);
+        Ok::<_, std::convert::Infallible>(())
+    })
+    .map(|_| ())
 }
 
 #[tauri::command]
@@ -382,12 +405,16 @@ mod tests {
         let d = dir("errors");
         let now = || "2026-10-30T10:00:00Z".to_string();
         assert_eq!(
-            remember_speaker(&d, M, 1, now()).unwrap_err().code,
+            remember_speaker(&d, M, 1, "2026-11-07T12:00:00Z".into())
+                .unwrap_err()
+                .code,
             NO_TRANSCRIPT
         );
         let id = crate::meetings::test_meeting(&d, &transcript(&[Some("Анна"), None]));
         assert_eq!(
-            remember_speaker(&d, M, 1, now()).unwrap_err().code,
+            remember_speaker(&d, M, 1, "2026-11-07T12:00:00Z".into())
+                .unwrap_err()
+                .code,
             NO_VOICE_CENTER
         );
         centers_file::save(&d, &id, &[(1, vec![1.0]), (2, vec![1.0])]).unwrap();
@@ -443,6 +470,21 @@ mod tests {
             used,
             [("Анна".into(), vec![1.0]), ("Анна".into(), vec![0.7])]
         );
+    }
+
+    #[test]
+    fn remembering_a_voice_of_a_deleted_meeting_leaves_the_library_unchanged() {
+        let d = dir("after-delete");
+        let id = crate::meetings::test_meeting(&d, &transcript(&[Some("Анна")]));
+        centers_file::save(&d, &id, &[(1, vec![0.6, 0.8])]).unwrap();
+        crate::meetings::delete_meeting::delete(&d, M, &|p| std::fs::remove_dir_all(p)).unwrap();
+        assert_eq!(
+            remember_speaker(&d, M, 1, "2026-11-07T12:00:00Z".into())
+                .unwrap_err()
+                .code,
+            NO_TRANSCRIPT
+        );
+        assert!(store::load(&d).unwrap().is_empty());
     }
 
     #[test]

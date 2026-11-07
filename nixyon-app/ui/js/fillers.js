@@ -1,4 +1,4 @@
-import { channel, errorCode, errorText, invoke } from "./api.js";
+import { channel, errorText, invoke, isQuietError } from "./api.js";
 import { $, el } from "./dom.js";
 import { clock } from "./format.js";
 import { K, t } from "./i18n.js";
@@ -115,7 +115,7 @@ async function run(ids) {
       }),
     });
   } catch (error) {
-    if (errorCode(error) !== "cancelled") $("filler-error").textContent = errorText(error);
+    if (!isQuietError(error)) $("filler-error").textContent = errorText(error);
   } finally {
     running = false;
     progress = null;

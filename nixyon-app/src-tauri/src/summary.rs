@@ -9,8 +9,9 @@ use nixyon_android::{SpeechExt, SummaryProgress, SummaryRequest};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime, State};
 
-use crate::meetings::summary_file;
+use crate::meetings::{MeetingId, edit_lock, summary_file};
 use crate::transcription::{CommandError, Running};
+use crate::vault::FilesStore;
 
 /// Работа языковой модели: протокол или подсказка имён, одно за раз, отдельно от
 /// расшифровки. Модель на устройстве одна, отмена у обоих общая (`cancel_summary`).
@@ -92,18 +93,23 @@ pub async fn summarize_meeting<R: Runtime>(
     })?;
 
     let saved = text.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        // Встречи могло не стать, пока модель работала: её папку протокол не воскрешает.
-        if !crate::meetings::exists(&store, &id) {
-            return Err(CommandError::new(crate::meetings::NO_TRANSCRIPT));
-        }
-        summary_file::save(&store, &id, &saved)
-            .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
-    })
-    .await
-    .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))??;
+    tauri::async_runtime::spawn_blocking(move || save_if_exists(&store, &id, &saved))
+        .await
+        .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))??;
     drop(slot);
     Ok(text)
+}
+
+/// Встречи могло не стать, пока модель работала: её папку протокол не воскрешает.
+/// Проверка и запись идут под блокировкой правок, чтобы удаление не прошло между ними.
+fn save_if_exists(store: &FilesStore, id: &MeetingId, text: &str) -> Result<(), CommandError> {
+    edit_lock::locked(|| {
+        if !crate::meetings::exists(store, id) {
+            return Err(CommandError::new(crate::meetings::NO_TRANSCRIPT));
+        }
+        summary_file::save(store, id, text)
+            .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
+    })
 }
 
 /// Отмена составления протокола. Если ничего не идёт, ничего и не происходит.
@@ -132,4 +138,36 @@ pub async fn meeting_summary<R: Runtime>(
     tauri::async_runtime::spawn_blocking(move || summary_file::load(&store, &id))
         .await
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ID: &str = "2026-11-07T10:00:00Z";
+
+    #[test]
+    fn summary_is_saved_to_an_existing_meeting() {
+        let store = crate::vault::test_store("summary-save");
+        let id = crate::meetings::test_meeting(&store, &crate::meetings::test_transcript(ID));
+        save_if_exists(&store, &id, "Итоги").unwrap();
+        assert_eq!(summary_file::load(&store, &id).as_deref(), Some("Итоги"));
+    }
+
+    #[test]
+    fn summary_finished_after_deletion_does_not_bring_the_meeting_folder_back() {
+        let store = crate::vault::test_store("summary-after-delete");
+        let id = crate::meetings::test_meeting(&store, &crate::meetings::test_transcript(ID));
+        crate::meetings::delete_meeting::delete(&store, ID, &|d| std::fs::remove_dir_all(d))
+            .unwrap();
+        assert_eq!(
+            save_if_exists(&store, &id, "Итоги").unwrap_err().code,
+            crate::meetings::NO_TRANSCRIPT
+        );
+        assert!(!crate::meetings::exists(&store, &id));
+        let left = std::fs::read_dir(store.dir().join("meetings"))
+            .unwrap()
+            .count();
+        assert_eq!(left, 0);
+    }
 }

@@ -142,6 +142,8 @@
       <button class="button button-secondary wide" id="open-fillers" type="button" data-i18n="fillers.open" hidden></button>
       <button class="button button-secondary wide" id="open-summary" type="button" data-i18n="summary.button" hidden></button>
       <button class="button button-secondary wide" id="open-names" type="button" data-i18n="names.button" hidden></button>
+      <button class="button button-danger wide" id="meeting-delete" type="button" data-i18n="meeting_delete.button"></button>
+      <p class="error" id="meeting-delete-error" role="alert"></p>
       <div class="search" role="search">
         <input class="search-input" id="search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-i18n-label="search.label">
         <button class="icon-button" id="search-prev" type="button" data-i18n-label="search.previous" disabled>
@@ -341,6 +343,14 @@
     <div class="alert-actions">
       <button class="button button-secondary" id="merge-no" type="button" data-i18n="common.cancel"></button>
       <button class="button button-danger" id="merge-yes" type="button" data-i18n="speaker.merge_do"></button>
+    </div>
+  </dialog>
+
+  <dialog class="alert" id="meeting-delete-confirm" aria-labelledby="meeting-delete-text">
+    <p id="meeting-delete-text"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="meeting-delete-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="meeting-delete-yes" type="button" data-i18n="meeting_delete.do"></button>
     </div>
   </dialog>
 

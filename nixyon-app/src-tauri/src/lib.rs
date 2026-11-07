@@ -28,6 +28,7 @@ pub fn run() {
             meetings::list_meetings::list_meetings,
             meetings::open_meeting::open_meeting,
             meetings::rename_meeting::rename_meeting,
+            meetings::delete_meeting::delete_meeting,
             media::start_recording,
             media::stop_recording,
             media::pause_recording,

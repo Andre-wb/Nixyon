@@ -93,6 +93,13 @@ export function errorCode(error) {
   return typeof error === "object" && error && typeof error.code === "string" ? error.code : "unknown";
 }
 
+// Фоновая работа, которую отменили или чью встречу удалили, пока она шла: показывать
+// нечего, это не ошибка для человека.
+export function isQuietError(error) {
+  const code = errorCode(error);
+  return code === "cancelled" || code === "no_transcript";
+}
+
 export function errorText(error) {
   return t(ERRORS[errorCode(error)] ?? K.error_unknown);
 }

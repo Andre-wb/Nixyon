@@ -1,4 +1,4 @@
-import { channel, errorCode, errorText, invoke } from "./api.js";
+import { channel, errorText, invoke, isQuietError } from "./api.js";
 import { $, dot, el, speakerColor } from "./dom.js";
 import { clock } from "./format.js";
 import { emotionChip, initEmotion, openEmotion } from "./emotion.js";
@@ -249,7 +249,7 @@ async function startTurnCheck() {
       }),
     });
   } catch (error) {
-    if (errorCode(error) !== "cancelled") $("turn-check-error").textContent = errorText(error);
+    if (!isQuietError(error)) $("turn-check-error").textContent = errorText(error);
   } finally {
     checkRunning = false;
     checkProgress = null;
@@ -347,6 +347,36 @@ function askMerge(absorb, keep) {
   openModal($("merge-confirm"));
 }
 
+// Удаление встречи необратимо: сначала подтверждение с её названием.
+function askDeleteMeeting() {
+  if (!current) return;
+  $("meeting-delete-error").textContent = "";
+  $("meeting-delete-text").textContent = t(K.meeting_delete_confirm, {
+    title: meetingTitle(title, current.created_at),
+  });
+  openModal($("meeting-delete-confirm"));
+}
+
+// Плеер закрывается до удаления: стирается и файл, который он играет. После удаления
+// экран встречи закрывается, список на главном перечитывается сам.
+async function deleteMeeting() {
+  $("meeting-delete-confirm").close();
+  const meeting = currentMeeting();
+  if (!meeting) return;
+  await closePlayer();
+  try {
+    await invoke("delete_meeting", { meeting });
+  } catch (error) {
+    $("meeting-delete-error").textContent = errorText(error);
+    if (currentMeeting() === meeting) openPlayer(current);
+    return;
+  }
+  if (currentMeeting() === meeting) {
+    current = null;
+    history.back();
+  }
+}
+
 async function merge() {
   $("merge-confirm").close();
   if (!pendingMerge) return;
@@ -381,6 +411,9 @@ export function initTranscript() {
     }
   });
   $("merge-yes").addEventListener("click", merge);
+  $("meeting-delete").addEventListener("click", askDeleteMeeting);
+  $("meeting-delete-no").addEventListener("click", () => $("meeting-delete-confirm").close());
+  $("meeting-delete-yes").addEventListener("click", deleteMeeting);
   $("turn-save").addEventListener("click", saveTurnText);
   $("turn-fillers").addEventListener("click", () => {
     $("turn-sheet").close();

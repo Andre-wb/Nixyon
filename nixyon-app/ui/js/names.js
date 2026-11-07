@@ -1,4 +1,4 @@
-import { channel, errorCode, errorText, invoke } from "./api.js";
+import { channel, errorCode, errorText, invoke, isQuietError } from "./api.js";
 import { $, el } from "./dom.js";
 import { K, t } from "./i18n.js";
 import { onModelsChange } from "./models.js";
@@ -92,7 +92,7 @@ async function start() {
   } catch (error) {
     const code = errorCode(error);
     if (code === "llm_failed") $("names-error").textContent = t(K.names_failed);
-    else if (code !== "cancelled") $("names-error").textContent = errorText(error);
+    else if (!isQuietError(error)) $("names-error").textContent = errorText(error);
   } finally {
     running = false;
     render();

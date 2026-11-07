@@ -1,4 +1,4 @@
-import { channel, errorCode, errorText, invoke } from "./api.js";
+import { channel, errorText, invoke, isQuietError } from "./api.js";
 import { $ } from "./dom.js";
 import { K, t } from "./i18n.js";
 import { onModelsChange } from "./models.js";
@@ -38,7 +38,7 @@ async function start() {
       }),
     });
   } catch (error) {
-    if (errorCode(error) !== "cancelled") $("summary-error").textContent = errorText(error);
+    if (!isQuietError(error)) $("summary-error").textContent = errorText(error);
   } finally {
     running = false;
     render();
