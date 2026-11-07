@@ -40,11 +40,9 @@ fi
 
 rm -rf "${STAGE}"
 mkdir -p "${STAGE}/models"
-# Роли, которые телефон не читает, в APK не кладутся: audEERING (age_gender, 363 МБ) даёт
-# только метку «ребёнок или взрослый» у спикеров, а фильтр музыки (tagging_*) на телефоне
-# не используется. Обе роли необязательны (ModelRole.kt), приложение без них работает,
-# поэтому из манифеста внутри APK они исключаются вместе с файлами.
-SKIP_ROLES="age_gender tagging_model tagging_labels"
+# Фильтр музыки (tagging_*) на телефоне не используется, поэтому в APK он не кладётся и
+# из манифеста внутри APK исключается вместе с файлами. Обе роли необязательны (ModelRole.kt).
+SKIP_ROLES="tagging_model tagging_labels"
 python3 -I -c '
 import json, sys
 skip = set(sys.argv[3].split())
