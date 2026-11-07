@@ -2,6 +2,7 @@ import { errorText, invoke } from "./api.js";
 import { $, el } from "./dom.js";
 import { K, t } from "./i18n.js";
 import { openModal } from "./screens.js";
+import { currentMeeting } from "./transcript.js";
 
 // Подпись каждой эмоции по её ключу из расшифровки.
 const LABELS = {
@@ -59,7 +60,7 @@ export function openEmotion(turn, meta, onSaved) {
 async function choose(emotion) {
   if (turnId === null) return;
   try {
-    const transcript = await invoke("set_turn_emotion", { id: turnId, emotion });
+    const transcript = await invoke("set_turn_emotion", { meeting: currentMeeting(), id: turnId, emotion });
     $("emotion-sheet").close();
     saved?.(transcript);
   } catch (error) {

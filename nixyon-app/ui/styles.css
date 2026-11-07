@@ -254,6 +254,16 @@ p {
   min-height: 44px;
 }
 
+/* Действия экрана справа; на узком экране или крупным шрифтом переносятся на новую
+   строку, а не уводят панель вбок. */
+.bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
 .icon {
   width: 24px;
   height: 24px;
@@ -550,11 +560,6 @@ p {
   cursor: pointer;
 }
 
-.last-label {
-  font-size: var(--text-footnote);
-  color: var(--label-secondary);
-}
-
 .last-file {
   font-weight: 600;
   overflow-wrap: anywhere;
@@ -619,6 +624,85 @@ p {
   cursor: pointer;
 }
 
+.meeting-row {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.meeting-row .meta {
+  overflow-wrap: anywhere;
+}
+
+.meetings-empty {
+  padding: 0 var(--space-4);
+}
+
+.meetings-search {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Названия меток вводит человек и они бывают длинными: метка переносится, а не уводит
+   ряд вбок. */
+.label-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.label-filter .chip {
+  max-width: 100%;
+  padding-block: var(--space-2);
+  line-height: 1.2;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.hit-text {
+  overflow-wrap: anywhere;
+}
+
+.label-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 52px;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+}
+
+.label-row.label-edit {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+}
+
+.label-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.label-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Удаление метки снимает её со всех встреч, поэтому значок цвета опасного действия. */
+.danger-icon {
+  color: var(--danger);
+}
+
 .voice-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -631,6 +715,19 @@ p {
 .voice-text {
   display: grid;
   gap: var(--space-1);
+}
+
+/* Имя и счётчик голоса: кнопка, открывает лист голоса со списком встреч. */
+.voice-open {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 /* Удаление необратимо, поэтому значок цвета опасного действия и окно подтверждения. */
@@ -695,6 +792,12 @@ p {
   font-size: var(--text-footnote);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
+}
+
+/* У встречи без звука слушать нечего: время остаётся подписью, без цвета ссылки. */
+.turn-time[disabled] {
+  color: var(--label-secondary);
+  cursor: default;
 }
 
 /* Метка эмоции реплики: нажатие открывает список эмоций. Невидимое поле вокруг даёт
@@ -1040,14 +1143,14 @@ p {
 }
 
 .player-speeds .chip {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 var(--space-3);
   font-variant-numeric: tabular-nums;
 }
 
 .player-speaker {
   flex: 1 1 140px;
-  min-height: 36px;
+  min-height: 44px;
   max-width: 100%;
   padding: 0 var(--space-2);
   border: 1px solid var(--separator);
@@ -1493,9 +1596,10 @@ label.model-row {
   padding-bottom: var(--space-5);
 }
 
-/* Разделы моделей, входа по отпечатку и ускорения в настройках. */
+/* Разделы моделей, входа по отпечатку, места на телефоне и ускорения в настройках. */
 .settings-models,
 .settings-biometric,
+.settings-storage,
 .settings-llm-gpu {
   display: grid;
   gap: var(--space-2);

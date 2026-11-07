@@ -1,12 +1,11 @@
 import { channel, errorCode, errorText, invoke, startMicrophone } from "./api.js";
 import { $ } from "./dom.js";
-import { clock, dateTime } from "./format.js";
+import { clock } from "./format.js";
 import { K, t } from "./i18n.js";
 import { renderLive } from "./live.js";
 import { onModelsChange, openModels, speechReady } from "./models.js";
 import { showImport, transcribe } from "./processing.js";
 import { onLanguageChange, show } from "./screens.js";
-import { open, onTranscriptChange } from "./transcript.js";
 
 const MIN_SPEAKERS = 1;
 const MAX_SPEAKERS = 10;
@@ -30,7 +29,6 @@ let startedAt = 0;
 let pausedAt = 0;
 let pausedMs = 0;
 let timer = null;
-let last = null;
 // Запись, восстановленная после падения приложения, пока её не расшифровали.
 let recovered = null;
 
@@ -218,14 +216,6 @@ async function importFile() {
   }
 }
 
-export function setLast(transcript) {
-  last = transcript;
-  $("last").hidden = !last;
-  if (!last) return;
-  $("last-file").textContent = last.audio.file;
-  $("last-meta").textContent = `${dateTime(last.created_at)}, ${clock(last.audio.duration_sec)}`;
-}
-
 export function failed(text, code) {
   show("home");
   if (text) notice(text, { code });
@@ -254,14 +244,9 @@ export function initHome() {
   $("import").addEventListener("click", importFile);
   $("open-app-settings").addEventListener("click", () => invoke("open_app_settings").catch(() => null));
   $("recovered-transcribe").addEventListener("click", transcribeRecovered);
-  $("last").addEventListener("click", () => last && open(last));
   $("models-open").addEventListener("click", openModels);
   onModelsChange(renderModels);
-  onTranscriptChange(setLast);
-  onLanguageChange(() => {
-    renderRecorder();
-    setLast(last);
-  });
+  onLanguageChange(renderRecorder);
   renderCount();
   renderRecorder();
   offerRecovered();

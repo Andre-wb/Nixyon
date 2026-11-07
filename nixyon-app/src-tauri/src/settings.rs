@@ -1,7 +1,8 @@
-//! Настройки приложения: язык интерфейса, тема, горячие слова для распознавания и
-//! показан ли экран загрузки моделей.
+//! Настройки приложения: язык интерфейса, тема, горячие слова для распознавания,
+//! показан ли экран загрузки моделей и срок автоочистки звука встреч.
 //! Хранятся в `files/settings.json`.
 
+mod cleanup_days;
 mod hotword_list;
 
 use nixyon_android::{SpeechExt, SystemBarsRequest};
@@ -43,11 +44,15 @@ pub struct Settings {
     /// Экран загрузки моделей уже показан: дальше он открывается только по кнопке.
     #[serde(default)]
     pub models_prompt_seen: bool,
+    /// Через сколько дней удаляется звук встреч; None: не удаляется.
+    #[serde(default)]
+    pub audio_cleanup_days: Option<u32>,
 }
 
 pub use hotword_list::merge_hotwords;
 
 const FILE: &str = "settings.json";
+const BAD_CLEANUP_DAYS: &str = "bad_cleanup_days";
 
 /// Битый или отсутствующий файл даёт настройки по умолчанию: язык не должен мешать
 /// запуску приложения.
@@ -171,6 +176,27 @@ pub async fn set_models_prompt_seen<R: Runtime>(
     .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
 
+/// Срок автоочистки звука встреч: None или один из сроков `CLEANUP_DAYS`.
+#[tauri::command]
+pub async fn set_audio_cleanup<R: Runtime>(
+    app: AppHandle<R>,
+    days: Option<u32>,
+) -> Result<Settings, CommandError> {
+    if !cleanup_days::valid(days) {
+        return Err(CommandError::new(BAD_CLEANUP_DAYS));
+    }
+    let store = files_store(&app).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut settings = load(&store);
+        settings.audio_cleanup_days = days;
+        save(&store, &settings)
+            .map(|()| settings)
+            .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
+    })
+    .await
+    .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,6 +212,7 @@ mod tests {
                 theme: Theme::Dark,
                 hotwords: vec!["Скайлс".into()],
                 models_prompt_seen: true,
+                audio_cleanup_days: Some(30),
             },
         )
         .unwrap();
@@ -193,12 +220,14 @@ mod tests {
         assert_eq!(load(&store).hotwords, ["Скайлс"]);
         assert_eq!(load(&store).theme, Theme::Dark);
         assert!(load(&store).models_prompt_seen);
+        assert_eq!(load(&store).audio_cleanup_days, Some(30));
         std::fs::write(store.dir().join(FILE), "{\"language\":\"de\"}").unwrap();
         assert_eq!(load(&store).language, Language::Auto);
         std::fs::write(store.dir().join(FILE), "{}").unwrap();
         assert_eq!(load(&store).language, Language::Auto);
         assert_eq!(load(&store).theme, Theme::Auto);
         assert!(!load(&store).models_prompt_seen);
+        assert_eq!(load(&store).audio_cleanup_days, None);
         std::fs::write(store.dir().join(FILE), "{\"theme\":\"sepia\"}").unwrap();
         assert_eq!(load(&store).theme, Theme::Auto);
     }

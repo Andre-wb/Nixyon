@@ -1,38 +1,27 @@
 //! Подготовка хранилища при первом обращении после запуска, до любой работы с файлами:
 //! остатки временных файлов удаляются, открытые файлы от прежних версий шифруются,
-//! файлы под потерянным ключом удаляются. Имена файлов записей не личные, их можно в лог.
+//! файлы под потерянным ключом удаляются, архив встреч приводится в порядок. Имена файлов
+//! записей не личные, их можно в лог.
 
 use std::path::Path;
 
 use super::files_store::FilesStore;
 use super::sealed_file::{first_chunk_opens, is_sealed, seal_in_place};
 
-/// Файлы с личными данными в `files`.
-pub const PRIVATE_FILES: [&str; 5] = [
-    "last_transcript.json",
-    "last_summary.json",
-    "last_centers.json",
-    "voices.json",
-    "settings.json",
-];
+/// Файлы с личными данными в `files`; файлы встреч лежат в своих папках.
+pub const PRIVATE_FILES: [&str; 3] = [crate::meetings::INDEX_FILE, "voices.json", "settings.json"];
 /// Папка исходных записей Kotlin-плагина (`RecordingsDir.kt`).
 pub const RECORDINGS_DIR: &str = "recordings";
-/// Папка записей образцов голоса (`SamplesDir.kt`): образец нужен только до сохранения
-/// голоса, после перезапуска он уже не нужен.
-pub const SAMPLES_DIR: &str = "samples";
-/// Папка файлов экспорта (`exporting.rs`): файл нужен, только пока его сохраняют или
-/// отправляют; открытым до следующего экспорта он лежать не должен.
-pub const EXPORTS_DIR: &str = "exports";
-const TEMP_PREFIX: &str = "nixyon-";
-
 pub fn prepare(store: &FilesStore, cache: &Path) {
-    sweep(cache, |name| name.starts_with(TEMP_PREFIX));
-    sweep(&cache.join(EXPORTS_DIR), |_| true);
-    sweep(&store.dir().join(SAMPLES_DIR), |_| true);
+    super::temporary_files::remove(store.dir(), cache);
     for name in PRIVATE_FILES {
         remove_quietly(&store.dir().join(format!("{name}.part")));
         secure(store, &store.dir().join(name));
     }
+    // Индекс уже проверен выше: под потерянным ключом он удалён, и папки встреч, тоже
+    // нечитаемые, уходят вместе с ним.
+    crate::meetings::startup::tidy(store, &|path| secure(store, path));
+    crate::meetings::backfill::fill_participants(store);
     let recordings = store.dir().join(RECORDINGS_DIR);
     sweep(&recordings, |name| name.ends_with(".part"));
     if let Ok(entries) = std::fs::read_dir(&recordings) {
@@ -91,6 +80,7 @@ mod tests {
     use super::super::data_key::test_key;
     use super::super::files_store::test_store;
     use super::super::sealed_file::{read_bytes, write_atomic};
+    use super::super::temporary_files::SAMPLES_DIR;
     use super::*;
 
     #[test]
@@ -107,6 +97,7 @@ mod tests {
         std::fs::write(cache.join("nixyon-1.wav"), b"pcm").unwrap();
         std::fs::write(cache.join("nixyon-1.segments.json"), b"[]").unwrap();
         std::fs::write(cache.join("other.bin"), b"x").unwrap();
+        std::fs::write(store.dir().join("meetings.json"), b"{\"meetings\":[]}").unwrap();
         std::fs::write(store.dir().join("last_transcript.json"), b"{\"t\":1}").unwrap();
         std::fs::write(store.dir().join("voices.json.part"), b"{").unwrap();
         std::fs::write(rec.join("rec-1.wav"), b"RIFF-plain").unwrap();
@@ -130,7 +121,7 @@ mod tests {
         assert!(!store.dir().join("voices.json.part").exists());
         assert!(!rec.join("rec-2.wav.part").exists());
         for (path, plain) in [
-            (store.dir().join("last_transcript.json"), &b"{\"t\":1}"[..]),
+            (store.dir().join("meetings.json"), &b"{\"meetings\":[]}"[..]),
             (rec.join("rec-1.wav"), &b"RIFF-plain"[..]),
             (store.dir().join("voices.json"), &b"{\"v\":[]}"[..]),
         ] {
@@ -138,5 +129,36 @@ mod tests {
             assert_eq!(read_bytes(&path, store.key()).unwrap(), plain);
         }
         assert!(!store.dir().join("settings.json").exists());
+        assert!(!store.dir().join("last_transcript.json").exists());
+    }
+
+    #[test]
+    fn plain_meeting_files_get_sealed_and_a_meeting_under_a_lost_key_goes_with_its_index() {
+        let store = test_store("prepare-meetings");
+        let cache = store.dir().join("cache");
+        let dir = store.dir().join("meetings/20261107T100000Z");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("transcript.json"), b"{\"t\":1}").unwrap();
+        let index =
+            br#"{"meetings":[{"id":"2026-11-07T10:00:00Z","duration_sec":1.0,"file":"a.wav"}]}"#;
+        write_atomic(&store.dir().join("meetings.json"), store.key(), index).unwrap();
+
+        prepare(&store, &cache);
+
+        assert!(is_sealed(&dir.join("transcript.json")).unwrap());
+        assert_eq!(
+            read_bytes(&dir.join("transcript.json"), store.key()).unwrap(),
+            b"{\"t\":1}"
+        );
+
+        write_atomic(
+            &store.dir().join("meetings.json"),
+            &Arc::new(test_key(7)),
+            index,
+        )
+        .unwrap();
+        prepare(&store, &cache);
+        assert!(!store.dir().join("meetings.json").exists());
+        assert!(!dir.exists());
     }
 }

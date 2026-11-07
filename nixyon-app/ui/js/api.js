@@ -36,6 +36,10 @@ const ERRORS = {
   export_failed: K.error_export_failed,
   hotword_too_long: K.error_hotword_too_long,
   import_failed: K.error_import_failed,
+  label_control_chars: K.error_label_control_chars,
+  label_empty: K.error_label_empty,
+  label_exists: K.error_label_exists,
+  label_too_long: K.error_label_too_long,
   last_turn: K.error_last_turn,
   llm_broken: K.error_llm_broken,
   llm_busy: K.error_llm_busy,
@@ -59,6 +63,7 @@ const ERRORS = {
   name_too_long: K.error_name_too_long,
   no_audio_track: K.error_no_audio_track,
   no_audio: K.error_no_audio,
+  no_label: K.error_no_label,
   no_speech: K.error_no_speech,
   no_transcript: K.error_no_transcript,
   no_voice_center: K.error_no_voice_center,
@@ -80,6 +85,8 @@ const ERRORS = {
   text_control_chars: K.error_text_control_chars,
   text_empty: K.error_text_empty,
   text_too_long: K.error_text_too_long,
+  title_control_chars: K.error_title_control_chars,
+  title_too_long: K.error_title_too_long,
   unknown_speaker: K.error_unknown_speaker,
   unknown_turn: K.error_unknown_turn,
   unknown_voice: K.error_unknown_voice,
@@ -89,6 +96,13 @@ const ERRORS = {
 
 export function errorCode(error) {
   return typeof error === "object" && error && typeof error.code === "string" ? error.code : "unknown";
+}
+
+// Фоновая работа, которую отменили или чью встречу удалили, пока она шла: показывать
+// нечего, это не ошибка для человека.
+export function isQuietError(error) {
+  const code = errorCode(error);
+  return code === "cancelled" || code === "no_transcript";
 }
 
 export function errorText(error) {

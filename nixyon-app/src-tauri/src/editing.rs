@@ -1,4 +1,4 @@
-//! Правки последней расшифровки: переименование и слияние спикеров, исправление текста
+//! Правки расшифровки встречи: переименование и слияние спикеров, исправление текста
 //! и эмоции реплики, удаление реплики. После правки
 //! расшифровка сохраняется и возвращается интерфейсу целиком.
 
@@ -10,10 +10,9 @@ use nixyon_pipeline::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
-use crate::transcription::{CommandError, last_centers, last_transcript};
+use crate::meetings::{centers_file, edit_lock, save_transcript};
+use crate::transcription::CommandError;
 use crate::vault::FilesStore;
-
-const NO_TRANSCRIPT: &str = "no_transcript";
 
 fn edit_code(e: &EditError) -> &'static str {
     match e {
@@ -29,39 +28,60 @@ fn edit_code(e: &EditError) -> &'static str {
     }
 }
 
-/// Загружает последнюю расшифровку, применяет правку и сохраняет. Ошибка правки
-/// оставляет файл как был.
+/// Загружает расшифровку встречи, применяет правку и сохраняет. Ошибка правки оставляет
+/// файл как был.
 pub fn apply(
     store: &FilesStore,
+    meeting: &str,
     edit: impl FnOnce(&mut Transcript) -> Result<(), EditError>,
 ) -> Result<Transcript, CommandError> {
-    let mut transcript =
-        last_transcript::load(store).ok_or_else(|| CommandError::new(NO_TRANSCRIPT))?;
+    edit_lock::locked(|| apply_unlocked(store, meeting, edit))
+}
+
+/// То же без блокировки: для правок, которые уже держат её сами.
+fn apply_unlocked(
+    store: &FilesStore,
+    meeting: &str,
+    edit: impl FnOnce(&mut Transcript) -> Result<(), EditError>,
+) -> Result<Transcript, CommandError> {
+    let (id, mut transcript) = crate::meetings::load(store, meeting)?;
     edit(&mut transcript).map_err(|e| CommandError::new(edit_code(&e)))?;
-    last_transcript::save(store, &transcript)
+    save_transcript(store, &id, &transcript)
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
     Ok(transcript)
 }
 
 /// Слияние спикеров вместе с их центрами голосов: центры смешиваются с весом по времени
 /// речи до слияния. Если новые центры не записались, старые стираются, чтобы по ним не
-/// запомнить чужой голос.
+/// запомнить чужой голос. Расшифровка и центры меняются под одной блокировкой, чтобы
+/// другая правка не вклинилась между ними.
 pub fn merge_with_centers(
     store: &FilesStore,
+    meeting: &str,
     keep: u32,
     absorb: u32,
 ) -> Result<Transcript, CommandError> {
+    edit_lock::locked(|| merge_unlocked(store, meeting, keep, absorb))
+}
+
+fn merge_unlocked(
+    store: &FilesStore,
+    meeting: &str,
+    keep: u32,
+    absorb: u32,
+) -> Result<Transcript, CommandError> {
+    let id = crate::meetings::meeting_id(meeting)?;
     let mut weights = (0.0, 0.0);
-    let transcript = apply(store, |t| {
+    let transcript = apply_unlocked(store, meeting, |t| {
         let talk = |id| t.speaker(id).map_or(0.0, |s| s.talk_time_sec);
         weights = (talk(keep), talk(absorb));
         merge(t, keep, absorb)
     })?;
-    if let Some(mut centers) = last_centers::load(store) {
+    if let Some(mut centers) = centers_file::load(store, &id) {
         merge_centers(&mut centers, keep, absorb, weights.0, weights.1);
-        if let Err(e) = last_centers::save(store, &centers) {
+        if let Err(e) = centers_file::save(store, &id, &centers) {
             log::warn!("центры голосов после слияния не записались: {e}");
-            if let Err(e) = last_centers::clear(store) {
+            if let Err(e) = centers_file::clear(store, &id) {
                 log::error!("устаревшие центры голосов не стёрлись: {e}");
             }
         }
@@ -75,10 +95,11 @@ async fn files_store<R: Runtime>(app: &AppHandle<R>) -> Result<FilesStore, Comma
 
 async fn run<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     edit: impl FnOnce(&mut Transcript) -> Result<(), EditError> + Send + 'static,
 ) -> Result<Transcript, CommandError> {
     let store = files_store(&app).await?;
-    tauri::async_runtime::spawn_blocking(move || apply(&store, edit))
+    tauri::async_runtime::spawn_blocking(move || apply(&store, &meeting, edit))
         .await
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
@@ -87,10 +108,11 @@ async fn run<R: Runtime>(
 #[tauri::command]
 pub async fn rename_speaker<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     id: u32,
     name: String,
 ) -> Result<Transcript, CommandError> {
-    run(app, move |t| rename(t, id, &name)).await
+    run(app, meeting, move |t| rename(t, id, &name)).await
 }
 
 /// Реплики `absorb` переходят к `keep`, `absorb` пропадает. Отменить нельзя: интерфейс
@@ -98,11 +120,12 @@ pub async fn rename_speaker<R: Runtime>(
 #[tauri::command]
 pub async fn merge_speakers<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     keep: u32,
     absorb: u32,
 ) -> Result<Transcript, CommandError> {
     let store = files_store(&app).await?;
-    tauri::async_runtime::spawn_blocking(move || merge_with_centers(&store, keep, absorb))
+    tauri::async_runtime::spawn_blocking(move || merge_with_centers(&store, &meeting, keep, absorb))
         .await
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
@@ -112,10 +135,11 @@ pub async fn merge_speakers<R: Runtime>(
 #[tauri::command]
 pub async fn edit_turn_text<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     id: u32,
     text: String,
 ) -> Result<Transcript, CommandError> {
-    run(app, move |t| edit_text(t, id, &text)).await
+    run(app, meeting, move |t| edit_text(t, id, &text)).await
 }
 
 /// Реплика удаляется целиком вместе со временем. Отменить нельзя: интерфейс спрашивает
@@ -123,9 +147,10 @@ pub async fn edit_turn_text<R: Runtime>(
 #[tauri::command]
 pub async fn delete_turn<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     id: u32,
 ) -> Result<Transcript, CommandError> {
-    run(app, move |t| remove_turn(t, id)).await
+    run(app, meeting, move |t| remove_turn(t, id)).await
 }
 
 /// Правка текста реплики из листа слов-паразитов. Замена идёт, только если текст реплики
@@ -152,12 +177,13 @@ pub struct AppliedTexts {
 #[tauri::command]
 pub async fn apply_turn_texts<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     changes: Vec<TurnTextChange>,
 ) -> Result<AppliedTexts, CommandError> {
     let store = files_store(&app).await?;
     tauri::async_runtime::spawn_blocking(move || {
         let mut skipped = 0;
-        let transcript = apply(&store, |t| {
+        let transcript = apply(&store, &meeting, |t| {
             skipped = apply_changes(t, &changes)?;
             Ok(())
         })?;
@@ -195,15 +221,17 @@ fn apply_changes(t: &mut Transcript, changes: &[TurnTextChange]) -> Result<u32, 
 #[tauri::command]
 pub async fn set_turn_emotion<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     id: u32,
     emotion: Option<TurnEmotion>,
 ) -> Result<Transcript, CommandError> {
-    run(app, move |t| set_emotion(t, id, emotion)).await
+    run(app, meeting, move |t| set_emotion(t, id, emotion)).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::meetings::transcript_file;
 
     fn change(id: u32, before: &str, after: &str) -> TurnTextChange {
         TurnTextChange {
@@ -212,6 +240,40 @@ mod tests {
             after: after.into(),
             delete: false,
         }
+    }
+
+    #[test]
+    fn simultaneous_edits_of_one_meeting_lose_no_change() {
+        let store = crate::vault::test_store("editing-race");
+        let mut t = crate::meetings::test_transcript("2026-11-07T10:00:00Z");
+        t.speakers = (1..=16)
+            .map(|id| nixyon_core::Speaker {
+                id,
+                name: None,
+                talk_time_sec: 1.0,
+                turns: 1,
+                words: 1,
+                age: None,
+                gender: None,
+            })
+            .collect();
+        let id = crate::meetings::test_meeting(&store, &t);
+        std::thread::scope(|s| {
+            for speaker in 1..=16 {
+                let store = &store;
+                s.spawn(move || {
+                    apply(store, "2026-11-07T10:00:00Z", |t| {
+                        // Пауза между чтением и записью: без блокировки все потоки успели
+                        // бы прочитать одну и ту же расшифровку.
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                        rename(t, speaker, &format!("Участник {speaker}"))
+                    })
+                    .unwrap()
+                });
+            }
+        });
+        let saved = transcript_file::load(&store, &id).unwrap();
+        assert!(saved.speakers.iter().all(|s| s.name.is_some()));
     }
 
     #[test]
@@ -248,27 +310,27 @@ mod tests {
         let mut t = sample();
         t.speakers[0].talk_time_sec = 3.0;
         t.speakers[1].talk_time_sec = 1.0;
-        last_transcript::save(&d, &t).unwrap();
-        last_centers::save(&d, &[(1, vec![1.0, 0.0]), (2, vec![0.0, 1.0])]).unwrap();
-        let merged = merge_with_centers(&d, 1, 2).unwrap();
+        let id = crate::meetings::test_meeting(&d, &t);
+        centers_file::save(&d, &id, &[(1, vec![1.0, 0.0]), (2, vec![0.0, 1.0])]).unwrap();
+        let merged = merge_with_centers(&d, M, 1, 2).unwrap();
         assert_eq!(merged.speakers.len(), 1);
-        let centers = last_centers::load(&d).unwrap();
+        let centers = centers_file::load(&d, &id).unwrap();
         assert_eq!(centers.len(), 1);
         assert_eq!(centers[0].0, 1);
         assert!(centers[0].1[0] > centers[0].1[1]);
         assert_eq!(
-            merge_with_centers(&d, 1, 1).unwrap_err().code,
+            merge_with_centers(&d, M, 1, 1).unwrap_err().code,
             "same_speaker"
         );
-        assert_eq!(last_centers::load(&d).unwrap().len(), 1);
+        assert_eq!(centers_file::load(&d, &id).unwrap().len(), 1);
     }
 
     #[test]
     fn merging_without_centers_still_merges_speakers() {
         let d = dir("nocenters");
-        last_transcript::save(&d, &sample()).unwrap();
-        assert_eq!(merge_with_centers(&d, 1, 2).unwrap().speakers.len(), 1);
-        assert_eq!(last_centers::load(&d), None);
+        let id = crate::meetings::test_meeting(&d, &sample());
+        assert_eq!(merge_with_centers(&d, M, 1, 2).unwrap().speakers.len(), 1);
+        assert_eq!(centers_file::load(&d, &id), None);
     }
     use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, Speaker, Turn};
 
@@ -294,7 +356,7 @@ mod tests {
         };
         Transcript {
             schema_version: SCHEMA_VERSION,
-            created_at: "2026-10-29T10:00:00Z".into(),
+            created_at: M.into(),
             audio: AudioInfo {
                 file: "a.wav".into(),
                 duration_sec: 10.0,
@@ -310,6 +372,8 @@ mod tests {
         }
     }
 
+    const M: &str = "2026-10-29T10:00:00Z";
+
     fn dir(name: &str) -> crate::vault::FilesStore {
         crate::vault::test_store(&format!("edit-{name}"))
     }
@@ -317,37 +381,40 @@ mod tests {
     #[test]
     fn edits_are_saved_and_bad_ones_leave_the_file_alone() {
         let d = dir("save");
-        assert_eq!(apply(&d, |_| Ok(())).unwrap_err().code, NO_TRANSCRIPT);
-        last_transcript::save(&d, &sample()).unwrap();
-        let renamed = apply(&d, |t| rename(t, 2, "Анна")).unwrap();
+        assert_eq!(
+            apply(&d, M, |_| Ok(())).unwrap_err().code,
+            crate::meetings::NO_TRANSCRIPT
+        );
+        let id = crate::meetings::test_meeting(&d, &sample());
+        let renamed = apply(&d, M, |t| rename(t, 2, "Анна")).unwrap();
         assert_eq!(renamed.speakers[1].name.as_deref(), Some("Анна"));
         assert_eq!(
-            apply(&d, |t| rename(t, 9, "x")).unwrap_err().code,
+            apply(&d, M, |t| rename(t, 9, "x")).unwrap_err().code,
             "unknown_speaker"
         );
         assert_eq!(
-            apply(&d, |t| merge(t, 1, 1)).unwrap_err().code,
+            apply(&d, M, |t| merge(t, 1, 1)).unwrap_err().code,
             "same_speaker"
         );
         assert_eq!(
-            apply(&d, |t| rename(t, 1, &"я".repeat(65)))
+            apply(&d, M, |t| rename(t, 1, &"я".repeat(65)))
                 .unwrap_err()
                 .code,
             "name_too_long"
         );
         assert_eq!(
-            apply(&d, |t| edit_text(t, 1, " ")).unwrap_err().code,
+            apply(&d, M, |t| edit_text(t, 1, " ")).unwrap_err().code,
             "text_empty"
         );
         assert_eq!(
-            apply(&d, |t| edit_text(t, 9, "нет")).unwrap_err().code,
+            apply(&d, M, |t| edit_text(t, 9, "нет")).unwrap_err().code,
             "unknown_turn"
         );
-        let edited = apply(&d, |t| edit_text(t, 1, "Да, конечно.")).unwrap();
+        let edited = apply(&d, M, |t| edit_text(t, 1, "Да, конечно.")).unwrap();
         assert_eq!(edited.turns[0].text, "Да, конечно.");
-        let merged = apply(&d, |t| merge(t, 2, 1)).unwrap();
+        let merged = apply(&d, M, |t| merge(t, 2, 1)).unwrap();
         assert_eq!(merged.speakers.len(), 1);
-        let reloaded = last_transcript::load(&d).unwrap();
+        let reloaded = transcript_file::load(&d, &id).unwrap();
         assert_eq!(reloaded.speakers[0].name.as_deref(), Some("Анна"));
         assert!(reloaded.turns.iter().all(|t| t.speaker == 2));
         assert_eq!(reloaded.turns[0].text, "Да, конечно.");

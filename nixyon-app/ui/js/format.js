@@ -16,6 +16,13 @@ export function dateTime(iso) {
   return new Intl.DateTimeFormat(locale(), { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+// Дата и время встречи полностью, «7 ноября 2026 г., 10:00»: название встречи по умолчанию.
+export function longDateTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(locale(), { dateStyle: "long", timeStyle: "short" }).format(date);
+}
+
 // Размер файла на языке интерфейса: от гигабайта с одним знаком, меньше в мегабайтах.
 // Единицы десятичные, как в настройках памяти Android.
 export function bytes(count) {

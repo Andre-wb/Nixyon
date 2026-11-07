@@ -1,10 +1,12 @@
-import { channel, errorCode, errorText, invoke } from "./api.js";
+import { channel, errorText, invoke, isQuietError } from "./api.js";
 import { $, dot, el, speakerColor } from "./dom.js";
-import { clock, dateTime } from "./format.js";
+import { clock } from "./format.js";
 import { emotionChip, initEmotion, openEmotion } from "./emotion.js";
 import { K, t } from "./i18n.js";
 import { openExport } from "./export.js";
 import { fillersAvailable, openFillers } from "./fillers.js";
+import { openLabels } from "./labels.js";
+import { meetingMeta, meetingTitle, openRename } from "./meeting-title.js";
 import { closePlayer, openPlayer, playFrom, refreshPlayerIndex } from "./player.js";
 import { applySearch, resetSearch } from "./search.js";
 import { openStats } from "./stats.js";
@@ -17,6 +19,10 @@ import { loadVoices } from "./voices.js";
 const OVERLAP_FLAG = "overlap";
 
 let current = null;
+// Своё название открытой встречи; null: встреча называется датой и временем.
+let title = null;
+// Есть ли у встречи исходная запись: без неё слушать и проверять реплики нечем.
+let hasAudio = true;
 let warnings = [];
 let editing = null;
 let pendingMerge = null;
@@ -60,19 +66,26 @@ export function speakerName(transcript, id) {
   return speaker?.name || t(K.export_speaker_default, { n: id });
 }
 
-export function open(transcript, newWarnings = []) {
+export function open(transcript, newWarnings = [], newTitle = null, newHasAudio = true) {
   current = transcript;
+  title = newTitle;
   warnings = newWarnings;
+  hasAudio = newHasAudio;
   resetSearch();
   closePlayer();
   render();
   prepareNames(transcript);
   pushTranscript();
-  openPlayer(transcript);
+  if (hasAudio) openPlayer(transcript);
 }
 
 export function currentTranscript() {
   return current;
+}
+
+// id открытой встречи: команды ядра получают его параметром.
+export function currentMeeting() {
+  return current?.created_at ?? null;
 }
 
 export function setTranscript(transcript) {
@@ -82,11 +95,20 @@ export function setTranscript(transcript) {
   for (const listener of changeListeners) listener(transcript);
 }
 
+function renderTitle() {
+  $("transcript-file").textContent = meetingTitle(title, current.created_at);
+  $("transcript-meta").textContent = meetingMeta(title, current.created_at, current.audio.duration_sec);
+}
+
 function render() {
   if (!current) return;
-  $("transcript-file").textContent = current.audio.file;
-  $("transcript-meta").textContent = `${dateTime(current.created_at)}, ${clock(current.audio.duration_sec)}`;
+  renderTitle();
   $("transcript-warning").hidden = !warnings.includes("clipping");
+  // Со звуком строку под заголовком ведёт плеер: там его ошибки.
+  if (!hasAudio) {
+    $("playback-note").textContent = t(K.transcript_no_audio);
+    $("playback-note").hidden = false;
+  }
 
   const speakers = $("speakers");
   speakers.replaceChildren();
@@ -120,6 +142,7 @@ function render() {
     const time = el("button", "turn-time", clock(turn.start));
     time.type = "button";
     time.setAttribute("aria-label", t(K.transcript_play_from, { time: clock(turn.start) }));
+    time.disabled = !hasAudio;
     time.addEventListener("click", () => playFrom(turn.start));
     const actions = el("span", "turn-actions");
     const checkButton = el("button", "icon-button turn-check");
@@ -128,6 +151,7 @@ function render() {
     checkButton.setAttribute("aria-label", checkLabel);
     checkButton.title = checkLabel;
     checkButton.append($("recheck-icon").content.cloneNode(true));
+    checkButton.disabled = !hasAudio;
     checkButton.addEventListener("click", () => openTurnCheck(turn.id));
     const editButton = el("button", "icon-button turn-edit");
     editButton.type = "button";
@@ -171,7 +195,7 @@ function openTurnEdit(id) {
 async function deleteTurn() {
   $("turn-delete-confirm").close();
   try {
-    setTranscript(await invoke("delete_turn", { id: editingTurn }));
+    setTranscript(await invoke("delete_turn", { meeting: currentMeeting(), id: editingTurn }));
     $("turn-sheet").close();
   } catch (error) {
     $("turn-error").textContent = errorText(error);
@@ -228,6 +252,7 @@ async function startTurnCheck() {
   renderTurnCheck();
   try {
     checkResult = await invoke("reprocess_turn", {
+      meeting: currentMeeting(),
       id: checkTurn,
       onProgress: channel((p) => {
         checkProgress = p;
@@ -235,7 +260,7 @@ async function startTurnCheck() {
       }),
     });
   } catch (error) {
-    if (errorCode(error) !== "cancelled") $("turn-check-error").textContent = errorText(error);
+    if (!isQuietError(error)) $("turn-check-error").textContent = errorText(error);
   } finally {
     checkRunning = false;
     checkProgress = null;
@@ -254,7 +279,7 @@ async function applyTurnCheck() {
   if (!checkResult || checkTurn === null) return;
   const text = checkCandidate().replace(/[\r\n\t]+/g, " ");
   try {
-    setTranscript(await invoke("edit_turn_text", { id: checkTurn, text }));
+    setTranscript(await invoke("edit_turn_text", { meeting: currentMeeting(), id: checkTurn, text }));
     checkResult = null;
     $("turn-check-sheet").close();
   } catch (error) {
@@ -266,7 +291,7 @@ async function applyTurnCheck() {
 async function saveTurnText() {
   const text = $("turn-text-input").value.replace(/[\r\n\t]+/g, " ");
   try {
-    setTranscript(await invoke("edit_turn_text", { id: editingTurn, text }));
+    setTranscript(await invoke("edit_turn_text", { meeting: currentMeeting(), id: editingTurn, text }));
     $("turn-sheet").close();
   } catch (error) {
     $("turn-error").textContent = errorText(error);
@@ -305,7 +330,7 @@ function openSpeaker(id) {
 
 async function saveName() {
   try {
-    setTranscript(await invoke("rename_speaker", { id: editing, name: $("speaker-name").value }));
+    setTranscript(await invoke("rename_speaker", { meeting: currentMeeting(), id: editing, name: $("speaker-name").value }));
     $("speaker-sheet").close();
   } catch (error) {
     $("speaker-error").textContent = errorText(error);
@@ -314,7 +339,7 @@ async function saveName() {
 
 async function rememberVoice() {
   try {
-    await invoke("remember_voice", { speaker: editing });
+    await invoke("remember_voice", { meeting: currentMeeting(), speaker: editing });
     $("speaker-remember-status").textContent = t(K.speaker_remembered);
     $("speaker-error").textContent = "";
     loadVoices();
@@ -333,11 +358,41 @@ function askMerge(absorb, keep) {
   openModal($("merge-confirm"));
 }
 
+// Удаление встречи необратимо: сначала подтверждение с её названием.
+function askDeleteMeeting() {
+  if (!current) return;
+  $("meeting-delete-error").textContent = "";
+  $("meeting-delete-text").textContent = t(K.meeting_delete_confirm, {
+    title: meetingTitle(title, current.created_at),
+  });
+  openModal($("meeting-delete-confirm"));
+}
+
+// Плеер закрывается до удаления: стирается и файл, который он играет. После удаления
+// экран встречи закрывается, список на главном перечитывается сам.
+async function deleteMeeting() {
+  $("meeting-delete-confirm").close();
+  const meeting = currentMeeting();
+  if (!meeting) return;
+  await closePlayer();
+  try {
+    await invoke("delete_meeting", { meeting });
+  } catch (error) {
+    $("meeting-delete-error").textContent = errorText(error);
+    if (currentMeeting() === meeting) openPlayer(current);
+    return;
+  }
+  if (currentMeeting() === meeting) {
+    current = null;
+    history.back();
+  }
+}
+
 async function merge() {
   $("merge-confirm").close();
   if (!pendingMerge) return;
   try {
-    setTranscript(await invoke("merge_speakers", pendingMerge));
+    setTranscript(await invoke("merge_speakers", { meeting: currentMeeting(), ...pendingMerge }));
     $("speaker-sheet").close();
   } catch (error) {
     $("speaker-error").textContent = errorText(error);
@@ -348,6 +403,16 @@ async function merge() {
 export function initTranscript() {
   $("back").addEventListener("click", () => history.back());
   $("open-export").addEventListener("click", () => current && openExport(current));
+  $("open-rename").addEventListener("click", () => {
+    if (!current) return;
+    const meeting = currentMeeting();
+    openRename(meeting, title, (renamed) => {
+      if (currentMeeting() !== meeting) return;
+      title = renamed;
+      renderTitle();
+    });
+  });
+  $("open-labels").addEventListener("click", () => current && openLabels(currentMeeting()));
   $("open-stats").addEventListener("click", () => current && openStats(current));
   $("speaker-save").addEventListener("click", saveName);
   $("speaker-remember").addEventListener("click", rememberVoice);
@@ -358,6 +423,9 @@ export function initTranscript() {
     }
   });
   $("merge-yes").addEventListener("click", merge);
+  $("meeting-delete").addEventListener("click", askDeleteMeeting);
+  $("meeting-delete-no").addEventListener("click", () => $("meeting-delete-confirm").close());
+  $("meeting-delete-yes").addEventListener("click", deleteMeeting);
   $("turn-save").addEventListener("click", saveTurnText);
   $("turn-fillers").addEventListener("click", () => {
     $("turn-sheet").close();

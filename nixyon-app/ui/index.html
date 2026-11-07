@@ -92,11 +92,19 @@
         <button class="button button-plain" id="recovered-transcribe" type="button" data-i18n="recording.recovered_transcribe" hidden></button>
       </div>
 
-      <button class="last card" id="last" type="button" hidden>
-        <span class="last-label" data-i18n="home.last"></span>
-        <span class="last-file" id="last-file"></span>
-        <span class="meta" id="last-meta"></span>
-      </button>
+      <div class="group">
+        <h2 class="group-title" id="meetings-title" data-i18n="home.meetings"></h2>
+        <div class="search meetings-search" role="search">
+          <input class="search-input" id="meetings-search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-i18n-label="home.search_label">
+        </div>
+        <div class="label-filter" id="label-filter" role="group" data-i18n-label="home.label_filter" hidden></div>
+        <ul class="card speakers" id="meetings-list" aria-labelledby="meetings-title" hidden></ul>
+        <p class="meta meetings-empty" id="meetings-empty" data-i18n="home.meetings_empty" hidden></p>
+        <p class="meta meetings-empty" id="meetings-filter-empty" data-i18n="home.meetings_filter_empty" hidden></p>
+        <ul class="card speakers" id="meeting-hits" aria-labelledby="meetings-title" hidden></ul>
+        <p class="meta meetings-empty" id="meeting-hits-note" aria-live="polite"></p>
+        <p class="error" id="meetings-error" role="alert"></p>
+      </div>
 
       <p class="hint" data-i18n="home.offline"></p>
     </section>
@@ -122,7 +130,11 @@
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
           <span data-i18n="transcript.back"></span>
         </button>
-        <button class="button button-plain" id="open-export" type="button" data-i18n="export_sheet.button"></button>
+        <div class="bar-actions">
+          <button class="button button-plain" id="open-rename" type="button" data-i18n="transcript.rename"></button>
+          <button class="button button-plain" id="open-labels" type="button" data-i18n="transcript.labels"></button>
+          <button class="button button-plain" id="open-export" type="button" data-i18n="export_sheet.button"></button>
+        </div>
       </header>
       <h1 class="title transcript-title" id="transcript-file"></h1>
       <p class="meta" id="transcript-meta"></p>
@@ -138,6 +150,8 @@
       <button class="button button-secondary wide" id="open-fillers" type="button" data-i18n="fillers.open" hidden></button>
       <button class="button button-secondary wide" id="open-summary" type="button" data-i18n="summary.button" hidden></button>
       <button class="button button-secondary wide" id="open-names" type="button" data-i18n="names.button" hidden></button>
+      <button class="button button-danger wide" id="meeting-delete" type="button" data-i18n="meeting_delete.button"></button>
+      <p class="error" id="meeting-delete-error" role="alert"></p>
       <div class="search" role="search">
         <input class="search-input" id="search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-i18n-label="search.label">
         <button class="icon-button" id="search-prev" type="button" data-i18n-label="search.previous" disabled>
@@ -243,6 +257,24 @@
         <button class="button button-secondary wide" id="settings-models-download" type="button" data-i18n="models.missing_download" hidden></button>
         <p class="status" id="settings-models-status" role="status"></p>
       </div>
+      <div class="settings-storage">
+        <h2 class="group-title" id="settings-storage-title" data-i18n="settings.storage"></h2>
+        <ul class="card models" id="storage-list" aria-labelledby="settings-storage-title"></ul>
+        <button class="button button-secondary wide" id="storage-clear-temporary" type="button" data-i18n="storage.clear_temporary"></button>
+        <button class="button button-danger wide" id="storage-remove-audio" type="button" data-i18n="storage.remove_audio"></button>
+        <p class="status" id="storage-status" role="status"></p>
+      </div>
+      <div class="settings-storage">
+        <h2 class="group-title" id="audio-cleanup-title" data-i18n="settings.audio_cleanup"></h2>
+        <div class="card choices" role="radiogroup" aria-labelledby="audio-cleanup-title">
+          <label class="choice"><input type="radio" name="audio-cleanup" value="off"><span data-i18n="settings.audio_cleanup_off"></span></label>
+          <label class="choice"><input type="radio" name="audio-cleanup" value="7"><span data-i18n="settings.audio_cleanup_7"></span></label>
+          <label class="choice"><input type="radio" name="audio-cleanup" value="30"><span data-i18n="settings.audio_cleanup_30"></span></label>
+          <label class="choice"><input type="radio" name="audio-cleanup" value="90"><span data-i18n="settings.audio_cleanup_90"></span></label>
+        </div>
+        <p class="meta settings-note" data-i18n="settings.audio_cleanup_hint"></p>
+        <p class="status" id="audio-cleanup-status" role="status"></p>
+      </div>
       <div class="settings-llm-gpu" id="settings-llm-gpu-block" hidden>
         <h2 class="group-title" id="settings-llm-gpu-title" data-i18n="settings.acceleration"></h2>
         <div class="card" role="group" aria-labelledby="settings-llm-gpu-title">
@@ -301,6 +333,39 @@
     </form>
   </dialog>
 
+  <dialog class="sheet" id="meeting-sheet" aria-labelledby="meeting-sheet-title">
+    <form method="dialog" class="sheet-body" id="meeting-form">
+      <div class="sheet-head">
+        <h2 id="meeting-sheet-title" data-i18n="meeting_sheet.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <label class="field">
+        <span data-i18n="meeting_sheet.label"></span>
+        <input id="meeting-title-input" type="text" maxlength="100" autocomplete="off" enterkeyhint="done">
+      </label>
+      <p class="hint" data-i18n="meeting_sheet.hint"></p>
+      <button class="button button-primary wide" id="meeting-save" type="button" data-i18n="meeting_sheet.save"></button>
+      <p class="error" id="meeting-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="labels-sheet" aria-labelledby="labels-sheet-title">
+    <form method="dialog" class="sheet-body" id="labels-form">
+      <div class="sheet-head">
+        <h2 id="labels-sheet-title" data-i18n="labels.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="meta" id="labels-empty" data-i18n="labels.empty" hidden></p>
+      <ul class="card speakers" id="labels-list" aria-labelledby="labels-sheet-title" hidden></ul>
+      <label class="field">
+        <span data-i18n="labels.new"></span>
+        <input id="label-new" type="text" maxlength="40" autocomplete="off" enterkeyhint="done">
+      </label>
+      <button class="button button-secondary wide" id="label-add" type="button" data-i18n="labels.add"></button>
+      <p class="error" id="labels-error" role="alert"></p>
+    </form>
+  </dialog>
+
   <dialog class="sheet" id="voice-sheet" aria-labelledby="voice-sheet-title">
     <form method="dialog" class="sheet-body" id="voice-form">
       <div class="sheet-head">
@@ -319,6 +384,35 @@
     </form>
   </dialog>
 
+  <dialog class="sheet" id="voice-card" aria-labelledby="voice-card-title">
+    <form method="dialog" class="sheet-body" id="voice-card-form">
+      <div class="sheet-head">
+        <h2 id="voice-card-title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="meta" id="voice-card-meta"></p>
+      <h3 class="group-title" id="voice-card-meetings-title" data-i18n="voice_card.meetings"></h3>
+      <ul class="card speakers" id="voice-card-meetings" aria-labelledby="voice-card-meetings-title" hidden></ul>
+      <p class="meta" id="voice-card-empty" data-i18n="voice_card.empty" hidden></p>
+    </form>
+  </dialog>
+
+  <dialog class="alert" id="storage-remove-audio-confirm" aria-labelledby="storage-remove-audio-text">
+    <p id="storage-remove-audio-text" data-i18n="storage.remove_audio_confirm"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="storage-remove-audio-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="storage-remove-audio-yes" type="button" data-i18n="storage.remove_audio_do"></button>
+    </div>
+  </dialog>
+
+  <dialog class="alert" id="storage-clear-temporary-confirm" aria-labelledby="storage-clear-temporary-text">
+    <p id="storage-clear-temporary-text" data-i18n="storage.clear_temporary_confirm"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="storage-clear-temporary-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-primary" id="storage-clear-temporary-yes" type="button" data-i18n="storage.clear_temporary_do"></button>
+    </div>
+  </dialog>
+
   <dialog class="alert" id="voice-delete-confirm" aria-labelledby="voice-delete-text">
     <p id="voice-delete-text"></p>
     <div class="alert-actions">
@@ -332,6 +426,22 @@
     <div class="alert-actions">
       <button class="button button-secondary" id="merge-no" type="button" data-i18n="common.cancel"></button>
       <button class="button button-danger" id="merge-yes" type="button" data-i18n="speaker.merge_do"></button>
+    </div>
+  </dialog>
+
+  <dialog class="alert" id="meeting-delete-confirm" aria-labelledby="meeting-delete-text">
+    <p id="meeting-delete-text"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="meeting-delete-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="meeting-delete-yes" type="button" data-i18n="meeting_delete.do"></button>
+    </div>
+  </dialog>
+
+  <dialog class="alert" id="label-delete-confirm" aria-labelledby="label-delete-text">
+    <p id="label-delete-text"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="label-delete-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="label-delete-yes" type="button" data-i18n="labels.delete_do"></button>
     </div>
   </dialog>
 

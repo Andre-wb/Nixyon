@@ -63,7 +63,7 @@ class ModelDownloadService : Service() {
     companion object {
         private const val TAG = "NixyonModels"
         private const val CHANNEL_ID = "nixyon-models"
-        private const val NOTIFICATION_ID = 2
+        private const val NOTIFICATION_ID = NotificationIds.MODEL_DOWNLOAD
         private const val EXTRA_TITLE = "title"
         // Уведомление обновляется не чаще раза в секунду: чаще система его отбрасывает.
         private const val UPDATE_MS = 1_000L

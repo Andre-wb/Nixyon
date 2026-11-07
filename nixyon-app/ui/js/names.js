@@ -1,9 +1,9 @@
-import { channel, errorCode, errorText, invoke } from "./api.js";
+import { channel, errorCode, errorText, invoke, isQuietError } from "./api.js";
 import { $, el } from "./dom.js";
 import { K, t } from "./i18n.js";
 import { onModelsChange } from "./models.js";
 import { onLanguageChange, openModal } from "./screens.js";
-import { onTranscriptChange, setTranscript, speakerName } from "./transcript.js";
+import { currentMeeting, onTranscriptChange, setTranscript, speakerName } from "./transcript.js";
 
 // Подсказка имён участников той же языковой моделью, что и протокол: кто представился
 // или к кому обратились по имени. Имя только предлагается, подписывает пользователь.
@@ -66,7 +66,11 @@ function card(suggestion) {
 async function acceptName(suggestion) {
   $("names-error").textContent = "";
   try {
-    setTranscript(await invoke("rename_speaker", { id: suggestion.speaker, name: suggestion.name }));
+    setTranscript(await invoke("rename_speaker", {
+      meeting: currentMeeting(),
+      id: suggestion.speaker,
+      name: suggestion.name,
+    }));
   } catch (error) {
     $("names-error").textContent = errorText(error);
   }
@@ -79,6 +83,7 @@ async function start() {
   render();
   try {
     suggestions = await invoke("suggest_speaker_names", {
+      meeting: currentMeeting(),
       onProgress: channel((p) => {
         progress = p;
         render();
@@ -87,7 +92,7 @@ async function start() {
   } catch (error) {
     const code = errorCode(error);
     if (code === "llm_failed") $("names-error").textContent = t(K.names_failed);
-    else if (code !== "cancelled") $("names-error").textContent = errorText(error);
+    else if (!isQuietError(error)) $("names-error").textContent = errorText(error);
   } finally {
     running = false;
     render();

@@ -68,7 +68,7 @@ class PlaybackService : Service() {
     companion object {
         private const val TAG = "NixyonPlayback"
         private const val CHANNEL_ID = "nixyon-playback"
-        private const val NOTIFICATION_ID = 2
+        private const val NOTIFICATION_ID = NotificationIds.PLAYBACK
         private const val ACTION_TOGGLE = "dev.demo.nixyon.speech.PLAYBACK_TOGGLE"
         private const val ACTION_REWIND = "dev.demo.nixyon.speech.PLAYBACK_REWIND"
         private const val ACTION_FORWARD = "dev.demo.nixyon.speech.PLAYBACK_FORWARD"
@@ -77,18 +77,21 @@ class PlaybackService : Service() {
         val active = AtomicBoolean(false)
         @Volatile private var current: Shown? = null
 
-        // Показывает уведомление и держит сервис. Первый вызов запускает сервис, следующие
-        // только обновляют уведомление. Вызывается из приложения, пока оно на экране.
+        // Показывает уведомление и держит сервис. Сервис запускается, когда звук пошёл
+        // (PlaybackNotice), следующие вызовы только обновляют уведомление.
         fun show(context: Context, token: MediaSession.Token, title: String, playing: Boolean) {
             val shown = Shown(token, title, playing)
             current = shown
             try {
-                if (active.get()) {
-                    ensureChannel(context)
-                    context.getSystemService(NotificationManager::class.java)
-                        ?.notify(NOTIFICATION_ID, build(context, shown))
-                } else {
-                    ContextCompat.startForegroundService(context, Intent(context, PlaybackService::class.java))
+                when (PlaybackNotice.choose(active.get(), playing)) {
+                    PlaybackNotice.UPDATE -> {
+                        ensureChannel(context)
+                        context.getSystemService(NotificationManager::class.java)
+                            ?.notify(NOTIFICATION_ID, build(context, shown))
+                    }
+                    PlaybackNotice.START ->
+                        ContextCompat.startForegroundService(context, Intent(context, PlaybackService::class.java))
+                    PlaybackNotice.NONE -> Unit
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "уведомление проигрывания не показалось", e)

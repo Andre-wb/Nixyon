@@ -2,6 +2,7 @@ mod editing;
 mod exporting;
 mod fillers;
 mod media;
+mod meetings;
 mod model_setup;
 mod playback;
 mod reprocessing;
@@ -9,6 +10,7 @@ mod searching;
 mod settings;
 mod speaker_names;
 mod statistics;
+mod storage_use;
 mod summary;
 mod transcription;
 mod vault;
@@ -24,7 +26,17 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             transcription::transcribe,
             transcription::cancel_transcription,
-            transcription::last_transcript,
+            meetings::list_meetings::list_meetings,
+            meetings::open_meeting::open_meeting,
+            meetings::rename_meeting::rename_meeting,
+            meetings::delete_meeting::delete_meeting,
+            meetings::clean_old_audio::clean_old_audio,
+            meetings::remove_all_audio::remove_all_audio,
+            meetings::list_labels::list_labels,
+            meetings::create_label::create_label,
+            meetings::rename_label::rename_label,
+            meetings::delete_label::delete_label,
+            meetings::set_meeting_labels::set_meeting_labels,
             media::start_recording,
             media::stop_recording,
             media::pause_recording,
@@ -47,6 +59,7 @@ pub fn run() {
             vault::biometric::open_biometric_settings,
             statistics::meeting_stats,
             searching::search_transcript,
+            searching::search_meetings::search_meetings,
             playback::open_playback,
             playback::play_audio,
             playback::pause_audio,
@@ -66,6 +79,9 @@ pub fn run() {
             settings::set_system_bars,
             settings::set_hotwords,
             settings::set_models_prompt_seen,
+            settings::set_audio_cleanup,
+            storage_use::storage_usage,
+            storage_use::clear_temporary_files,
             model_setup::models_status,
             model_setup::download_models,
             model_setup::cancel_model_download,
@@ -78,7 +94,7 @@ pub fn run() {
             summary::gpu::set_llm_gpu,
             summary::summarize_meeting,
             summary::cancel_summary,
-            summary::last_summary,
+            summary::meeting_summary,
             speaker_names::suggest_speaker_names
         ])
         .setup(|app| {

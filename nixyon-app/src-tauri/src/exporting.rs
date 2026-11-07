@@ -1,4 +1,4 @@
-//! Экспорт последней расшифровки: файл нужного формата строится в `cache/exports`, а
+//! Экспорт расшифровки встречи: файл нужного формата строится в `cache/exports`, а
 //! сохранить его в выбранное место или отправить в другое приложение помогает Kotlin.
 //! PDF верстает Kotlin по блокам протокола, остальные форматы собирает Rust.
 
@@ -13,7 +13,7 @@ use nixyon_render::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
-use crate::transcription::{CommandError, last_transcript};
+use crate::transcription::CommandError;
 
 const EXPORT_FAILED: &str = "export_failed";
 const MAX_STEM_CHARS: usize = 120;
@@ -67,6 +67,16 @@ pub struct ExportedFile {
 pub fn file_name(source: &str, format: Format) -> String {
     let last = source.rsplit(['/', '\\']).next().unwrap_or_default();
     let stem = last.rsplit_once('.').map_or(last, |(stem, _)| stem);
+    clean_name(stem, format)
+}
+
+/// Имя файла экспорта из своего названия встречи. Точка в названии не считается
+/// расширением: «Отчёт Q3.2026» остаётся целым.
+pub fn title_file_name(title: &str, format: Format) -> String {
+    clean_name(title, format)
+}
+
+fn clean_name(stem: &str, format: Format) -> String {
     let clean: String = stem
         .chars()
         .filter(|c| !c.is_control() && !r#"<>:"/\|?*"#.contains(*c))
@@ -150,11 +160,12 @@ async fn dirs<R: Runtime>(app: &AppHandle<R>) -> Result<StoragePaths, CommandErr
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
 }
 
-/// Строит файл экспорта последней расшифровки на языке интерфейса. Дату записи
+/// Строит файл экспорта расшифровки встречи на языке интерфейса. Дату записи
 /// присылает интерфейс уже в поясе устройства.
 #[tauri::command]
 pub async fn export_transcript<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     format: Format,
     language: String,
     recorded_at: Option<String>,
@@ -164,10 +175,12 @@ pub async fn export_transcript<R: Runtime>(
     let lang = Lang::from_code(&language).unwrap_or(Lang::Ru);
     let dir = exports_dir(&storage.paths);
     let (name, path, pdf_blocks) = tauri::async_runtime::spawn_blocking(move || {
-        let transcript =
-            last_transcript::load(&store).ok_or_else(|| CommandError::new("no_transcript"))?;
+        let (id, transcript) = crate::meetings::load(&store, &meeting)?;
         let rendered = render(&transcript, format, lang, recorded_at.as_deref())?;
-        let name = file_name(&transcript.audio.file, format);
+        let name = match crate::meetings::title(&store, &id) {
+            Some(title) => title_file_name(&title, format),
+            None => file_name(&transcript.audio.file, format),
+        };
         match rendered {
             Rendered::File(body) => {
                 let path = write_export(&dir, &name, &body).map_err(failed)?;
@@ -253,6 +266,24 @@ mod tests {
         assert_eq!(
             file_name(&"я".repeat(300), Format::Txt).chars().count(),
             MAX_STEM_CHARS + 4
+        );
+    }
+
+    #[test]
+    fn export_name_from_a_meeting_title_keeps_dots_and_drops_unsafe_parts() {
+        assert_eq!(
+            title_file_name("Отчёт Q3.2026", Format::Pdf),
+            "Отчёт Q3.2026.pdf"
+        );
+        assert_eq!(
+            title_file_name("План: 7/11 \\ итоги?", Format::Txt),
+            "План 711  итоги.txt"
+        );
+        assert_eq!(title_file_name("..", Format::Md), "transcript.md");
+        assert_eq!(title_file_name("...итоги", Format::Md), "итоги.md");
+        assert_eq!(
+            title_file_name(&"Ж".repeat(100), Format::Docx),
+            format!("{}.docx", "Ж".repeat(100))
         );
     }
 

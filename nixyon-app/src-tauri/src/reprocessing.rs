@@ -15,12 +15,11 @@ use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime, State};
 
+use crate::meetings::audio_file;
+use crate::meetings::audio_in_use::AudioInUse;
 use crate::settings::merge_hotwords;
-use crate::summary::{NO_TRANSCRIPT, SummaryRunning, answer};
-use crate::transcription::allowed_path::resolve_input;
-use crate::transcription::{
-    CommandError, Running, Slot, last_audio, last_transcript, temp_files::TempFiles,
-};
+use crate::summary::{SummaryRunning, answer};
+use crate::transcription::{CommandError, Running, Slot, temp_files::TempFiles};
 
 const NO_AUDIO: &str = "no_audio";
 const UNKNOWN_TURN: &str = "unknown_turn";
@@ -82,6 +81,7 @@ pub async fn reprocess_turn<R: Runtime>(
     app: AppHandle<R>,
     listening: State<'_, Running>,
     checking: State<'_, SummaryRunning>,
+    meeting: String,
     id: u32,
     on_progress: Channel<ReprocessProgress>,
 ) -> Result<ReprocessResult, CommandError> {
@@ -93,31 +93,22 @@ pub async fn reprocess_turn<R: Runtime>(
         .begin()
         .ok_or_else(|| CommandError::new(CommandError::BUSY))?;
 
+    // Звук встречи занят до конца команды: очистка его не удалит, пока фраза слушается.
+    let _audio_in_use = AudioInUse::hold(crate::meetings::meeting_id(&meeting)?);
     let storage = crate::vault::storage(&app).await?;
     let (store, dirs) = (storage.store, storage.paths);
-    let roots: Vec<PathBuf> = [
-        Some(&dirs.files),
-        Some(&dirs.cache),
-        dirs.external_files.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    .map(PathBuf::from)
-    .collect();
     let files_dir = PathBuf::from(&dirs.files);
     let cache_dir = PathBuf::from(&dirs.cache);
     let store_for_load = store.clone();
     let (turn, audio) = tauri::async_runtime::spawn_blocking(move || {
-        let transcript = last_transcript::load(&store_for_load)
-            .ok_or_else(|| CommandError::new(NO_TRANSCRIPT))?;
+        let (meeting_id, transcript) = crate::meetings::load(&store_for_load, &meeting)?;
         let turn = transcript
             .turns
             .into_iter()
             .find(|t| t.id == id)
             .ok_or_else(|| CommandError::new(UNKNOWN_TURN))?;
-        let audio = last_audio::load(&files_dir)
-            .and_then(|p| resolve_input(&p, &roots))
-            .ok_or_else(|| CommandError::new(NO_AUDIO))?;
+        let audio =
+            audio_file::path(&files_dir, &meeting_id).ok_or_else(|| CommandError::new(NO_AUDIO))?;
         Ok::<_, CommandError>((turn, audio))
     })
     .await

@@ -46,6 +46,14 @@ jobs:
       - name: Тесты скриптов
         run: nixyon-ci step test-scripts "Тесты скриптов" -- python3 -I -B -m unittest discover -s scripts
 
+      # Тесты интерфейса на node --test. Node отдельно не ставится: берётся тот, что лежит в
+      # раннере GitHub Actions. Шаблон файлов раскрывает сам node.
+      - name: Тесты интерфейса
+        working-directory: nixyon-app
+        run: |
+          nixyon-ci step test-ui "Тесты интерфейса" -- \
+            /opt/actions-runner/externals/node24/bin/node --test 'ui-tests/*.test.mjs'
+
       - name: Clippy ядра
         run: nixyon-ci step clippy-core "Clippy ядра" -- cargo clippy --workspace --all-targets -- -D warnings
 

@@ -1,20 +1,25 @@
-//! Поиск по текстам реплик последней расшифровки. Запрос в лог не пишется: в нём могут
-//! быть слова из разговора.
+//! Поиск по текстам реплик расшифровки встречи и по всем встречам архива. Запрос в лог не
+//! пишется: в нём могут быть слова из разговора.
 
 mod hit_view;
+mod in_order_parallel;
+#[cfg(test)]
+mod many_meetings_timing;
+mod meeting_hit;
+mod meeting_results;
+pub mod search_meetings;
+#[cfg(test)]
+mod test_archive;
 
 use nixyon_pipeline::search;
 use tauri::{AppHandle, Runtime};
 
-use crate::transcription::{CommandError, last_transcript};
+use crate::transcription::CommandError;
 use crate::vault::FilesStore;
 pub use hit_view::HitView;
 
-const NO_TRANSCRIPT: &str = "no_transcript";
-
-pub fn find(store: &FilesStore, query: &str) -> Result<Vec<HitView>, CommandError> {
-    let transcript =
-        last_transcript::load(store).ok_or_else(|| CommandError::new(NO_TRANSCRIPT))?;
+pub fn find(store: &FilesStore, meeting: &str, query: &str) -> Result<Vec<HitView>, CommandError> {
+    let (_, transcript) = crate::meetings::load(store, meeting)?;
     Ok(search(&transcript, query)
         .iter()
         .map(HitView::from)
@@ -24,10 +29,11 @@ pub fn find(store: &FilesStore, query: &str) -> Result<Vec<HitView>, CommandErro
 #[tauri::command]
 pub async fn search_transcript<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     query: String,
 ) -> Result<Vec<HitView>, CommandError> {
     let store = crate::vault::storage(&app).await?.store;
-    tauri::async_runtime::spawn_blocking(move || find(&store, &query))
+    tauri::async_runtime::spawn_blocking(move || find(&store, &meeting, &query))
         .await
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
@@ -50,7 +56,7 @@ mod tests {
         };
         Transcript {
             schema_version: SCHEMA_VERSION,
-            created_at: "2026-10-29T10:00:00Z".into(),
+            created_at: M.into(),
             audio: AudioInfo {
                 file: "a.wav".into(),
                 duration_sec: 10.0,
@@ -74,16 +80,21 @@ mod tests {
         }
     }
 
+    const M: &str = "2026-10-29T10:00:00Z";
+
     fn dir(name: &str) -> crate::vault::FilesStore {
         crate::vault::test_store(&format!("search-{name}"))
     }
 
     #[test]
-    fn hits_come_from_last_transcript_and_missing_one_is_an_error() {
+    fn hits_come_from_the_meeting_and_unknown_one_is_an_error() {
         let d = dir("find");
-        assert_eq!(find(&d, "встреча").unwrap_err().code, NO_TRANSCRIPT);
-        last_transcript::save(&d, &sample()).unwrap();
-        let hits = find(&d, "встреча").unwrap();
+        assert_eq!(
+            find(&d, M, "встреча").unwrap_err().code,
+            crate::meetings::NO_TRANSCRIPT
+        );
+        crate::meetings::test_meeting(&d, &sample());
+        let hits = find(&d, M, "встреча").unwrap();
         assert_eq!(hits.len(), 2);
         assert_eq!(
             (hits[0].turn_id, hits[0].start, hits[0].end, hits[0].exact),

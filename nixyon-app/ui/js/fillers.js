@@ -1,4 +1,4 @@
-import { channel, errorCode, errorText, invoke } from "./api.js";
+import { channel, errorText, invoke, isQuietError } from "./api.js";
 import { $, el } from "./dom.js";
 import { clock } from "./format.js";
 import { K, t } from "./i18n.js";
@@ -107,6 +107,7 @@ async function run(ids) {
   try {
     resultFor = transcript;
     result = await invoke("remove_filler_words", {
+      meeting: transcript?.created_at ?? null,
       ids,
       onProgress: channel((p) => {
         progress = p;
@@ -114,7 +115,7 @@ async function run(ids) {
       }),
     });
   } catch (error) {
-    if (errorCode(error) !== "cancelled") $("filler-error").textContent = errorText(error);
+    if (!isQuietError(error)) $("filler-error").textContent = errorText(error);
   } finally {
     running = false;
     progress = null;
@@ -126,7 +127,7 @@ async function apply() {
   if (!result?.changes.length) return;
   const changes = result.changes.map(({ id, before, after, delete: remove }) => ({ id, before, after, delete: remove }));
   try {
-    const applied = await invoke("apply_turn_texts", { changes });
+    const applied = await invoke("apply_turn_texts", { meeting: resultFor?.created_at ?? null, changes });
     setTranscript(applied.transcript);
     result = null;
     // Не вставшие правки не теряются молча: лист остаётся открытым и говорит, сколько их.

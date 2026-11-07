@@ -170,6 +170,11 @@ class StorageKey(private val context: Context) {
                     lost = true
                     finish(Result.failure(StorageLockedException(KEY_LOST)))
                 } else {
+                    // Перезапирание заменяет ключ Keystore под отпечатком ещё до пальца. Если
+                    // палец отменят, старая обёртка с новым ключом выглядела бы целой, и каждый
+                    // запуск падал бы на расшифровке. Пустая обёртка заранее оставляет вход
+                    // включённым и при следующем запуске снова ведёт сюда.
+                    write(BIO_FILE, ByteArray(0))
                     seal(activity, legacy, finish) { SecretKeySpec(legacy, "AES") }
                 }
             }

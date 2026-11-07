@@ -1,8 +1,9 @@
-import { channel, errorCode, errorText, invoke } from "./api.js";
+import { channel, errorText, invoke, isQuietError } from "./api.js";
 import { $ } from "./dom.js";
 import { K, t } from "./i18n.js";
 import { onModelsChange } from "./models.js";
 import { onLanguageChange, openModal } from "./screens.js";
+import { currentMeeting } from "./transcript.js";
 
 // Протокол встречи языковой моделью на телефоне. Модель работает минуты, поэтому лист
 // можно закрыть: составление продолжается, результат сохраняется и виден при новом открытии.
@@ -30,13 +31,14 @@ async function start() {
   render();
   try {
     text = await invoke("summarize_meeting", {
+      meeting: currentMeeting(),
       onProgress: channel((p) => {
         progress = p;
         render();
       }),
     });
   } catch (error) {
-    if (errorCode(error) !== "cancelled") $("summary-error").textContent = errorText(error);
+    if (!isQuietError(error)) $("summary-error").textContent = errorText(error);
   } finally {
     running = false;
     render();
@@ -45,7 +47,7 @@ async function start() {
 
 async function openSummary() {
   $("summary-error").textContent = "";
-  if (!running) text = await invoke("last_summary").catch(() => null);
+  if (!running) text = await invoke("meeting_summary", { meeting: currentMeeting() }).catch(() => null);
   render();
   openModal($("summary-sheet"));
 }
