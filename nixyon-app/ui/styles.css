@@ -717,6 +717,19 @@ p {
   gap: var(--space-1);
 }
 
+/* Имя и счётчик голоса: кнопка, открывает лист голоса со списком встреч. */
+.voice-open {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 /* Удаление необратимо, поэтому значок цвета опасного действия и окно подтверждения. */
 .voice-row .icon-button {
   color: var(--danger);
@@ -779,6 +792,12 @@ p {
   font-size: var(--text-footnote);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
+}
+
+/* У встречи без звука слушать нечего: время остаётся подписью, без цвета ссылки. */
+.turn-time[disabled] {
+  color: var(--label-secondary);
+  cursor: default;
 }
 
 /* Метка эмоции реплики: нажатие открывает список эмоций. Невидимое поле вокруг даёт
@@ -1577,9 +1596,10 @@ label.model-row {
   padding-bottom: var(--space-5);
 }
 
-/* Разделы моделей и входа по отпечатку в настройках. */
+/* Разделы моделей, входа по отпечатку и места на телефоне в настройках. */
 .settings-models,
-.settings-biometric {
+.settings-biometric,
+.settings-storage {
   display: grid;
   gap: var(--space-2);
 }

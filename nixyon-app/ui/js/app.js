@@ -9,6 +9,7 @@ import { unlockApp } from "./lock.js";
 import { initPlayer } from "./player.js";
 import { initProcessing } from "./processing.js";
 import { applyHotwords, applySetting, initSettings } from "./settings.js";
+import { applyAudioCleanup, cleanOldAudio } from "./settings-storage.js";
 import { handleModalBack, show } from "./screens.js";
 import { initSearch } from "./search.js";
 import { initStats } from "./stats.js";
@@ -26,6 +27,9 @@ async function start() {
   applyTheme(settings.theme);
   applySetting(settings.language);
   applyHotwords(settings.hotwords);
+  applyAudioCleanup(settings.audio_cleanup_days);
+  // Очистка идёт в фоне: запуск её не ждёт.
+  cleanOldAudio();
   initHome();
   initMeetings();
   initMeetingTitle();
@@ -48,7 +52,9 @@ async function start() {
     if (handleModalBack()) return;
     // С экрана загрузки моделей, открытого из настроек, «Назад» возвращает в настройки.
     if (location.hash === "#settings") show("settings");
-    else if (location.hash !== "#transcript" && location.hash !== "#voices" && location.hash !== "#models") show("home");
+    // Со встречи, открытой из листа голоса, «Назад» возвращает к голосам.
+    else if (location.hash === "#voices") show("voices");
+    else if (location.hash !== "#transcript" && location.hash !== "#models") show("home");
   });
   await initModels(Boolean(settings.models_prompt_seen));
 }

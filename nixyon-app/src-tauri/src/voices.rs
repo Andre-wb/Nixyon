@@ -6,8 +6,10 @@
 mod add_sample;
 mod forget_meeting;
 mod meeting_center;
+mod meetings_of_voice;
 mod remember;
 mod store;
+mod voice_meeting;
 mod voice_name;
 mod voice_record;
 
@@ -28,7 +30,9 @@ use crate::vault::{FilesStore, Storage};
 use add_sample::add_sample;
 use forget_meeting::forget_meeting;
 use meeting_center::MeetingCenter;
+use meetings_of_voice::meetings_of_voice;
 use remember::remember;
+use voice_meeting::VoiceMeeting;
 use voice_record::VoiceRecord;
 
 const UNKNOWN_SPEAKER: &str = "unknown_speaker";
@@ -43,8 +47,8 @@ pub struct VoiceItem {
     pub created_at: String,
     /// Есть ли записанный образец; без него голос знают только по встречам.
     pub has_sample: bool,
-    /// Со скольких встреч запомнен голос.
-    pub meetings: usize,
+    /// Встречи архива, на которых голос узнан, новые сверху; их число и есть «По встречам».
+    pub meetings: Vec<VoiceMeeting>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -53,9 +57,19 @@ pub struct VoicesView {
     pub voices: Vec<VoiceItem>,
     /// Наибольшая длина записи образца: интерфейс останавливает запись сам.
     pub max_sample_sec: f64,
+    /// Индекс встреч не прочитан: списки встреч у голосов пустые, причина в логе.
+    pub meetings_failed: bool,
 }
 
-fn view(voices: &[VoiceRecord]) -> VoicesView {
+/// Голоса со встречами архива: индекс читается один раз на весь список.
+fn view(files: &FilesStore, voices: &[VoiceRecord]) -> VoicesView {
+    let (archive, meetings_failed) = match crate::meetings::archived(files) {
+        Ok(archive) => (archive, false),
+        Err(e) => {
+            log::warn!("индекс встреч не читается, у голосов нет списка встреч: {e}");
+            (Vec::new(), true)
+        }
+    };
     VoicesView {
         voices: voices
             .iter()
@@ -63,10 +77,11 @@ fn view(voices: &[VoiceRecord]) -> VoicesView {
                 name: v.name.clone(),
                 created_at: v.created_at.clone(),
                 has_sample: v.embedding.is_some(),
-                meetings: v.centers.len(),
+                meetings: meetings_of_voice(&v.centers, &archive),
             })
             .collect(),
         max_sample_sec: MAX_SAMPLE_SEC,
+        meetings_failed,
     }
 }
 
@@ -155,7 +170,7 @@ fn recording(dirs: &StoragePaths, path: &str) -> Result<PathBuf, CommandError> {
 #[tauri::command]
 pub async fn list_voices<R: Runtime>(app: AppHandle<R>) -> Result<VoicesView, CommandError> {
     let store = storage(&app).await?.store;
-    tauri::async_runtime::spawn_blocking(move || load(&store).map(|v| view(&v)))
+    tauri::async_runtime::spawn_blocking(move || load(&store).map(|v| view(&store, &v)))
         .await
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
@@ -224,7 +239,7 @@ pub async fn add_voice<R: Runtime>(
                 created_at,
             )
             .map_err(|_| CommandError::new(CommandError::VOICE_NAME_TAKEN))?;
-            Ok(view(voices))
+            Ok(view(&files, voices))
         })
     })
     .await
@@ -244,7 +259,7 @@ pub async fn delete_voice<R: Runtime>(
             if voices.len() == before {
                 return Err(CommandError::new(CommandError::UNKNOWN_VOICE));
             }
-            Ok(view(voices))
+            Ok(view(&files, voices))
         })
     })
     .await
@@ -295,7 +310,7 @@ fn remember_unlocked(
                 voice_model: Some(transcript.engine.embedding.clone()),
             },
         );
-        Ok(view(voices))
+        Ok(view(files, voices))
     })
 }
 
@@ -389,7 +404,7 @@ mod tests {
         let view = remember_speaker(&d, M, 1, "2026-10-30T10:00:00Z".into()).unwrap();
         assert_eq!(view.voices.len(), 1);
         assert_eq!(
-            (view.voices[0].has_sample, view.voices[0].meetings),
+            (view.voices[0].has_sample, view.voices[0].meetings.len()),
             (false, 1)
         );
         // Повтор с той же встречи не добавляет второй центр.
@@ -398,6 +413,59 @@ mod tests {
         assert_eq!(used.len(), 1);
         assert_eq!(used[0].name, "Анна");
         assert_eq!(used[0].embedding, vec![0.6, 0.8]);
+    }
+
+    #[test]
+    fn voice_lists_its_archive_meetings_and_the_counter_drops_after_deletion() {
+        let d = dir("meetings-of-voice");
+        let later = "2026-10-31T09:00:00Z";
+        for created_at in [M, later] {
+            let mut t = transcript(&[Some("Анна")]);
+            t.created_at = created_at.into();
+            let id = crate::meetings::test_meeting(&d, &t);
+            centers_file::save(&d, &id, &[(1, vec![0.6, 0.8])]).unwrap();
+            remember_speaker(&d, created_at, 1, "2026-10-31T10:00:00Z".into()).unwrap();
+        }
+        // Центр встречи, которой в архиве нет: голос по нему узнаётся, но в списке её нет.
+        update(&d, |voices| {
+            voices[0].centers.push(MeetingCenter {
+                meeting: "2026-01-01T00:00:00Z".into(),
+                embedding: vec![1.0, 0.0],
+                remembered_at: "2026-10-31T10:00:00Z".into(),
+                voice_model: Some("e".into()),
+            });
+            Ok(())
+        })
+        .unwrap();
+        let before = view(&d, &load(&d).unwrap());
+        let ids: Vec<&str> = before.voices[0]
+            .meetings
+            .iter()
+            .map(|m| m.id.as_str())
+            .collect();
+        assert_eq!(ids, [later, M]);
+        assert!(!before.meetings_failed);
+
+        crate::meetings::delete_meeting::delete(&d, later, &|dir| std::fs::remove_dir_all(dir))
+            .unwrap();
+        let voices = load(&d).unwrap();
+        let after = view(&d, &voices);
+        assert_eq!(after.voices[0].meetings.len(), 1);
+        assert_eq!(after.voices[0].meetings[0].id, M);
+        assert_eq!(voices[0].centers.len(), 2);
+    }
+
+    #[test]
+    fn unreadable_index_leaves_voices_without_meetings_and_says_so() {
+        let d = dir("meetings-of-voice-broken");
+        let id = crate::meetings::test_meeting(&d, &transcript(&[Some("Анна")]));
+        centers_file::save(&d, &id, &[(1, vec![0.6, 0.8])]).unwrap();
+        remember_speaker(&d, M, 1, "2026-10-31T10:00:00Z".into()).unwrap();
+        d.write(crate::meetings::INDEX_FILE, b"{").unwrap();
+        let listed = view(&d, &load(&d).unwrap());
+        assert!(listed.meetings_failed);
+        assert_eq!(listed.voices.len(), 1);
+        assert!(listed.voices[0].meetings.is_empty());
     }
 
     #[test]

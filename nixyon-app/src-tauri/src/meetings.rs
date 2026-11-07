@@ -2,9 +2,12 @@
 //! встречи равен времени создания её расшифровки. Каждая команда, которая работает со
 //! встречей, получает её id параметром: скрытой «открытой встречи» в ядре нет.
 
+mod audio_cutoff;
 pub mod audio_file;
+pub mod audio_in_use;
 pub mod backfill;
 pub mod centers_file;
+pub mod clean_old_audio;
 pub mod create_label;
 pub mod delete_label;
 pub mod delete_meeting;
@@ -24,6 +27,8 @@ mod meeting_title;
 pub mod open_meeting;
 mod opened_meeting;
 mod participant;
+pub mod remove_all_audio;
+mod remove_audio;
 pub mod rename_label;
 pub mod rename_meeting;
 mod save_meeting;
@@ -39,6 +44,7 @@ use crate::transcription::CommandError;
 use crate::vault::FilesStore;
 
 pub use index::FILE as INDEX_FILE;
+pub use meeting_dir::{AUDIO, MEETINGS_DIR};
 pub use meeting_id::MeetingId;
 pub use save_meeting::{NewMeeting, save_meeting};
 pub use save_transcript::save_transcript;
@@ -71,6 +77,14 @@ pub fn title(store: &FilesStore, id: &MeetingId) -> Option<String> {
             None
         }
     }
+}
+
+/// Встречи архива с их своими названиями, в порядке индекса.
+pub fn archived(store: &FilesStore) -> std::io::Result<Vec<(MeetingId, Option<String>)>> {
+    Ok(index::load(store)?
+        .into_iter()
+        .map(|m| (m.id, m.title))
+        .collect())
 }
 
 /// Есть ли ещё встреча: фоновая работа не сохраняет результат встрече, которой уже нет.

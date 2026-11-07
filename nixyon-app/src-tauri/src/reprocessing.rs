@@ -16,6 +16,7 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime, State};
 
 use crate::meetings::audio_file;
+use crate::meetings::audio_in_use::AudioInUse;
 use crate::settings::merge_hotwords;
 use crate::summary::{SummaryRunning, answer};
 use crate::transcription::{CommandError, Running, Slot, temp_files::TempFiles};
@@ -92,6 +93,8 @@ pub async fn reprocess_turn<R: Runtime>(
         .begin()
         .ok_or_else(|| CommandError::new(CommandError::BUSY))?;
 
+    // Звук встречи занят до конца команды: очистка его не удалит, пока фраза слушается.
+    let _audio_in_use = AudioInUse::hold(crate::meetings::meeting_id(&meeting)?);
     let storage = crate::vault::storage(&app).await?;
     let (store, dirs) = (storage.store, storage.paths);
     let files_dir = PathBuf::from(&dirs.files);

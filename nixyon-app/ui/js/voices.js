@@ -2,9 +2,15 @@ import { channel, errorText, invoke, startMicrophone } from "./api.js";
 import { $, el } from "./dom.js";
 import { clock, dateTime } from "./format.js";
 import { K, t } from "./i18n.js";
-import { onLanguageChange, openModal, show } from "./screens.js";
+import { meetingTitle } from "./meeting-title.js";
+import { showMeeting } from "./meetings.js";
+import { onLanguageChange, onScreenChange, openModal, show } from "./screens.js";
 
 let voices = [];
+// Индекс встреч не прочитан: у голосов нет списка встреч.
+let meetingsFailed = false;
+// Имя голоса, чей лист открыт; null, пока лист закрыт.
+let cardName = null;
 // Предел длины образца приходит из ядра вместе со списком голосов.
 let maxSampleSec = null;
 // Запись образца: путь сохранённого файла, пока голос не сохранён или не отменён.
@@ -19,16 +25,25 @@ function renderSummary() {
   $("voices-summary").textContent = names || t(K.home_voices_none);
 }
 
+// Счётчик встреч голоса; пусто, если встреч нет.
+function meetingsText(voice) {
+  if (meetingsFailed) return t(K.voices_meetings_failed);
+  return voice.meetings.length > 0 ? t(K.voices_meetings, { n: voice.meetings.length }) : "";
+}
+
 function renderList() {
   const list = $("voices-list");
   list.replaceChildren();
   for (const voice of voices) {
     const row = el("div", "voice-row");
-    const text = el("div", "voice-text");
+    const text = el("button", "voice-text voice-open");
+    text.type = "button";
     text.append(el("span", "speaker-name", voice.name));
     // У голоса, запомненного только по встречам, нет даты образца.
     if (voice.hasSample) text.append(el("span", "meta", t(K.voices_added, { date: dateTime(voice.createdAt) })));
-    if (voice.meetings > 0) text.append(el("span", "meta", t(K.voices_meetings, { n: voice.meetings })));
+    const counter = meetingsText(voice);
+    if (counter) text.append(el("span", "meta", counter));
+    text.addEventListener("click", () => openCard(voice.name));
     const remove = el("button", "icon-button");
     remove.type = "button";
     const label = t(K.voices_delete, { name: voice.name });
@@ -59,8 +74,57 @@ function trashIcon() {
 function apply(view) {
   voices = view.voices;
   maxSampleSec = view.maxSampleSec;
+  meetingsFailed = view.meetingsFailed;
   renderSummary();
   renderList();
+  renderCard();
+}
+
+// Лист голоса: встречи архива, на которых он узнан, новые сверху.
+function renderCard() {
+  const voice = voices.find((v) => v.name === cardName);
+  if (!voice) return;
+  $("voice-card-title").textContent = voice.name;
+  $("voice-card-meta").textContent = meetingsText(voice);
+  const list = $("voice-card-meetings");
+  list.replaceChildren();
+  for (const meeting of voice.meetings) {
+    const row = el("button", "meeting-row");
+    row.type = "button";
+    row.append(el("span", "speaker-name", meetingTitle(meeting.title, meeting.id)));
+    // Дата нужна, только когда название своё: иначе название и есть дата.
+    if (meeting.title) row.append(el("span", "meta", dateTime(meeting.id)));
+    row.addEventListener("click", () => openFromCard(meeting.id));
+    const item = el("li");
+    item.append(row);
+    list.append(item);
+  }
+  list.hidden = voice.meetings.length === 0;
+  $("voice-card-empty").hidden = meetingsFailed || voice.meetings.length > 0;
+}
+
+function openCard(name) {
+  cardName = name;
+  renderCard();
+  openModal($("voice-card"));
+}
+
+// Встреча открывается, когда закрытие листа уже снято из истории: иначе запись экрана
+// встречи легла бы под запись листа, и «Назад» ушёл бы не туда.
+function openFromCard(id) {
+  window.addEventListener(
+    "popstate",
+    async () => {
+      try {
+        await showMeeting(id);
+        $("voices-error").textContent = "";
+      } catch (error) {
+        $("voices-error").textContent = errorText(error);
+      }
+    },
+    { once: true },
+  );
+  $("voice-card").close();
 }
 
 export async function loadVoices() {
@@ -72,10 +136,10 @@ export async function loadVoices() {
   }
 }
 
+// Список загружается при каждом показе экрана, см. initVoices.
 function openVoices() {
   if (location.hash !== "#voices") history.pushState(null, "", "#voices");
   show("voices");
-  loadVoices();
 }
 
 function renderSheet() {
@@ -194,6 +258,9 @@ export function initVoices() {
   $("voice-save").addEventListener("click", save);
   $("voice-name").addEventListener("input", renderSheet);
   $("voice-sheet").addEventListener("close", closeSheet);
+  $("voice-card").addEventListener("close", () => {
+    cardName = null;
+  });
   $("voice-delete-yes").addEventListener("click", confirmDelete);
   $("voice-delete-no").addEventListener("click", () => {
     pendingDelete = null;
@@ -203,6 +270,12 @@ export function initVoices() {
     renderSummary();
     renderList();
     renderSheet();
+    renderCard();
+  });
+  // Список обновляется при каждом показе: так видны голоса, запомненные на встрече, с
+  // которой вернулись.
+  onScreenChange((name) => {
+    if (name === "voices") loadVoices();
   });
   loadVoices();
 }

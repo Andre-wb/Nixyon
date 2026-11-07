@@ -257,6 +257,24 @@
         <button class="button button-secondary wide" id="settings-models-download" type="button" data-i18n="models.missing_download" hidden></button>
         <p class="status" id="settings-models-status" role="status"></p>
       </div>
+      <div class="settings-storage">
+        <h2 class="group-title" id="settings-storage-title" data-i18n="settings.storage"></h2>
+        <ul class="card models" id="storage-list" aria-labelledby="settings-storage-title"></ul>
+        <button class="button button-secondary wide" id="storage-clear-temporary" type="button" data-i18n="storage.clear_temporary"></button>
+        <button class="button button-danger wide" id="storage-remove-audio" type="button" data-i18n="storage.remove_audio"></button>
+        <p class="status" id="storage-status" role="status"></p>
+      </div>
+      <div class="settings-storage">
+        <h2 class="group-title" id="audio-cleanup-title" data-i18n="settings.audio_cleanup"></h2>
+        <div class="card choices" role="radiogroup" aria-labelledby="audio-cleanup-title">
+          <label class="choice"><input type="radio" name="audio-cleanup" value="off"><span data-i18n="settings.audio_cleanup_off"></span></label>
+          <label class="choice"><input type="radio" name="audio-cleanup" value="7"><span data-i18n="settings.audio_cleanup_7"></span></label>
+          <label class="choice"><input type="radio" name="audio-cleanup" value="30"><span data-i18n="settings.audio_cleanup_30"></span></label>
+          <label class="choice"><input type="radio" name="audio-cleanup" value="90"><span data-i18n="settings.audio_cleanup_90"></span></label>
+        </div>
+        <p class="meta settings-note" data-i18n="settings.audio_cleanup_hint"></p>
+        <p class="status" id="audio-cleanup-status" role="status"></p>
+      </div>
       <div class="sheet-group">
         <label class="field">
           <span data-i18n="settings.hotwords"></span>
@@ -353,6 +371,35 @@
       <button class="button button-primary wide" id="voice-save" type="button" data-i18n="voice_sheet.save" disabled></button>
       <p class="error" id="voice-error" role="alert"></p>
     </form>
+  </dialog>
+
+  <dialog class="sheet" id="voice-card" aria-labelledby="voice-card-title">
+    <form method="dialog" class="sheet-body" id="voice-card-form">
+      <div class="sheet-head">
+        <h2 id="voice-card-title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="meta" id="voice-card-meta"></p>
+      <h3 class="group-title" id="voice-card-meetings-title" data-i18n="voice_card.meetings"></h3>
+      <ul class="card speakers" id="voice-card-meetings" aria-labelledby="voice-card-meetings-title" hidden></ul>
+      <p class="meta" id="voice-card-empty" data-i18n="voice_card.empty" hidden></p>
+    </form>
+  </dialog>
+
+  <dialog class="alert" id="storage-remove-audio-confirm" aria-labelledby="storage-remove-audio-text">
+    <p id="storage-remove-audio-text" data-i18n="storage.remove_audio_confirm"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="storage-remove-audio-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="storage-remove-audio-yes" type="button" data-i18n="storage.remove_audio_do"></button>
+    </div>
+  </dialog>
+
+  <dialog class="alert" id="storage-clear-temporary-confirm" aria-labelledby="storage-clear-temporary-text">
+    <p id="storage-clear-temporary-text" data-i18n="storage.clear_temporary_confirm"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="storage-clear-temporary-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-primary" id="storage-clear-temporary-yes" type="button" data-i18n="storage.clear_temporary_do"></button>
+    </div>
   </dialog>
 
   <dialog class="alert" id="voice-delete-confirm" aria-labelledby="voice-delete-text">

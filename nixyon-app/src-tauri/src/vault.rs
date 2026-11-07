@@ -10,6 +10,7 @@ mod prepare;
 mod sealed_file;
 mod sealed_reader;
 mod sealed_writer;
+pub mod temporary_files;
 
 use std::path::PathBuf;
 use std::sync::Arc;

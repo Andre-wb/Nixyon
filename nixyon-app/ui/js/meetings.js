@@ -66,13 +66,18 @@ async function load() {
   rerunMeetingSearch();
 }
 
+// Открывает встречу архива на экране расшифровки; ошибку отдаёт вызывающему.
+export async function showMeeting(id) {
+  const opened = await invoke("open_meeting", { meeting: id });
+  open(opened.transcript, [], opened.title ?? null, opened.has_audio);
+}
+
 // target: совпадение из поиска по встречам ({ query, turnId, start }); встреча
 // открывается с тем же запросом на этой реплике.
 async function openMeeting(id, target = null) {
   try {
-    const opened = await invoke("open_meeting", { meeting: id });
+    await showMeeting(id);
     $("meetings-error").textContent = "";
-    open(opened.transcript, [], opened.title ?? null);
     if (target) searchFor(target.query, target);
   } catch (error) {
     $("meetings-error").textContent = errorText(error);

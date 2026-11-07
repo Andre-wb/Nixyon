@@ -10,6 +10,7 @@ mod searching;
 mod settings;
 mod speaker_names;
 mod statistics;
+mod storage_use;
 mod summary;
 mod transcription;
 mod vault;
@@ -29,6 +30,8 @@ pub fn run() {
             meetings::open_meeting::open_meeting,
             meetings::rename_meeting::rename_meeting,
             meetings::delete_meeting::delete_meeting,
+            meetings::clean_old_audio::clean_old_audio,
+            meetings::remove_all_audio::remove_all_audio,
             meetings::list_labels::list_labels,
             meetings::create_label::create_label,
             meetings::rename_label::rename_label,
@@ -76,6 +79,9 @@ pub fn run() {
             settings::set_system_bars,
             settings::set_hotwords,
             settings::set_models_prompt_seen,
+            settings::set_audio_cleanup,
+            storage_use::storage_usage,
+            storage_use::clear_temporary_files,
             model_setup::models_status,
             model_setup::download_models,
             model_setup::cancel_model_download,

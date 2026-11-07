@@ -12,18 +12,8 @@ use super::sealed_file::{first_chunk_opens, is_sealed, seal_in_place};
 pub const PRIVATE_FILES: [&str; 3] = [crate::meetings::INDEX_FILE, "voices.json", "settings.json"];
 /// Папка исходных записей Kotlin-плагина (`RecordingsDir.kt`).
 pub const RECORDINGS_DIR: &str = "recordings";
-/// Папка записей образцов голоса (`SamplesDir.kt`): образец нужен только до сохранения
-/// голоса, после перезапуска он уже не нужен.
-pub const SAMPLES_DIR: &str = "samples";
-/// Папка файлов экспорта (`exporting.rs`): файл нужен, только пока его сохраняют или
-/// отправляют; открытым до следующего экспорта он лежать не должен.
-pub const EXPORTS_DIR: &str = "exports";
-const TEMP_PREFIX: &str = "nixyon-";
-
 pub fn prepare(store: &FilesStore, cache: &Path) {
-    sweep(cache, |name| name.starts_with(TEMP_PREFIX));
-    sweep(&cache.join(EXPORTS_DIR), |_| true);
-    sweep(&store.dir().join(SAMPLES_DIR), |_| true);
+    super::temporary_files::remove(store.dir(), cache);
     for name in PRIVATE_FILES {
         remove_quietly(&store.dir().join(format!("{name}.part")));
         secure(store, &store.dir().join(name));
@@ -90,6 +80,7 @@ mod tests {
     use super::super::data_key::test_key;
     use super::super::files_store::test_store;
     use super::super::sealed_file::{read_bytes, write_atomic};
+    use super::super::temporary_files::SAMPLES_DIR;
     use super::*;
 
     #[test]

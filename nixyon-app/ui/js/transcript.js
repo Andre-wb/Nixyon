@@ -21,6 +21,8 @@ const OVERLAP_FLAG = "overlap";
 let current = null;
 // Своё название открытой встречи; null: встреча называется датой и временем.
 let title = null;
+// Есть ли у встречи исходная запись: без неё слушать и проверять реплики нечем.
+let hasAudio = true;
 let warnings = [];
 let editing = null;
 let pendingMerge = null;
@@ -64,16 +66,17 @@ export function speakerName(transcript, id) {
   return speaker?.name || t(K.export_speaker_default, { n: id });
 }
 
-export function open(transcript, newWarnings = [], newTitle = null) {
+export function open(transcript, newWarnings = [], newTitle = null, newHasAudio = true) {
   current = transcript;
   title = newTitle;
   warnings = newWarnings;
+  hasAudio = newHasAudio;
   resetSearch();
   closePlayer();
   render();
   prepareNames(transcript);
   pushTranscript();
-  openPlayer(transcript);
+  if (hasAudio) openPlayer(transcript);
 }
 
 export function currentTranscript() {
@@ -101,6 +104,11 @@ function render() {
   if (!current) return;
   renderTitle();
   $("transcript-warning").hidden = !warnings.includes("clipping");
+  // Со звуком строку под заголовком ведёт плеер: там его ошибки.
+  if (!hasAudio) {
+    $("playback-note").textContent = t(K.transcript_no_audio);
+    $("playback-note").hidden = false;
+  }
 
   const speakers = $("speakers");
   speakers.replaceChildren();
@@ -134,6 +142,7 @@ function render() {
     const time = el("button", "turn-time", clock(turn.start));
     time.type = "button";
     time.setAttribute("aria-label", t(K.transcript_play_from, { time: clock(turn.start) }));
+    time.disabled = !hasAudio;
     time.addEventListener("click", () => playFrom(turn.start));
     const actions = el("span", "turn-actions");
     const checkButton = el("button", "icon-button turn-check");
@@ -142,6 +151,7 @@ function render() {
     checkButton.setAttribute("aria-label", checkLabel);
     checkButton.title = checkLabel;
     checkButton.append($("recheck-icon").content.cloneNode(true));
+    checkButton.disabled = !hasAudio;
     checkButton.addEventListener("click", () => openTurnCheck(turn.id));
     const editButton = el("button", "icon-button turn-edit");
     editButton.type = "button";
