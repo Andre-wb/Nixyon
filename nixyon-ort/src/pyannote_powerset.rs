@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use nixyon_core::{CancelFlag, POWERSET_CLASSES, PowersetWindow};
+use nixyon_core::{POWERSET_CLASSES, PowersetWindow};
 use ort::session::Session;
 use ort::value::Tensor;
 
@@ -9,12 +9,12 @@ use crate::OrtError;
 use crate::runtime::{session, session_from_bytes};
 use crate::softmax::softmax;
 
-const SAMPLE_RATE: f64 = 16_000.0;
+pub(crate) const SAMPLE_RATE: f64 = 16_000.0;
 /// Окно модели 10 с, сдвиг 1 с: как у встроенной диаризации sherpa-onnx
 /// (`window_shift_ratio` 0,1). Длина окна, шаг кадра и поле зрения кадра записаны в
 /// метаданных модели (`window_size`, `receptive_field_shift`, `receptive_field_size`).
-const WINDOW_SAMPLES: usize = 160_000;
-const WINDOW_SHIFT_SAMPLES: usize = 16_000;
+pub(crate) const WINDOW_SAMPLES: usize = 160_000;
+pub(crate) const WINDOW_SHIFT_SAMPLES: usize = 16_000;
 const FRAME_SHIFT_SAMPLES: f64 = 270.0;
 const RECEPTIVE_FIELD_SAMPLES: f64 = 991.0;
 const INPUT_NAME: &str = "x";
@@ -41,38 +41,14 @@ impl PyannotePowerset {
         })
     }
 
-    /// Окна по записи 16 кГц. Последнее окно дополняется тишиной, кадры после конца
-    /// записи отбрасываются. Пустая запись: окон нет. `None`: обработку отменили.
-    pub fn windows(
+    /// Окно с отсчёта `start`: `input` ровно длины окна, из них `length` настоящих, дальше
+    /// тишина. Кадры после настоящего звука отбрасываются.
+    pub(crate) fn window(
         &self,
-        samples_16k: &[f32],
-        cancel: &CancelFlag,
-    ) -> Result<Option<Vec<PowersetWindow>>, OrtError> {
-        let duration_sec = samples_16k.len() as f64 / SAMPLE_RATE;
-        let mut windows = Vec::new();
-        let mut start = 0;
-        while start < samples_16k.len() {
-            if cancel.is_cancelled() {
-                return Ok(None);
-            }
-            let end = (start + WINDOW_SAMPLES).min(samples_16k.len());
-            let mut input = samples_16k[start..end].to_vec();
-            input.resize(WINDOW_SAMPLES, 0.0);
-            let mut window = self.window(input, start)?;
-            let inside = (0..window.frames.len())
-                .take_while(|&i| window.frame_time(i) < duration_sec)
-                .count();
-            window.frames.truncate(inside);
-            windows.push(window);
-            if end == samples_16k.len() {
-                break;
-            }
-            start += WINDOW_SHIFT_SAMPLES;
-        }
-        Ok(Some(windows))
-    }
-
-    fn window(&self, input: Vec<f32>, start: usize) -> Result<PowersetWindow, OrtError> {
+        input: Vec<f32>,
+        start: usize,
+        length: usize,
+    ) -> Result<PowersetWindow, OrtError> {
         let tensor = Tensor::from_array(([1usize, 1, WINDOW_SAMPLES], input))?;
         let mut session = self.session.lock().map_err(|_| OrtError::Poisoned)?;
         let outputs = session.run(ort::inputs![INPUT_NAME => tensor])?;
@@ -88,10 +64,16 @@ impl PyannotePowerset {
                 softmax(logits)
             })
             .collect();
-        Ok(PowersetWindow {
+        let mut window = PowersetWindow {
             first_frame_sec: (start as f64 + RECEPTIVE_FIELD_SAMPLES / 2.0) / SAMPLE_RATE,
             frame_sec: FRAME_SHIFT_SAMPLES / SAMPLE_RATE,
             frames,
-        })
+        };
+        let end_sec = (start + length) as f64 / SAMPLE_RATE;
+        let inside = (0..window.frames.len())
+            .take_while(|&i| window.frame_time(i) < end_sec)
+            .count();
+        window.frames.truncate(inside);
+        Ok(window)
     }
 }

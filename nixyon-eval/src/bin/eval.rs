@@ -72,20 +72,20 @@ use nixyon_core::{
     AudioInfo, CancelFlag, EngineInfo, EngineOptions, NEURAL_BLOCK_SEC, SpeechEngine, VoiceSample,
     VoiceSegmenter, WindowSpec, to_json,
 };
-use nixyon_core::{PowersetWindow, SegmentResult, VoiceSpan};
+use nixyon_core::{ModelOverlaps, SegmentResult, VoiceSpan};
 use nixyon_eval::{
     Combo, ComboModels, RecordRun, RecordScore, Segmenter, Truth, UnscoredRecord, VoiceModel,
     analyze_combos, library_from_meeting, load_voice_samples, min_speaker_sec, render_table,
     score_record,
 };
-use nixyon_ort::{OrtManifest, PyannotePowerset};
+use nixyon_ort::{OrtManifest, PyannotePowerset, scan_overlaps};
 use nixyon_pipeline::{
-    PipelineOptions, Segmentation, SilentOverlaps, SpeakerCount, TranscriptMeta, VoiceMatch,
-    build_transcript_from,
+    MIN_SILENT_OVERLAP_SEC, PipelineOptions, Segmentation, SilentOverlaps, SpeakerCount,
+    TranscriptMeta, VoiceMatch, build_transcript_from,
 };
 use nixyon_sherpa::{
     BEAM_PATHS, Decoding, HOTWORD_SCORE, ModelManifest, Parallel, SherpaEngine, SherpaModels,
-    denoise_wav, read_samples, threads,
+    denoise_wav, threads,
 };
 
 const USAGE: &str = "использование: eval <папка моделей> <папка записей> [--speakers auto|truth] \
@@ -529,7 +529,7 @@ fn run(args: &Args) -> Result<String, Box<dyn std::error::Error>> {
             analyzed.segments,
             Segmentation {
                 spans: &analyzed.spans,
-                windows: &analyzed.windows,
+                overlaps: &analyzed.overlaps,
             },
             &[],
             count(args, &truth),
@@ -619,7 +619,7 @@ fn run_unscored(args: &Args) -> Result<String, Box<dyn std::error::Error>> {
             record.segments,
             Segmentation {
                 spans: &record.spans,
-                windows: &record.windows,
+                overlaps: &record.overlaps,
             },
             &[],
             SpeakerCount::Auto,
@@ -691,7 +691,7 @@ fn run_combos_unscored(
                 record.segments,
                 Segmentation {
                     spans: &record.spans,
-                    windows: &record.windows,
+                    overlaps: &record.overlaps,
                 },
                 &[],
                 SpeakerCount::Auto,
@@ -824,7 +824,7 @@ fn count(args: &Args, truth: &Truth) -> SpeakerCount {
 struct Analyzed {
     segments: Vec<SegmentResult>,
     spans: Vec<VoiceSpan>,
-    windows: Vec<PowersetWindow>,
+    overlaps: ModelOverlaps,
     audio_sec: f64,
     analysis_sec: f64,
 }
@@ -835,7 +835,7 @@ fn analyze(
     args: &Args,
     name: &str,
 ) -> Result<Analyzed, Box<dyn std::error::Error>> {
-    let ((segments, spans, windows), audio_sec, analysis_sec) = with_wav16k(args, name, |wav| {
+    let ((segments, spans, overlaps), audio_sec, analysis_sec) = with_wav16k(args, name, |wav| {
         let segments = engine
             .analyze(wav, &args.engine, &CancelFlag::new())
             .map_err(|e| e.to_string())?;
@@ -847,7 +847,7 @@ fn analyze(
         } else {
             Vec::new()
         };
-        Ok((segments, spans, powerset_windows(powerset, wav)?))
+        Ok((segments, spans, model_overlaps(powerset, args, wav)?))
     })?;
     let embedded: usize = segments.iter().map(|s| s.windows.len()).sum();
     if embedded > 0 {
@@ -856,41 +856,42 @@ fn analyze(
     if !spans.is_empty() {
         eprintln!("{name}: отрезков нейросегментации {}", spans.len());
     }
+    if !overlaps.spans.is_empty() {
+        eprintln!("{name}: перекрытий по модели {}", overlaps.spans.len());
+    }
     Ok(Analyzed {
         segments,
         spans,
-        windows,
+        overlaps,
         audio_sec,
         analysis_sec,
     })
 }
 
-// Кадры модели сегментации по всей записи; без модели их нет.
-fn powerset_windows(
+// Перекрытия по модели сегментации, тем же обходом записи, что в приложении; без модели
+// их нет.
+fn model_overlaps(
     powerset: Option<&PyannotePowerset>,
+    args: &Args,
     wav: &Path,
-) -> Result<Vec<PowersetWindow>, String> {
+) -> Result<ModelOverlaps, String> {
     let Some(model) = powerset else {
-        return Ok(Vec::new());
+        return Ok(ModelOverlaps::default());
     };
-    let samples = read_samples(wav).map_err(|e| e.to_string())?;
-    Ok(model
-        .windows(&samples, &CancelFlag::new())
-        .map_err(|e| e.to_string())?
-        .unwrap_or_default())
-}
-
-fn needs_model_overlaps(options: &PipelineOptions) -> bool {
-    options.neural_segmentation
-        && matches!(
-            options.silent_overlaps,
-            SilentOverlaps::ModelNeighbour | SilentOverlaps::ModelLocalSpeakers
-        )
+    let found = scan_overlaps(
+        model,
+        wav,
+        args.pipeline.model_overlap_threshold,
+        MIN_SILENT_OVERLAP_SEC,
+        &mut |_| true,
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(found.unwrap_or_default())
 }
 
 // Модель сегментации набора напрямую, только если ходы без текста берут перекрытия из неё.
 fn load_powerset(args: &Args) -> Result<Option<PyannotePowerset>, Box<dyn std::error::Error>> {
-    if !needs_model_overlaps(&args.pipeline) {
+    if !args.pipeline.needs_model_overlaps() {
         return Ok(None);
     }
     let path = ModelManifest::load(&args.models)?
@@ -915,7 +916,7 @@ fn analyze_by_combos(
         .pipeline
         .neural_segmentation
         .then_some(args.neural_block_sec);
-    let ((results, windows), audio_sec, total_sec) = with_wav16k(args, name, |wav| {
+    let ((results, overlaps), audio_sec, total_sec) = with_wav16k(args, name, |wav| {
         let results = analyze_combos(
             engine.models(),
             extra,
@@ -926,7 +927,7 @@ fn analyze_by_combos(
             &CancelFlag::new(),
         )
         .map_err(|e| e.to_string())?;
-        Ok((results, powerset_windows(powerset, wav)?))
+        Ok((results, model_overlaps(powerset, args, wav)?))
     })?;
     let common_sec = total_sec - results.iter().map(|r| r.own_sec).sum::<f64>();
     Ok(results
@@ -934,7 +935,7 @@ fn analyze_by_combos(
         .map(|r| Analyzed {
             segments: r.segments,
             spans: r.spans,
-            windows: windows.clone(),
+            overlaps: overlaps.clone(),
             audio_sec,
             analysis_sec: common_sec + r.own_sec,
         })
@@ -991,7 +992,7 @@ fn score_analyzed(
         record.segments.clone(),
         Segmentation {
             spans: &record.spans,
-            windows: &record.windows,
+            overlaps: &record.overlaps,
         },
         samples,
         count(args, truth),

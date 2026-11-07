@@ -1,5 +1,5 @@
 use nixyon_core::{
-    OVERLAP_FLAG, PowersetWindow, SegmentResult, Turn, UNCLEAR_FLAG, VoiceSpan, Word,
+    ModelOverlaps, OVERLAP_FLAG, SegmentResult, Turn, UNCLEAR_FLAG, VoiceSpan, Word,
 };
 
 use crate::neural_labels::neural_labels;
@@ -20,12 +20,12 @@ use crate::{PipelineOptions, SpeakerCount};
 /// неразборчивой речи; ход, где букв мало для времени голоса, тоже помечается.
 /// Ход, голос которого мало похож на его спикера, помечается неуверенным.
 /// Номера спикеров с 1 в порядке первого появления. Куски идут по времени.
-/// Вместе с ходами отдаёт центры голосов спикеров. `windows`: кадры модели сегментации,
-/// нужны только способам ходов без текста, которые берут перекрытия из модели.
+/// Вместе с ходами отдаёт центры голосов спикеров. `overlaps`: перекрытия по модели
+/// сегментации, нужны только способам ходов без текста, которые берут их из модели.
 pub(crate) fn neural_turns(
     segments: &[SegmentResult],
     spans: &[VoiceSpan],
-    windows: &[PowersetWindow],
+    overlaps: &ModelOverlaps,
     count: SpeakerCount,
     options: &PipelineOptions,
 ) -> (Vec<Turn>, Vec<SpeakerCenter>) {
@@ -68,13 +68,7 @@ pub(crate) fn neural_turns(
         );
     }
     mark_unclear(&mut turns, spans);
-    add_silent_overlaps(
-        &mut turns,
-        &labeled,
-        windows,
-        options.silent_overlaps,
-        options.model_overlap_threshold,
-    );
+    add_silent_overlaps(&mut turns, &labeled, overlaps, options.silent_overlaps);
     let order = renumber(&mut turns);
     let centers = centers_by_speaker(&order, &labels.centers);
     (turns, centers)
@@ -211,7 +205,7 @@ mod tests {
         let (t, _) = neural_turns(
             &[seg],
             &spans,
-            &[],
+            &ModelOverlaps::default(),
             SpeakerCount::Known(2),
             &PipelineOptions::default(),
         );
@@ -254,7 +248,7 @@ mod tests {
         let (t, _) = neural_turns(
             &[seg],
             &spans,
-            &[],
+            &ModelOverlaps::default(),
             SpeakerCount::Known(2),
             &with_silent_overlaps(),
         );
@@ -274,7 +268,7 @@ mod tests {
         let (t, _) = neural_turns(
             &[seg],
             &spans,
-            &[],
+            &ModelOverlaps::default(),
             SpeakerCount::Known(2),
             &with_silent_overlaps(),
         );
@@ -287,7 +281,7 @@ mod tests {
         let (t, _) = neural_turns(
             &[seg],
             &spans,
-            &[],
+            &ModelOverlaps::default(),
             SpeakerCount::Known(2),
             &PipelineOptions::default(),
         );
@@ -302,7 +296,7 @@ mod tests {
         let (t, _) = neural_turns(
             &[seg],
             &spans,
-            &[],
+            &ModelOverlaps::default(),
             SpeakerCount::Auto,
             &PipelineOptions::default(),
         );
@@ -320,7 +314,7 @@ mod tests {
         let (t, _) = neural_turns(
             &segs,
             &spans,
-            &[],
+            &ModelOverlaps::default(),
             SpeakerCount::Known(2),
             &PipelineOptions::default(),
         );
@@ -341,7 +335,7 @@ mod tests {
         let (t, _) = neural_turns(
             &segs,
             &spans,
-            &[],
+            &ModelOverlaps::default(),
             SpeakerCount::Known(2),
             &PipelineOptions::default(),
         );

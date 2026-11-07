@@ -46,6 +46,12 @@ pub struct AnalyzeRequest {
     pub step_sec: f64,
     pub spans_path: Option<String>,
     pub neural_block_sec: f64,
+    /// Куда записать перекрытия по модели сегментации; None: не искать их.
+    pub overlaps_path: Option<String>,
+    /// Вероятность перекрытия в кадре, выше которой кадр считается перекрытием.
+    pub overlap_threshold: f32,
+    /// Перекрытия короче этого, секунды, не записываются.
+    pub min_overlap_sec: f64,
     /// Горячие слова одной строкой через «/» (`nixyon_core::hotwords_line`); пусто: без них.
     pub hotwords: String,
     pub on_progress: Channel<serde_json::Value>,

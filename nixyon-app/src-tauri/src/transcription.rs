@@ -16,14 +16,16 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nixyon_android::{
-    AnalyzeProgress, AnalyzeRequest, AnalyzeSummary, SpeechExt, read_segments, read_spans,
+    AnalyzeProgress, AnalyzeRequest, AnalyzeSummary, SpeechExt, read_overlaps, read_segments,
+    read_spans,
 };
 use nixyon_audio::{TARGET_SAMPLE_RATE, convert_reader_to_wav16k};
 use nixyon_core::{
-    AudioInfo, EngineInfo, NEURAL_BLOCK_SEC, Transcript, hotwords_line, rfc3339_utc,
+    AudioInfo, EngineInfo, ModelOverlaps, NEURAL_BLOCK_SEC, Transcript, hotwords_line, rfc3339_utc,
 };
 use nixyon_pipeline::{
-    PipelineError, PipelineOptions, SpeakerCount, TranscriptMeta, build_transcript_with_centers,
+    MIN_SILENT_OVERLAP_SEC, PipelineError, PipelineOptions, Segmentation, SpeakerCount,
+    TranscriptMeta, build_transcript_from,
 };
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
@@ -82,7 +84,13 @@ pub async fn transcribe<R: Runtime>(
     let wav = cache.join(format!("nixyon-{stamp}.wav"));
     let segments_file = cache.join(format!("nixyon-{stamp}.segments.json"));
     let spans_file = cache.join(format!("nixyon-{stamp}.spans.json"));
-    let _temp = TempFiles::new(vec![wav.clone(), segments_file.clone(), spans_file.clone()]);
+    let overlaps_file = cache.join(format!("nixyon-{stamp}.overlaps.json"));
+    let _temp = TempFiles::new(vec![
+        wav.clone(),
+        segments_file.clone(),
+        spans_file.clone(),
+        overlaps_file.clone(),
+    ]);
 
     let _ = on_progress.send(Progress {
         phase: Phase::Prepare,
@@ -111,6 +119,7 @@ pub async fn transcribe<R: Runtime>(
         .windows
         .map_or((0.0, 0.0), |w| (w.window_sec(), w.step_sec()));
     let neural = options.neural_segmentation;
+    let model_overlaps = options.needs_model_overlaps();
     // Горячие слова: имена из голосов участников и список из настроек.
     let store_for_words = store.clone();
     let hotwords = tauri::async_runtime::spawn_blocking(move || {
@@ -130,6 +139,9 @@ pub async fn transcribe<R: Runtime>(
             step_sec,
             spans_path: neural.then(|| spans_file.to_string_lossy().into_owned()),
             neural_block_sec: if neural { NEURAL_BLOCK_SEC } else { 0.0 },
+            overlaps_path: model_overlaps.then(|| overlaps_file.to_string_lossy().into_owned()),
+            overlap_threshold: options.model_overlap_threshold,
+            min_overlap_sec: MIN_SILENT_OVERLAP_SEC,
             hotwords,
             on_progress: Channel::new(move |body| {
                 if let InvokeResponseBody::Json(text) = body
@@ -198,9 +210,25 @@ pub async fn transcribe<R: Runtime>(
         } else {
             Vec::new()
         };
+        let overlaps = if options.needs_model_overlaps() {
+            read_overlaps(&overlaps_file)
+                .map_err(|e| CommandError::logged(CommandError::ENGINE_FAILED, e))?
+        } else {
+            ModelOverlaps::default()
+        };
         let samples = crate::voices::samples(&store, &summary_voice_model);
-        let (transcript, centers) = build_transcript_with_centers(
-            segments, &spans, &samples, count, &options, meta, &cancel,
+        let segmentation = Segmentation {
+            spans: &spans,
+            overlaps: &overlaps,
+        };
+        let (transcript, centers) = build_transcript_from(
+            segments,
+            segmentation,
+            &samples,
+            count,
+            &options,
+            meta,
+            &cancel,
         )
         .map_err(|e| match e {
             PipelineError::Cancelled => CommandError::new(CommandError::CANCELLED),

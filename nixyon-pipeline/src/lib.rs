@@ -5,7 +5,6 @@ mod edit;
 mod error;
 mod meeting_stats;
 mod merge_centers;
-mod model_overlaps;
 mod neural_labels;
 mod neural_turns;
 mod overlap_local_speakers;
@@ -52,7 +51,7 @@ pub use pipeline_options::PipelineOptions;
 pub use sample_names::SpeakerCenter;
 pub use sample_threshold::SAMPLE_THRESHOLD;
 pub use search::{MatchKind, SearchHit, search};
-pub use silent_overlaps::SilentOverlaps;
+pub use silent_overlaps::{MIN_SILENT_OVERLAP_SEC, SilentOverlaps};
 pub use speaker_count::SpeakerCount;
 pub use speaker_labels::{
     LONG_SEGMENT_SEC, MAX_AUTO_SPEAKERS, MIN_SPEAKER_SEC, SpeakerLabels, label_segments,

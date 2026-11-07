@@ -1,6 +1,5 @@
-use nixyon_core::{OVERLAP_FLAG, PowersetWindow, Turn};
+use nixyon_core::{ModelOverlaps, OVERLAP_FLAG, Turn};
 
-use crate::model_overlaps::model_overlaps;
 use crate::overlap_local_speakers::local_speaker;
 use crate::overlap_neighbour::neighbour_speaker;
 use crate::overlap_spans::overlap_spans;
@@ -8,7 +7,7 @@ use crate::word_cut::turn;
 use crate::word_speakers::LabeledSpan;
 
 /// Перекрытие короче этого не даёт хода без текста.
-const MIN_SILENT_OVERLAP_SEC: f64 = 0.3;
+pub const MIN_SILENT_OVERLAP_SEC: f64 = 0.3;
 
 /// Откуда берутся ходы без текста в перекрытиях. Распознаватель слышит в перекрытии один
 /// голос, слова второго теряются; ход без текста показывает, что второй человек говорил.
@@ -31,9 +30,8 @@ pub enum SilentOverlaps {
 pub(crate) fn add_silent_overlaps(
     turns: &mut Vec<Turn>,
     labeled: &[LabeledSpan],
-    windows: &[PowersetWindow],
+    overlaps: &ModelOverlaps,
     mode: SilentOverlaps,
-    threshold: f32,
 ) {
     let found: Vec<(f64, f64, u32)> = match mode {
         SilentOverlaps::Off => Vec::new(),
@@ -41,23 +39,22 @@ pub(crate) fn add_silent_overlaps(
             .into_iter()
             .map(|(start, end, label)| (start, end, cluster_id(label)))
             .collect(),
-        SilentOverlaps::ModelNeighbour | SilentOverlaps::ModelLocalSpeakers => {
-            model_overlaps(windows, threshold, MIN_SILENT_OVERLAP_SEC)
-                .into_iter()
-                .filter_map(|(start, end)| {
-                    let heard = heard(turns, start, end);
-                    if heard.len() != 1 {
-                        return None;
-                    }
-                    let second = if mode == SilentOverlaps::ModelNeighbour {
-                        neighbour_speaker(turns, start, end, &heard)
-                    } else {
-                        local_speaker(windows, turns, start, end, &heard)
-                    };
-                    second.map(|s| (start, end, s))
-                })
-                .collect()
-        }
+        SilentOverlaps::ModelNeighbour | SilentOverlaps::ModelLocalSpeakers => overlaps
+            .spans
+            .iter()
+            .filter_map(|&(start, end)| {
+                let heard = heard(turns, start, end);
+                if heard.len() != 1 {
+                    return None;
+                }
+                let second = if mode == SilentOverlaps::ModelNeighbour {
+                    neighbour_speaker(turns, start, end, &heard)
+                } else {
+                    local_speaker(&overlaps.windows, turns, start, end, &heard)
+                };
+                second.map(|s| (start, end, s))
+            })
+            .collect(),
     };
     for (start, end, speaker) in found {
         let busy = turns
@@ -92,17 +89,21 @@ fn cluster_id(label: usize) -> u32 {
 mod tests {
     use super::*;
     use crate::test_support::transcript;
+    use nixyon_core::PowersetWindow;
 
     const ONE: [f32; 7] = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     const BOTH: [f32; 7] = [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0];
     const TWO: [f32; 7] = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0];
 
     // Говорящий 0 звучит 0..4, говорящий 1 с 4 с; модель слышит обоих в 3..4.
-    fn window() -> PowersetWindow {
-        PowersetWindow {
-            first_frame_sec: 0.5,
-            frame_sec: 1.0,
-            frames: vec![ONE, ONE, ONE, BOTH, TWO, TWO, TWO],
+    fn overlaps() -> ModelOverlaps {
+        ModelOverlaps {
+            spans: vec![(3.0, 4.0)],
+            windows: vec![PowersetWindow {
+                first_frame_sec: 0.5,
+                frame_sec: 1.0,
+                frames: vec![ONE, ONE, ONE, BOTH, TWO, TWO, TWO],
+            }],
         }
     }
 
@@ -118,7 +119,7 @@ mod tests {
 
     fn run(mode: SilentOverlaps) -> Vec<Turn> {
         let mut turns = transcript(&[(0, 0.0, 4.0, "раз"), (1, 4.0, 7.0, "два")]).turns;
-        add_silent_overlaps(&mut turns, &[], &[window()], mode, 0.5);
+        add_silent_overlaps(&mut turns, &[], &overlaps(), mode);
         turns
     }
 
@@ -149,7 +150,12 @@ mod tests {
     fn spans_mode_uses_crossing_spans_of_two_voices() {
         let mut turns = transcript(&[(0, 0.0, 5.0, "раз")]).turns;
         let labeled = [(0.0, 5.0, 0), (2.0, 3.0, 1)];
-        add_silent_overlaps(&mut turns, &labeled, &[], SilentOverlaps::Spans, 0.5);
+        add_silent_overlaps(
+            &mut turns,
+            &labeled,
+            &ModelOverlaps::default(),
+            SilentOverlaps::Spans,
+        );
         assert_eq!(
             shape(&turns),
             [(0, 0.0, 5.0, "раз", false), (1, 2.0, 3.0, "", true)]

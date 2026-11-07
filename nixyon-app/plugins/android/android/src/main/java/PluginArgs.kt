@@ -15,6 +15,11 @@ class AnalyzeArgs {
     // Нейросегментация: файл для отрезков и длина блока в секундах; 0: не нужна.
     var spansPath: String? = null
     var neuralBlockSec: Double = 0.0
+    // Перекрытия по модели сегментации: файл для итога, порог и наименьшая длина в секундах;
+    // без файла не нужны.
+    var overlapsPath: String? = null
+    var overlapThreshold: Float = 0f
+    var minOverlapSec: Double = 0.0
     // Горячие слова через «/»; пусто: без них.
     var hotwords: String = ""
     var onProgress: Channel? = null

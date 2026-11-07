@@ -1,10 +1,10 @@
-//! Выход нейросегментации pyannote по кадрам на настоящих записях. Запуск:
+//! Перекрытия по модели сегментации pyannote на настоящих записях. Запуск:
 //! `MODELS_DIR=models cargo test -p nixyon-ort --release -- --ignored`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use nixyon_core::{CancelFlag, PowersetWindow, overlap_probability};
-use nixyon_ort::PyannotePowerset;
+use nixyon_core::{ModelOverlaps, POWERSET_CLASSES};
+use nixyon_ort::{PyannotePowerset, scan_overlaps};
 
 fn models_dir() -> PathBuf {
     let dir = std::env::var("MODELS_DIR").expect("задайте MODELS_DIR: папку с models.json");
@@ -19,53 +19,62 @@ fn models_dir() -> PathBuf {
     }
 }
 
-fn windows(dir: &std::path::Path, record: &str) -> (Vec<PowersetWindow>, f64) {
+fn scan(dir: &Path, record: &str) -> ModelOverlaps {
     let model = PyannotePowerset::load(&dir.join("segmentation.onnx"), 2).unwrap();
-    let samples = nixyon_sherpa::read_samples(&dir.join(format!("dialogs/{record}.wav"))).unwrap();
-    let duration = samples.len() as f64 / 16_000.0;
-    let windows = model
-        .windows(&samples, &CancelFlag::new())
+    let wav = dir.join(format!("dialogs/{record}.wav"));
+    scan_overlaps(&model, &wav, 0.3, 0.3, &mut |_| true)
         .unwrap()
-        .unwrap();
-    (windows, duration)
+        .unwrap()
 }
 
 #[test]
 #[ignore = "нужны модели и диалоги: MODELS_DIR"]
-fn windows_cover_the_record_and_frames_are_probabilities() {
-    let (windows, duration) = windows(&models_dir(), "ru2");
-    assert!(!windows.is_empty());
-    let last = windows.last().unwrap();
-    let end = last.frame_time(last.frames.len() - 1);
+fn record_without_overlaps_gives_no_spans_and_keeps_no_windows() {
+    let found = scan(&models_dir(), "ru2");
+    assert!(found.spans.is_empty(), "{:?}", found.spans);
+    assert!(found.windows.is_empty());
+}
+
+#[test]
+#[ignore = "нужны модели и диалоги: MODELS_DIR"]
+fn mixed_voices_are_found_and_only_windows_around_them_are_kept() {
+    // В ru4_overlap наложение у смены говорящих 71,65..72,15 с.
+    let found = scan(&models_dir(), "ru4_overlap");
     assert!(
-        end < duration && duration - end < 0.1,
-        "{end} из {duration}"
+        found.spans.iter().any(|&(a, b)| a < 72.15 && 71.65 < b),
+        "{:?}",
+        found.spans
     );
-    for w in &windows {
+    for w in &found.windows {
+        let from = w.frame_time(0);
+        let to = w.frame_time(w.frames.len() - 1);
+        assert!(
+            found
+                .spans
+                .iter()
+                .any(|&(a, b)| a < to + 0.1 && from - 0.1 < b)
+        );
         for f in &w.frames {
+            assert_eq!(f.len(), POWERSET_CLASSES);
             assert!((f.iter().sum::<f32>() - 1.0).abs() < 1e-4);
         }
     }
+    let audio_windows = 87;
+    assert!(
+        found.windows.len() < audio_windows,
+        "{}",
+        found.windows.len()
+    );
 }
 
 #[test]
 #[ignore = "нужны модели и диалоги: MODELS_DIR"]
-fn overlap_is_more_likely_where_two_voices_were_mixed() {
-    // В ru4_overlap наложения у смены говорящих, например 71,65..72,15 с; в 2..5 с говорит
-    // один человек.
-    let (windows, _) = windows(&models_dir(), "ru4_overlap");
-    let mean = |from: f64, to: f64| {
-        let values: Vec<f32> = windows
-            .iter()
-            .flat_map(|w| {
-                (0..w.frames.len())
-                    .filter(move |&i| (from..to).contains(&w.frame_time(i)))
-                    .map(move |i| overlap_probability(&w.frames[i]))
-            })
-            .collect();
-        values.iter().sum::<f32>() / values.len() as f32
-    };
-    let mixed = mean(71.65, 72.15);
-    let single = mean(2.0, 5.0);
-    assert!(mixed > 0.3 && single < 0.05, "{mixed} и {single}");
+fn cancelled_scan_gives_nothing() {
+    let dir = models_dir();
+    let model = PyannotePowerset::load(&dir.join("segmentation.onnx"), 2).unwrap();
+    let wav = dir.join("dialogs/ru4_overlap.wav");
+    assert_eq!(
+        scan_overlaps(&model, &wav, 0.3, 0.3, &mut |_| false).unwrap(),
+        None
+    );
 }

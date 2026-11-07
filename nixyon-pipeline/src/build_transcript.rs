@@ -1,5 +1,5 @@
 use nixyon_core::{
-    CancelFlag, PowersetWindow, SCHEMA_VERSION, SegmentResult, Speaker, Transcript, Turn,
+    CancelFlag, ModelOverlaps, SCHEMA_VERSION, SegmentResult, Speaker, Transcript, Turn,
     VoiceSample, VoiceSpan,
 };
 
@@ -48,7 +48,7 @@ pub fn build_transcript_with_centers(
 ) -> Result<(Transcript, Vec<SpeakerCenter>), PipelineError> {
     let segmentation = Segmentation {
         spans,
-        windows: &[],
+        overlaps: &ModelOverlaps::default(),
     };
     build_transcript_from(
         segments,
@@ -66,12 +66,12 @@ pub fn build_transcript_with_centers(
 pub struct Segmentation<'a> {
     /// Отрезки говорящих, нужны при `options.neural_segmentation`.
     pub spans: &'a [VoiceSpan],
-    /// Кадры модели сегментации по окнам, нужны способам ходов без текста, которые берут
-    /// перекрытия из модели (`options.silent_overlaps`).
-    pub windows: &'a [PowersetWindow],
+    /// Перекрытия по модели сегментации и окна вокруг них, нужны способам ходов без
+    /// текста, которые берут перекрытия из модели (`options.silent_overlaps`).
+    pub overlaps: &'a ModelOverlaps,
 }
 
-/// То же, что `build_transcript_with_centers`, с кадрами модели сегментации.
+/// То же, что `build_transcript_with_centers`, с перекрытиями по модели сегментации.
 pub fn build_transcript_from(
     mut segments: Vec<SegmentResult>,
     segmentation: Segmentation<'_>,
@@ -95,7 +95,7 @@ pub fn build_transcript_from(
         neural_turns(
             &segments,
             segmentation.spans,
-            segmentation.windows,
+            segmentation.overlaps,
             count,
             options,
         )

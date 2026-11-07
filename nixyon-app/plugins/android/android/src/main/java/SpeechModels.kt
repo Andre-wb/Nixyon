@@ -35,6 +35,7 @@ class SpeechModels private constructor(
     val recognizer: OfflineRecognizer,
     val voice: VoiceModel,
     val diarizer: OfflineSpeakerDiarization,
+    val powerset: PowersetModel,
     val live: OnlineRecognizer?,
     private val denoiserConfig: OfflineSpeechDenoiserModelConfig?,
 ) {
@@ -46,6 +47,7 @@ class SpeechModels private constructor(
     // пользуется (ModelSlot); после этого ни одну из них трогать нельзя.
     fun release() {
         live?.let { runCatching { it.release() } }
+        runCatching { powerset.close() }
         runCatching { diarizer.release() }
         runCatching { voice.close() }
         runCatching { recognizer.release() }
@@ -106,8 +108,12 @@ class SpeechModels private constructor(
                     .also { loaded.add(it::close) }
                 val diarizer = OfflineSpeakerDiarization(source.assetManager, diarizationConfig)
                     .also { loaded.add(it::release) }
+                // Та же модель сегментации, что у диаризатора, но напрямую: по ней ищутся
+                // перекрытия голосов.
+                val powerset = PowersetModel.open(source, manifest.file(ModelRole.SEGMENTATION), threads)
+                    .also { loaded.add(it::close) }
                 val live = if (manifest.hasLiveModel) OnlineRecognizer(source.assetManager, liveConfig(located)) else null
-                return SpeechModels(located, vadConfig, recognizer, voice, diarizer, live, denoiserConfig)
+                return SpeechModels(located, vadConfig, recognizer, voice, diarizer, powerset, live, denoiserConfig)
             } catch (e: Throwable) {
                 loaded.asReversed().forEach { release -> runCatching(release) }
                 if (e is ModelsException) throw e

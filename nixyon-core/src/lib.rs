@@ -9,6 +9,8 @@ mod engine_options;
 mod error;
 mod hotwords_line;
 mod json;
+mod model_overlaps;
+mod overlap_grid;
 mod par_map;
 mod pool;
 mod powerset_window;
@@ -39,6 +41,8 @@ pub use engine_options::EngineOptions;
 pub use error::CoreError;
 pub use hotwords_line::hotwords_line;
 pub use json::{from_json, to_json};
+pub use model_overlaps::ModelOverlaps;
+pub use overlap_grid::OverlapGrid;
 pub use par_map::par_map;
 pub use pool::{Pool, PoolPoisoned};
 pub use powerset_window::{

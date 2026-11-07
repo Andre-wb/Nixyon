@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 /// Число классов выхода pyannote segmentation-3.0: тишина, три говорящих поодиночке и
 /// три пары.
 pub const POWERSET_CLASSES: usize = 7;
@@ -10,7 +12,7 @@ pub const FIRST_OVERLAP_CLASS: usize = 4;
 
 /// Одно окно нейросегментации pyannote: вероятности классов по кадрам. Номера говорящих
 /// (0, 1, 2) свои у каждого окна и между окнами не совпадают.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PowersetWindow {
     /// Секунды от начала записи до середины первого кадра.
     pub first_frame_sec: f64,

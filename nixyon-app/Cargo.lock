@@ -2212,6 +2212,7 @@ dependencies = [
 name = "nixyon-ort"
 version = "0.1.0"
 dependencies = [
+ "nixyon-audio",
  "nixyon-core",
  "ort",
  "realfft",

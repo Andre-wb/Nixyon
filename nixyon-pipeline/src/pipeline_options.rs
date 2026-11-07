@@ -71,6 +71,15 @@ impl PipelineOptions {
         }
     }
 
+    /// Нужны ли конвейеру перекрытия по модели сегментации (`Segmentation::overlaps`).
+    pub fn needs_model_overlaps(&self) -> bool {
+        self.neural_segmentation
+            && matches!(
+                self.silent_overlaps,
+                SilentOverlaps::ModelNeighbour | SilentOverlaps::ModelLocalSpeakers
+            )
+    }
+
     /// Штраф Витерби для разметки окон: заданный, а при одном разрезе по словам 0
     /// (каждое окно к ближайшему центру). None: окна не размечаются.
     pub(crate) fn window_penalty(&self) -> Option<f64> {

@@ -169,6 +169,9 @@ pub async fn reprocess_turn<R: Runtime>(
             step_sec: 0.0,
             spans_path: None,
             neural_block_sec: 0.0,
+            overlaps_path: None,
+            overlap_threshold: 0.0,
+            min_overlap_sec: 0.0,
             hotwords,
             on_progress: Channel::new(move |body| {
                 if let InvokeResponseBody::Json(text) = body

@@ -21,12 +21,16 @@ mod jni_support;
 #[cfg(any(test, target_os = "android"))]
 mod model_slice;
 mod models;
+mod overlaps;
+#[cfg(target_os = "android")]
+mod powerset_model;
 mod segments;
 mod spans;
 #[cfg(target_os = "android")]
 mod voice_model;
 
 pub use error::{Error, Result};
+pub use overlaps::{read_overlaps, write_overlaps};
 pub use segments::{SegmentsError, read_segments};
 pub use spans::read_spans;
 

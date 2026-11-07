@@ -94,7 +94,8 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
             try {
                 val windows = WindowSpans.fromRequest(args.windowSec, args.stepSec, SpeechModels.SAMPLE_RATE)
                 val neural = neuralRequest(args.spansPath, args.neuralBlockSec)
-                val summary = engine.analyze(File(args.wavPath), File(args.outPath), windows, args.hotwords, neural) { phase, done, total ->
+                val overlaps = OverlapRequest.of(args.overlapsPath, args.overlapThreshold, args.minOverlapSec)
+                val summary = engine.analyze(File(args.wavPath), File(args.outPath), windows, args.hotwords, neural, overlaps) { phase, done, total ->
                     args.onProgress?.send(jsObject("phase" to phase, "doneSec" to done, "totalSec" to total))
                 }
                 Log.i(TAG, "разбор: кусков речи ${summary.segments}, запись ${summary.durationSec} с")
