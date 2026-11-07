@@ -18,7 +18,7 @@ class AgeVerdict(val id: Int, val child: Boolean?, val female: Boolean?)
 class SpeakerAges(private val located: LocatedModels) {
     fun run(wav: File, speakers: List<AgeSpeaker>, cancelled: AtomicBoolean): List<AgeVerdict> {
         val manifest = located.manifest
-        val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, MAX_THREADS)
+        val threads = CpuCores.computeThreads
         // Модель грузится секунды: отмена до начала не ждёт загрузки.
         checkCancelled(cancelled)
         return AgeModel.open(located.source, manifest.file(ModelRole.AGE_GENDER), threads).use { model ->
@@ -36,8 +36,6 @@ class SpeakerAges(private val located: LocatedModels) {
     }
 
     companion object {
-        private const val MAX_THREADS = 4
-
         // Куски в сэмплах, по порядку в записи; пустые и вывернутые пропускаются.
         fun bounds(pieces: List<AgePiece>): List<Pair<Long, Long>> =
             pieces

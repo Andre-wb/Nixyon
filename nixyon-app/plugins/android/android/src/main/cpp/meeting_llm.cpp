@@ -277,7 +277,8 @@ jbyteArray to_java_bytes(JNIEnv *env, const std::string &text) {
 }  // namespace
 
 extern "C" JNIEXPORT jlong JNICALL Java_dev_demo_nixyon_speech_MeetingLlmNative_nativeOpen(
-    JNIEnv *env, jobject /*unused*/, jint fd, jlong offset, jint n_ctx, jint n_threads) {
+    JNIEnv *env, jobject /*unused*/, jint fd, jlong offset, jint n_ctx, jint n_threads,
+    jint n_threads_batch, jboolean repack) {
     try {
         static bool backend_ready = false;
         std::call_once(backend_once, [] {
@@ -305,6 +306,9 @@ extern "C" JNIEXPORT jlong JNICALL Java_dev_demo_nixyon_speech_MeetingLlmNative_
         }
         llama_model_params model_params = llama_model_default_params();
         model_params.n_gpu_layers = 0;
+        // Перекладка весов под dotprod и i8mm (буфер CPU_REPACK) копирует их в память
+        // процесса. Без неё веса остаются страницами отображённого файла (LlmMemory.kt).
+        model_params.use_extra_bufts = repack == JNI_TRUE;
         session->model.reset(llama_model_load_from_file_ptr(session->file.get(), model_params));
         if (!session->model) {
             throw GenerationError(CODE_LOAD_FAILED, "модель не загрузилась");
@@ -315,7 +319,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_dev_demo_nixyon_speech_MeetingLlmNative_
         context_params.n_batch = 512;
         context_params.n_ubatch = 512;
         context_params.n_threads = n_threads;
-        context_params.n_threads_batch = n_threads;
+        context_params.n_threads_batch = n_threads_batch;
         context_params.abort_callback = cancel_requested;
         context_params.abort_callback_data = &session->cancel;
         session->context.reset(llama_init_from_model(session->model.get(), context_params));
