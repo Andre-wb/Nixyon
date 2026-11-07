@@ -1,5 +1,6 @@
 mod editing;
 mod exporting;
+mod fillers;
 mod media;
 mod model_setup;
 mod playback;
@@ -33,6 +34,9 @@ pub fn run() {
             editing::rename_speaker,
             editing::merge_speakers,
             editing::edit_turn_text,
+            editing::delete_turn,
+            editing::apply_turn_texts,
+            fillers::remove_filler_words,
             statistics::meeting_stats,
             searching::search_transcript,
             playback::open_playback,

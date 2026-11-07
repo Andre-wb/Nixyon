@@ -16,4 +16,6 @@ pub enum EditError {
     TextTooLong { max: usize },
     #[error("в тексте реплики есть управляющие символы")]
     TextHasControlChars,
+    #[error("нельзя удалить последнюю реплику")]
+    LastTurn,
 }

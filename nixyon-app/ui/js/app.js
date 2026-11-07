@@ -9,6 +9,7 @@ import { handleModalBack, show } from "./screens.js";
 import { initSearch } from "./search.js";
 import { initStats } from "./stats.js";
 import { initNames } from "./names.js";
+import { initFillers } from "./fillers.js";
 import { initSummary } from "./summary.js";
 import { initTimeline } from "./timeline.js";
 import { initTranscript } from "./transcript.js";
@@ -28,6 +29,7 @@ async function start() {
   initVoices();
   initStats();
   initSummary();
+  initFillers();
   initNames();
   initSearch();
   initPlayer();
