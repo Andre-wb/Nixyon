@@ -16,7 +16,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 // Foreground service на время записи: с ним Android не глушит микрофон, когда приложение
 // свёрнуто или экран выключен. Сама запись идёт в AudioRecorder, сервис только держит
-// уведомление «Идёт запись» с таймером. Тексты уведомления приходят из интерфейса.
+// уведомление «Идёт запись» с таймером. На паузе уведомление говорит об этом и таймер
+// стоит. Тексты уведомления приходят из интерфейса.
 class RecordingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -25,22 +26,19 @@ class RecordingService : Service() {
         val channel = intent?.getStringExtra(EXTRA_CHANNEL).orEmpty()
         try {
             createChannel(channel)
-            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.nixyon_recording)
-                .setContentTitle(title)
-                .setUsesChronometer(true)
-                .setWhen(System.currentTimeMillis())
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-                .setContentIntent(openApp())
-                .build()
+            val notification = notification(this, title, System.currentTimeMillis())
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
             active.set(true)
+            // Запись могла остановиться раньше, чем сервис успел запуститься: тогда он
+            // останавливается сразу после startForeground.
+            if (gate.enteredForeground()) {
+                active.set(false)
+                stopSelf()
+            }
         } catch (e: Exception) {
             // Без сервиса запись остановится при сворачивании, как раньше.
             Log.e(TAG, "foreground service записи не запустился", e)
@@ -52,6 +50,7 @@ class RecordingService : Service() {
 
     override fun onDestroy() {
         active.set(false)
+        gate.destroyed()
         super.onDestroy()
     }
 
@@ -62,12 +61,6 @@ class RecordingService : Service() {
         getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
     }
 
-    // Нажатие на уведомление открывает приложение там, где оно было.
-    private fun openApp(): PendingIntent? {
-        val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return null
-        launch.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        return PendingIntent.getActivity(this, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-    }
 
     companion object {
         private const val TAG = "NixyonSpeech"
@@ -78,6 +71,7 @@ class RecordingService : Service() {
 
         // Сервис запущен и держит запись в foreground.
         val active = AtomicBoolean(false)
+        private val gate = ForegroundStopGate()
 
         // Запуск при начале записи, пока приложение на экране: из фона Android 14+ не даёт
         // запустить foreground service для микрофона. false: запустить не удалось.
@@ -85,6 +79,7 @@ class RecordingService : Service() {
             val intent = Intent(context, RecordingService::class.java)
                 .putExtra(EXTRA_TITLE, title)
                 .putExtra(EXTRA_CHANNEL, channel)
+            gate.starting()
             return try {
                 ContextCompat.startForegroundService(context, intent)
                 true
@@ -94,8 +89,42 @@ class RecordingService : Service() {
             }
         }
 
+        // Пауза и продолжение меняют уведомление: на паузе таймер стоит, после паузы он
+        // идёт от уже записанного времени. Без запущенного сервиса менять нечего.
+        fun update(context: Context, title: String, recordedSec: Double, paused: Boolean) {
+            if (!active.get()) return
+            val since = if (paused) null else System.currentTimeMillis() - (recordedSec * 1000).toLong()
+            try {
+                context.getSystemService(NotificationManager::class.java)
+                    ?.notify(NOTIFICATION_ID, notification(context, title, since))
+            } catch (e: Exception) {
+                Log.w(TAG, "уведомление о записи не обновилось", e)
+            }
+        }
+
+        // since: с какого момента считает таймер; null, если таймер стоит.
+        private fun notification(context: Context, title: String, since: Long?) =
+            NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.nixyon_recording)
+                .setContentTitle(title)
+                .setUsesChronometer(since != null)
+                .setShowWhen(since != null)
+                .setWhen(since ?: System.currentTimeMillis())
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                .setContentIntent(openApp(context))
+                .build()
+
+        // Нажатие на уведомление открывает приложение там, где оно было.
+        private fun openApp(context: Context): PendingIntent? {
+            val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
+            launch.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            return PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
+
         fun stop(context: Context) {
-            context.stopService(Intent(context, RecordingService::class.java))
+            if (gate.requestStop()) context.stopService(Intent(context, RecordingService::class.java))
             active.set(false)
         }
     }

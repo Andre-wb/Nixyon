@@ -33,6 +33,13 @@ impl<R: Runtime> Speech<R> {
         Err(crate::Error::Unsupported)
     }
 
+    pub async fn turn_emotions(
+        &self,
+        _request: TurnEmotionsRequest,
+    ) -> crate::Result<TurnEmotions> {
+        Err(crate::Error::Unsupported)
+    }
+
     pub async fn set_system_bars(&self, _request: SystemBarsRequest) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }
@@ -53,6 +60,14 @@ impl<R: Runtime> Speech<R> {
     }
 
     pub async fn stop_recording(&self) -> crate::Result<RecordingSaved> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn pause_recording(&self, _request: PauseRequest) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn resume_recording(&self, _request: PauseRequest) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }
 
@@ -115,6 +130,23 @@ impl<R: Runtime> Speech<R> {
         Err(crate::Error::Unsupported)
     }
 
+    pub async fn reset_storage_key(&self) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    /// Отпечатка на ноутбуке нет, настройка в интерфейсе скрыта.
+    pub async fn biometric_status(&self) -> crate::Result<BiometricStatus> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn set_biometric(&self, _enabled: bool) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn open_biometric_settings(&self) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
     pub async fn render_pdf(&self, _path: String, _blocks: String) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }
@@ -135,6 +167,22 @@ impl<R: Runtime> Speech<R> {
     }
 
     pub async fn cancel_summary(&self) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn models_status(&self) -> crate::Result<ModelsStatus> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn download_models(&self, _request: DownloadModelsRequest) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn set_models_disabled(&self, _request: ModelsDisabledRequest) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn cancel_model_download(&self) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }
 }

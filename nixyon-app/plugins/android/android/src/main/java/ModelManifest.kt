@@ -21,6 +21,8 @@ class ModelManifest(val version: String, val files: Map<ModelRole, ModelFile>) {
         get() = ModelRole.DENOISER in files
     val hasAgeGender: Boolean
         get() = ModelRole.AGE_GENDER in files
+    val hasEmotion: Boolean
+        get() = ModelRole.EMOTION in files
 
     companion object {
         fun parse(text: String): ModelManifest {

@@ -1,0 +1,8 @@
+{
+  "version": "qwen3.5-4b-q3_k_m-unsloth-e87f1764",
+  "model": {
+    "path": "qwen3.5-4b-q3_k_m.gguf",
+    "size": 2293388448,
+    "sha256": "d6981ab4d77ba712b48ef69d69042d75b5e39b9dce5fb5a5b054fd08e06afb95"
+  }
+}

@@ -15,3 +15,17 @@ export function dateTime(iso) {
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat(locale(), { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
+
+// Размер файла на языке интерфейса: от гигабайта с одним знаком, меньше в мегабайтах.
+// Единицы десятичные, как в настройках памяти Android.
+export function bytes(count) {
+  const n = Number.isFinite(count) && count > 0 ? count : 0;
+  const giga = n >= 1e9;
+  const value = giga ? n / 1e9 : n / 1e6;
+  return new Intl.NumberFormat(locale(), {
+    style: "unit",
+    unit: giga ? "gigabyte" : "megabyte",
+    unitDisplay: "short",
+    maximumFractionDigits: giga || value < 10 ? 1 : 0,
+  }).format(value);
+}

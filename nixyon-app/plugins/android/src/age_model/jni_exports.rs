@@ -39,7 +39,7 @@ struct AgeModel {
 }
 
 fn open(fd: jint, offset: jlong, length: jlong, threads: jint) -> Result<AgeModel, String> {
-    // Классификатор проверяется до чтения 363 МБ модели: испорченные веса видны сразу.
+    // Классификатор проверяется до чтения модели: испорченные веса видны сразу.
     let classifier = bundled_child_adult().map_err(|e| e.to_string())?;
     let threads = usize::try_from(threads).unwrap_or(1).max(1);
     let bytes = model_bytes(fd, offset, length)?;

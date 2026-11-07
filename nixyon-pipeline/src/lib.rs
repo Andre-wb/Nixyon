@@ -31,7 +31,10 @@ mod words;
 mod test_support;
 
 pub use build_transcript::{build_transcript, build_transcript_with_centers};
-pub use edit::{MAX_TURN_TEXT_CHARS, edit_turn_text, merge_speakers, rename_speaker};
+pub use edit::{
+    MAX_TURN_TEXT_CHARS, delete_turn, edit_turn_text, merge_speakers, rename_speaker,
+    set_turn_emotion,
+};
 pub use error::EditError;
 pub use meeting_stats::{MONOLOGUE_SEC, MeetingStats, SpeakerSummary, meeting_stats};
 pub use merge_centers::merge_centers;

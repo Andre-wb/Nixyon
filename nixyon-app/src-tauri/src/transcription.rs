@@ -13,6 +13,7 @@ mod running;
 mod same_speaker;
 mod speaker_ages;
 pub(crate) mod temp_files;
+mod turn_emotions;
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -33,7 +34,7 @@ use tauri::{AppHandle, Runtime, State};
 
 pub use command_error::CommandError;
 pub use progress::{Phase, Progress};
-pub use running::Running;
+pub use running::{Running, Slot};
 
 use crate::settings::merge_hotwords;
 use temp_files::TempFiles;
@@ -226,6 +227,16 @@ pub async fn transcribe<R: Runtime>(
                 return Err(CommandError::new(CommandError::CANCELLED));
             }
             Err(e) => log::warn!("ребёнок или взрослый не определён: {e}"),
+        }
+    }
+    // Эмоции реплик: без модели или при её сбое расшифровка остаётся без эмоций.
+    if let Some(request) = turn_emotions::emotion_request(&wav, &transcript) {
+        match speech.turn_emotions(request).await {
+            Ok(emotions) => turn_emotions::apply_emotions(&mut transcript, &emotions),
+            Err(e) if e.rejected_code() == Some("cancelled") => {
+                return Err(CommandError::new(CommandError::CANCELLED));
+            }
+            Err(e) => log::warn!("эмоции реплик не определены: {e}"),
         }
     }
     if cancel.is_cancelled() {

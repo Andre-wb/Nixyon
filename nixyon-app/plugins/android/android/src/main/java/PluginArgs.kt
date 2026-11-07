@@ -45,8 +45,27 @@ class SpeakerAgesArgs {
 }
 
 @InvokeArg
+class EmotionTurnArgs {
+    var id: Int = 0
+    var startSec: Double = 0.0
+    var endSec: Double = 0.0
+}
+
+@InvokeArg
+class TurnEmotionsArgs {
+    lateinit var wavPath: String
+    var turns: Array<EmotionTurnArgs> = arrayOf()
+}
+
+@InvokeArg
 class SystemBarsArgs {
     var dark: Boolean = false
+}
+
+// Пауза и продолжение записи: заголовок уведомления на языке интерфейса.
+@InvokeArg
+class PauseArgs {
+    var notificationTitle: String = ""
 }
 
 @InvokeArg
@@ -117,4 +136,26 @@ class SpeakerNamesArgs {
 class PlayArgs {
     // Позиция в секундах; null: с текущего места.
     var fromSec: Double? = null
+}
+
+@InvokeArg
+class DownloadModelsArgs {
+    // Ключи ModelPack; обязательный набор речи входит всегда.
+    var packs: Array<String> = arrayOf()
+    // Разрешена ли платная сеть (мобильная, точка доступа).
+    var allowMetered: Boolean = false
+    // Заголовок уведомления о загрузке на языке интерфейса.
+    var notificationTitle: String = ""
+    var onProgress: Channel? = null
+}
+
+@InvokeArg
+class ModelsDisabledArgs {
+    // Ключи необязательных ModelPack, которые выключены; пусто: включены все.
+    var packs: Array<String> = arrayOf()
+}
+
+@InvokeArg
+class BiometricArgs {
+    var enabled: Boolean = false
 }

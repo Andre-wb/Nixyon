@@ -45,6 +45,7 @@ pub fn transcript(turns: &[(u32, f64, f64, &str)]) -> Transcript {
                 text: text.into(),
                 words: None,
                 flags: vec![],
+                emotion: None,
             })
             .collect(),
     }

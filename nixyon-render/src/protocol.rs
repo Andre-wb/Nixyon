@@ -29,9 +29,12 @@ pub enum Block {
         header: Vec<String>,
         rows: Vec<Vec<String>>,
     },
+    /// `emotion`: подпись эмоции реплики; у нейтральной и без эмоции поля нет.
     Turn {
         speaker: String,
         time: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        emotion: Option<String>,
         text: String,
     },
 }
@@ -71,6 +74,7 @@ pub fn protocol_blocks(
     blocks.extend(transcript.turns.iter().map(|turn| Block::Turn {
         speaker: one_line(&speaker_name(transcript, turn.speaker, labels)),
         time: clock(turn.start),
+        emotion: labels.emotion(turn.emotion).map(one_line),
         text: one_line(&turn.text),
     }));
     blocks

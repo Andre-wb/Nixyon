@@ -3,6 +3,7 @@ import { $ } from "./dom.js";
 import { clock, dateTime } from "./format.js";
 import { K, t } from "./i18n.js";
 import { renderLive } from "./live.js";
+import { onModelsChange, openModels, speechReady } from "./models.js";
 import { showImport, transcribe } from "./processing.js";
 import { onLanguageChange, show } from "./screens.js";
 import { open, onTranscriptChange } from "./transcript.js";
@@ -20,8 +21,14 @@ const STOP_REASONS = {
 let unknownCount = true;
 let count = 2;
 let recording = false;
+let paused = false;
+// Команда паузы ещё не ответила: второе нажатие в это время ничего не делает.
+let pausing = false;
 let liveLines = [];
 let startedAt = 0;
+// Пауза: когда её поставили и сколько всего длилась до текущей.
+let pausedAt = 0;
+let pausedMs = 0;
 let timer = null;
 let last = null;
 // Запись, восстановленная после падения приложения, пока её не расшифровали.
@@ -85,12 +92,20 @@ function startOf(path) {
   return match ? new Date(Number(match[1])) : new Date();
 }
 
+// Сколько записано без пауз, в миллисекундах.
+function elapsedMs(now = Date.now()) {
+  return now - startedAt - pausedMs - (paused ? now - pausedAt : 0);
+}
+
 function renderRecorder() {
   $("screen-home").classList.toggle("recording", recording);
+  $("screen-home").classList.toggle("paused", paused);
   $("record-label").textContent = t(recording ? K.home_stop : K.home_record);
   $("record").setAttribute("aria-label", t(recording ? K.home_stop : K.home_record));
   $("timer").hidden = !recording;
-  if (recording) $("timer").textContent = `${t(K.home_recording)}, ${clock((Date.now() - startedAt) / 1000)}`;
+  if (recording) $("timer").textContent = `${t(paused ? K.home_paused : K.home_recording)}, ${clock(elapsedMs() / 1000)}`;
+  $("record-pause").hidden = !recording;
+  $("record-pause-label").textContent = t(paused ? K.home_resume : K.home_pause);
   $("import").disabled = recording;
 }
 
@@ -109,7 +124,7 @@ async function startRecording() {
   try {
     await startMicrophone(
       channel((event) => {
-        if (event.type === "level") setLevel(event.dbfs);
+        if (event.type === "level" && !paused) setLevel(event.dbfs);
         if (event.type === "live") setLive(event.lines);
         if (event.type === "stopped") finishRecording(event, STOP_REASONS[event.reason]);
       }),
@@ -132,8 +147,34 @@ async function stopRecording() {
   }
 }
 
+// Кнопка паузы: первое нажатие ставит запись на паузу, второе продолжает её в том же файле.
+async function togglePause() {
+  if (!recording || pausing) return;
+  const pause = !paused;
+  pausing = true;
+  $("record-pause").disabled = true;
+  try {
+    await invoke(pause ? "pause_recording" : "resume_recording", {
+      notificationTitle: t(pause ? K.recording_notification_paused : K.recording_notification_title),
+    });
+  } catch (error) {
+    notice(errorText(error), { code: errorCode(error) });
+    return;
+  } finally {
+    pausing = false;
+    $("record-pause").disabled = false;
+  }
+  const now = Date.now();
+  if (pause) pausedAt = now;
+  else pausedMs += now - pausedAt;
+  paused = pause;
+  renderRecorder();
+}
+
 function resetRecorder() {
   recording = false;
+  paused = false;
+  pausedMs = 0;
   clearInterval(timer);
   setLevel(-90);
   setLive([]);
@@ -190,6 +231,17 @@ export function failed(text, code) {
   if (text) notice(text, { code });
 }
 
+// Пока модели речи не скачаны, записывать и расшифровывать нечем: вместо записи и
+// выбора файла плашка с кнопкой загрузки. ready: модели только что скачались.
+function renderModels(ready) {
+  const missing = !speechReady();
+  $("models-missing").hidden = !missing;
+  $("count-group").hidden = missing;
+  $("recorder").hidden = missing;
+  $("import").hidden = missing;
+  if (ready && !missing) notice(t(K.models_ready), { info: true });
+}
+
 export function initHome() {
   $("count-unknown").addEventListener("click", () => {
     unknownCount = !unknownCount;
@@ -198,10 +250,13 @@ export function initHome() {
   $("count-less").addEventListener("click", () => setCount(unknownCount ? count : count - 1));
   $("count-more").addEventListener("click", () => setCount(unknownCount ? count : count + 1));
   $("record").addEventListener("click", () => (recording ? stopRecording() : startRecording()));
+  $("record-pause").addEventListener("click", togglePause);
   $("import").addEventListener("click", importFile);
   $("open-app-settings").addEventListener("click", () => invoke("open_app_settings").catch(() => null));
   $("recovered-transcribe").addEventListener("click", transcribeRecovered);
   $("last").addEventListener("click", () => last && open(last));
+  $("models-open").addEventListener("click", openModels);
+  onModelsChange(renderModels);
   onTranscriptChange(setLast);
   onLanguageChange(() => {
     renderRecorder();

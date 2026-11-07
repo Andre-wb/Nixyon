@@ -23,10 +23,15 @@ pub fn render_txt(transcript: &Transcript, labels: &Labels, recorded_at: Option<
         transcript.speakers.len()
     ));
     for turn in &transcript.turns {
+        let emotion = labels
+            .emotion(turn.emotion)
+            .map(|e| format!(", {}", one_line(e)))
+            .unwrap_or_default();
         out.push_str(&format!(
-            "\n{}, {}\n{}\n",
+            "\n{}, {}{}\n{}\n",
             one_line(&speaker_name(transcript, turn.speaker, labels)),
             clock(turn.start),
+            emotion,
             one_line(&turn.text)
         ));
     }

@@ -51,6 +51,14 @@ impl<R: Runtime> Speech<R> {
             .map_err(Into::into)
     }
 
+    /// Эмоция каждой реплики; занимает движок, как разбор записи.
+    pub async fn turn_emotions(&self, request: TurnEmotionsRequest) -> crate::Result<TurnEmotions> {
+        self.0
+            .run_mobile_plugin_async("turnEmotions", request)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn set_system_bars(&self, request: SystemBarsRequest) -> crate::Result<()> {
         self.0
             .run_mobile_plugin_async("setSystemBars", request)
@@ -82,6 +90,20 @@ impl<R: Runtime> Speech<R> {
     pub async fn stop_recording(&self) -> crate::Result<RecordingSaved> {
         self.0
             .run_mobile_plugin_async("stopRecording", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn pause_recording(&self, request: PauseRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("pauseRecording", request)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn resume_recording(&self, request: PauseRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("resumeRecording", request)
             .await
             .map_err(Into::into)
     }
@@ -159,9 +181,38 @@ impl<R: Runtime> Speech<R> {
             .map_err(Into::into)
     }
 
+    pub async fn biometric_status(&self) -> crate::Result<BiometricStatus> {
+        self.0
+            .run_mobile_plugin_async("biometricStatus", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Включает или выключает вход по отпечатку; система спрашивает палец.
+    pub async fn set_biometric(&self, enabled: bool) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("setBiometric", BiometricRequest { enabled })
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn open_biometric_settings(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("openBiometricSettings", ())
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn storage_key(&self) -> crate::Result<StorageKey> {
         self.0
             .run_mobile_plugin_async("storageKey", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn reset_storage_key(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("resetStorageKey", ())
             .await
             .map_err(Into::into)
     }
@@ -202,6 +253,35 @@ impl<R: Runtime> Speech<R> {
     pub async fn cancel_summary(&self) -> crate::Result<()> {
         self.0
             .run_mobile_plugin_async("cancelSummary", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn models_status(&self) -> crate::Result<ModelsStatus> {
+        self.0
+            .run_mobile_plugin_async("modelsStatus", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Качает выбранные модели с зеркала. Ждёт до конца загрузки, отмены или ошибки.
+    pub async fn download_models(&self, request: DownloadModelsRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("downloadModels", request)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn set_models_disabled(&self, request: ModelsDisabledRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("setModelsDisabled", request)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn cancel_model_download(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("cancelModelDownload", ())
             .await
             .map_err(Into::into)
     }

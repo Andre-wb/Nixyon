@@ -98,6 +98,7 @@ pub(crate) fn turn(
         text,
         words,
         flags: Vec::new(),
+        emotion: None,
     }
 }
 

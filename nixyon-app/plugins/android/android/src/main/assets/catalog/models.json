@@ -1,0 +1,85 @@
+{
+  "version": "giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8",
+  "files": {
+    "vad": {
+      "path": "vad.onnx",
+      "size": 643854,
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
+    },
+    "asr_encoder": {
+      "path": "asr-encoder.int8.onnx",
+      "size": 224570820,
+      "sha256": "369f35a71bf288d3b8e0391fabd8dba5f2314088d440bca474056b7b4b6e66bf"
+    },
+    "asr_decoder": {
+      "path": "asr-decoder.onnx",
+      "size": 4600132,
+      "sha256": "38fc7475443ea2a26f63211ca350f73ac50fff824ab7a3876ee2bd610c53bbc4"
+    },
+    "asr_joiner": {
+      "path": "asr-joiner.onnx",
+      "size": 2712896,
+      "sha256": "602ff7017a93311aad34df1437c8d7f49911353c13d6eae7a6ee7b041339465c"
+    },
+    "asr_tokens": {
+      "path": "asr-tokens.txt",
+      "size": 13354,
+      "sha256": "39abae20e692998290c574e606f11a9edef2902a1995463fcff63d1490cf22b7"
+    },
+    "embedding": {
+      "path": "embedding.onnx",
+      "size": 28281164,
+      "sha256": "aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2"
+    },
+    "segmentation": {
+      "path": "segmentation.onnx",
+      "size": 5992913,
+      "sha256": "220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079"
+    },
+    "asr_bpe_vocab": {
+      "path": "asr-bpe.vocab",
+      "size": 28693,
+      "sha256": "af72e53d851552fca7510fd1aa8ca7db340407ee1c57bd34c4bafaec1a79529c"
+    },
+    "live_encoder": {
+      "path": "live-encoder.int8.onnx",
+      "size": 26214060,
+      "sha256": "e0db705e94ec35d803b1df4f40cda23d064e1142977c80ab288430b109777a9d"
+    },
+    "live_decoder": {
+      "path": "live-decoder.onnx",
+      "size": 2093080,
+      "sha256": "89b3088a9e20e1ef7f2e85ce1a3478afe6a9c4ac57369cabcc4beb8e95328ea0"
+    },
+    "live_joiner": {
+      "path": "live-joiner.int8.onnx",
+      "size": 259417,
+      "sha256": "b55784b071ab7512eab4c7c44e4f5478284ef33c83562cc6a249b972515a31e5"
+    },
+    "live_tokens": {
+      "path": "live-tokens.txt",
+      "size": 6388,
+      "sha256": "93bbbc0bae6b78c0bbb743d4aa9fded3bb5ff3aac5f0200e3a769a5a05e0fdf6"
+    },
+    "redimnet2": {
+      "path": "redimnet2-b6.onnx",
+      "size": 51223453,
+      "sha256": "d960e9f713eaba712f44498e82221b6fc12fcd7eaacd367c9eac45d3a6ce59ec"
+    },
+    "denoiser": {
+      "path": "denoiser.onnx",
+      "size": 535638,
+      "sha256": "e77603ac0c23dac3227dd2d7135b3a585cbee2679048aecfa886657d3ae1b534"
+    },
+    "age_gender": {
+      "path": "age-gender.onnx",
+      "size": 129460421,
+      "sha256": "6f57fec62e46e370e02422169a74d5e7a096979b7a78192c11eba6032d1569f8"
+    },
+    "emotion": {
+      "path": "emotion.int8.onnx",
+      "size": 257093387,
+      "sha256": "fe1c1b182624180dc66c4275d9f79de506a4af9a169c6e8fed497427d45c6316"
+    }
+  }
+}

@@ -67,6 +67,7 @@ class ProtocolPdf(private val blocks: List<ProtocolBlock>) {
         val heading = SpannableStringBuilder(block.speaker).apply {
             setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             append(", ${block.time}")
+            block.emotion?.let { append(", $it") }
         }
         val head = layout(heading, body, CONTENT_WIDTH)
         val text = layout(block.text, body, CONTENT_WIDTH)

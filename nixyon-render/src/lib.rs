@@ -4,6 +4,7 @@
 
 mod clock;
 mod docx;
+mod emotion_labels;
 mod json;
 mod labels;
 mod markdown;
@@ -15,6 +16,7 @@ mod txt;
 
 pub use clock::{clock, srt_timestamp};
 pub use docx::{document_xml, render_docx};
+pub use emotion_labels::EmotionLabels;
 pub use json::render_json;
 pub use labels::Labels;
 pub use markdown::render_markdown;

@@ -76,6 +76,7 @@ mod tests {
                         },
                     ]),
                     flags: vec![],
+                    emotion: None,
                 },
                 Turn {
                     id: 2,
@@ -85,6 +86,7 @@ mod tests {
                     text: "да я готова".into(),
                     words: None,
                     flags: vec!["clipping".into()],
+                    emotion: None,
                 },
             ],
         }

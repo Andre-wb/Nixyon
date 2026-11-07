@@ -1,8 +1,10 @@
-import { errorText, invoke } from "./api.js";
+import { channel, errorCode, errorText, invoke } from "./api.js";
 import { $, dot, el, speakerColor } from "./dom.js";
 import { clock, dateTime } from "./format.js";
+import { emotionChip, initEmotion, openEmotion } from "./emotion.js";
 import { K, t } from "./i18n.js";
 import { openExport } from "./export.js";
+import { fillersAvailable, openFillers } from "./fillers.js";
 import { closePlayer, openPlayer, playFrom, refreshPlayerIndex } from "./player.js";
 import { applySearch, resetSearch } from "./search.js";
 import { openStats } from "./stats.js";
@@ -19,6 +21,11 @@ let warnings = [];
 let editing = null;
 let pendingMerge = null;
 let editingTurn = null;
+// Повторная обработка реплики: идёт ли она, на какой реплике, ход и итог.
+let checkRunning = false;
+let checkTurn = null;
+let checkProgress = null;
+let checkResult = null;
 const changeListeners = [];
 // Места слов с временем в тексте каждого хода: id хода превращается в список отрезков.
 let ranges = new Map();
@@ -62,6 +69,10 @@ export function open(transcript, newWarnings = []) {
   prepareNames(transcript);
   pushTranscript();
   openPlayer(transcript);
+}
+
+export function currentTranscript() {
+  return current;
 }
 
 export function setTranscript(transcript) {
@@ -110,6 +121,14 @@ function render() {
     time.type = "button";
     time.setAttribute("aria-label", t(K.transcript_play_from, { time: clock(turn.start) }));
     time.addEventListener("click", () => playFrom(turn.start));
+    const actions = el("span", "turn-actions");
+    const checkButton = el("button", "icon-button turn-check");
+    checkButton.type = "button";
+    const checkLabel = t(K.transcript_recheck);
+    checkButton.setAttribute("aria-label", checkLabel);
+    checkButton.title = checkLabel;
+    checkButton.append($("recheck-icon").content.cloneNode(true));
+    checkButton.addEventListener("click", () => openTurnCheck(turn.id));
     const editButton = el("button", "icon-button turn-edit");
     editButton.type = "button";
     const editLabel = t(K.transcript_edit_text);
@@ -117,7 +136,10 @@ function render() {
     editButton.title = editLabel;
     editButton.append($("edit-icon").content.cloneNode(true));
     editButton.addEventListener("click", () => openTurnEdit(turn.id));
-    head.append(el("span", "turn-name", speakerName(current, turn.speaker)), time, editButton);
+    actions.append(checkButton, editButton);
+    const meta = `${speakerName(current, turn.speaker)}, ${clock(turn.start)}`;
+    const emotion = emotionChip(turn, () => openEmotion(turn, meta, setTranscript));
+    head.append(el("span", "turn-name", speakerName(current, turn.speaker)), time, emotion, actions);
     if (turn.flags?.includes(OVERLAP_FLAG)) head.append(el("span", "turn-flag", t(K.transcript_overlap)));
     const text = el("p", "turn-text", turn.text);
     text.dataset.turnId = String(turn.id);
@@ -141,7 +163,103 @@ function openTurnEdit(id) {
   $("turn-sheet-meta").textContent = `${speakerName(current, turn.speaker)}, ${clock(turn.start)}`;
   $("turn-text-input").value = turn.text;
   $("turn-error").textContent = "";
+  $("turn-fillers").hidden = !fillersAvailable();
   openModal($("turn-sheet"));
+}
+
+// Удаление фразы необратимо: сначала подтверждение.
+async function deleteTurn() {
+  $("turn-delete-confirm").close();
+  try {
+    setTranscript(await invoke("delete_turn", { id: editingTurn }));
+    $("turn-sheet").close();
+  } catch (error) {
+    $("turn-error").textContent = errorText(error);
+  }
+}
+
+// Повторная обработка: фраза слушается заново и проверяется моделью, итог только
+// показывается. Замена текста: обычная правка реплики, поэтому её можно отменить закрытием.
+function openTurnCheck(id) {
+  if (!checkRunning) {
+    checkTurn = id;
+    checkProgress = null;
+    checkResult = null;
+  }
+  $("turn-check-error").textContent = "";
+  renderTurnCheck();
+  openModal($("turn-check-sheet"));
+}
+
+function renderTurnCheck() {
+  const turn = current?.turns.find((x) => x.id === checkTurn);
+  $("turn-check-meta").textContent = turn ? `${speakerName(current, turn.speaker)}, ${clock(turn.start)}` : "";
+  $("turn-check-running").hidden = !checkRunning;
+  const checking = checkProgress?.stage === "check";
+  $("turn-check-phase").textContent = t(checking ? K.turn_check_checking : K.turn_check_listening);
+  const share = checkProgress && checkProgress.total > 0 ? Math.min(1, checkProgress.done / checkProgress.total) : 0;
+  $("turn-check-progress-fill").style.transform = `scaleX(${share})`;
+  $("turn-check-progress").setAttribute("aria-valuenow", String(Math.round(share * 100)));
+  const done = !checkRunning && checkResult !== null;
+  const candidate = done ? checkCandidate() : "";
+  // Сверка с текстом реплики сейчас: её могли поправить, пока шла обработка.
+  const changed = done && candidate !== (turn?.text ?? "");
+  $("turn-check-result").hidden = !done;
+  $("turn-check-before").textContent = turn?.text ?? "";
+  // Ответ модели недоверенный: только как текст, никогда как разметка.
+  $("turn-check-after").textContent = candidate;
+  $("turn-check-note").hidden = !(done && checkResult.correction == null);
+  $("turn-check-same").hidden = !(done && !changed);
+  $("turn-check-apply").hidden = !changed;
+  $("turn-check-start").hidden = checkRunning;
+}
+
+// Итог обработки: исправление модели, а без него повторное распознавание.
+function checkCandidate() {
+  return checkResult.correction ?? checkResult.recognized;
+}
+
+async function startTurnCheck() {
+  if (checkTurn === null) return;
+  $("turn-check-error").textContent = "";
+  checkRunning = true;
+  checkProgress = null;
+  checkResult = null;
+  renderTurnCheck();
+  try {
+    checkResult = await invoke("reprocess_turn", {
+      id: checkTurn,
+      onProgress: channel((p) => {
+        checkProgress = p;
+        renderTurnCheck();
+      }),
+    });
+  } catch (error) {
+    if (errorCode(error) !== "cancelled") $("turn-check-error").textContent = errorText(error);
+  } finally {
+    checkRunning = false;
+    checkProgress = null;
+    renderTurnCheck();
+  }
+}
+
+// Отмена обеих стадий сразу: по ходу работы не видно, началась ли уже проверка моделью,
+// пока модель не прислала первый отчёт. Команда для стадии, которая не идёт, ничего не делает.
+function cancelTurnCheck() {
+  invoke("cancel_transcription").catch(() => null);
+  invoke("cancel_summary").catch(() => null);
+}
+
+async function applyTurnCheck() {
+  if (!checkResult || checkTurn === null) return;
+  const text = checkCandidate().replace(/[\r\n\t]+/g, " ");
+  try {
+    setTranscript(await invoke("edit_turn_text", { id: checkTurn, text }));
+    checkResult = null;
+    $("turn-check-sheet").close();
+  } catch (error) {
+    $("turn-check-error").textContent = errorText(error);
+  }
 }
 
 // Перенос строки в реплике не нужен: вставленный текст склеивается через пробел.
@@ -241,6 +359,16 @@ export function initTranscript() {
   });
   $("merge-yes").addEventListener("click", merge);
   $("turn-save").addEventListener("click", saveTurnText);
+  $("turn-fillers").addEventListener("click", () => {
+    $("turn-sheet").close();
+    openFillers([editingTurn]);
+  });
+  $("turn-delete").addEventListener("click", () => openModal($("turn-delete-confirm")));
+  $("turn-delete-no").addEventListener("click", () => $("turn-delete-confirm").close());
+  $("turn-delete-yes").addEventListener("click", deleteTurn);
+  $("turn-check-start").addEventListener("click", startTurnCheck);
+  $("turn-check-apply").addEventListener("click", applyTurnCheck);
+  $("turn-check-cancel").addEventListener("click", cancelTurnCheck);
   $("turn-text-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -251,5 +379,7 @@ export function initTranscript() {
     pendingMerge = null;
     $("merge-confirm").close();
   });
+  initEmotion();
   onLanguageChange(render);
+  onLanguageChange(renderTurnCheck);
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::Word;
+use crate::{TurnEmotion, Word};
 
 /// Пометка хода, где говорящих несколько одновременно.
 pub const OVERLAP_FLAG: &str = "overlap";
@@ -19,6 +19,10 @@ pub struct Turn {
     /// Пометки вроде "overlap" или "clipping". default: файлы без поля тоже читаются.
     #[serde(default)]
     pub flags: Vec<String>,
+    /// Эмоция по голосу или выбранная вручную; None, если модели нет или она не уверена.
+    /// default: файлы без поля тоже читаются.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emotion: Option<TurnEmotion>,
 }
 
 impl Turn {

@@ -22,7 +22,7 @@ BASE_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download"
 source "${ROOT}/scripts/model-mirror.sh"
 
 # Меняется при любой смене моделей: по нему приложение видит, что набор другой.
-VERSION="giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple"
+VERSION="giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8"
 # GigaAM v3 с пунктуацией: сразу даёт знаки препинания, заглавные буквы и числа цифрами.
 GIGAAM="sherpa-onnx-nemo-transducer-punct-giga-am-v3-russian-2025-12-16"
 # Нейросегментация: кто и когда говорит, включая наложения голосов.
@@ -38,6 +38,14 @@ TOKENIZER="gigaam-v3-tokenizer.model"
 # Распознавание звуков по классам AudioSet (речь, музыка, пение): по нему отбрасываются
 # куски, где вместо речи звучит музыка. CED tiny, лицензия Apache-2.0.
 TAGGING="sherpa-onnx-ced-tiny-audio-tagging-2024-04-19"
+
+# Эмоция реплики: GigaAM-Emo (SberDevices, лицензия MIT), своя выгрузка ONNX с весами
+# MatMul в 8 бит (scripts/export-gigaam-emo.py, там же замеры). Чекпойнт emo.ckpt скачан
+# один раз с CDN SberDevices (у CDN просрочен сертификат, файл сверен по md5 из
+# официального gigaam/__init__.py), выгрузка повторяется байт в байт. Готовый файл
+# берётся только с зеркала по сумме: torch для выгрузки в CI нет.
+EMOTION_FILE="emotion.int8.onnx"
+EMOTION_SHA256="fe1c1b182624180dc66c4275d9f79de506a4af9a169c6e8fed497427d45c6316"
 
 # путь в релизе и SHA-256
 DOWNLOADS=(
@@ -80,6 +88,20 @@ else
   mv "${tokenizer}.part" "${tokenizer}"
 fi
 
+emotion_missing() {
+  echo "на зеркале нет ${EMOTION_FILE}: выгрузите его scripts/export-gigaam-emo.py" >&2
+  return 1
+}
+
+emotion="${CACHE}/${EMOTION_FILE}"
+if [[ -f "${emotion}" ]] && [[ "$(sha256_of "${emotion}")" == "${EMOTION_SHA256}" ]]; then
+  echo "есть: ${EMOTION_FILE}"
+else
+  echo "скачиваю: ${EMOTION_FILE}"
+  model_download "${emotion}.part" "${EMOTION_SHA256}" emotion_missing || exit 1
+  mv "${emotion}.part" "${emotion}"
+fi
+
 # роль и файл; роли читает приложение
 ROLES=(
   "vad vad.onnx"
@@ -99,6 +121,7 @@ ROLES=(
   "redimnet2 redimnet2-b6.onnx"
   "denoiser denoiser.onnx"
   "age_gender age-gender.onnx"
+  "emotion ${EMOTION_FILE}"
 )
 
 manifest="${MODELS}/models.json"
@@ -141,6 +164,32 @@ AGE_GENDER_FILE="age-gender.onnx"
 AGE_GENDER_ROLE="age_gender"
 AGE_GENDER_SHA256="75c5cc3debc2013215cee5f331a66b59bd7205da170fb61abab46fc4507df7be"
 AGE_GENDER_VERSION="audeering-w2v2-l-robust-6-age-gender-1.1.1"
+# int8-копия для основного набора, см. quantize_age_gender.
+AGE_GENDER_INT8_SHA256="6f57fec62e46e370e02422169a74d5e7a096979b7a78192c11eba6032d1569f8"
+
+# Кладёт int8-копию model.onnx из набора ort в основной набор под именем AGE_GENDER_FILE:
+# динамическое квантование весов MatMul в int8 с каналом на выход (onnxruntime),
+# 363 МБ превращаются в 129 МБ. Свёрточный вход wav2vec2 остаётся fp32: с ним квантованным
+# вердикты «ребёнок или взрослый» расходились с fp32 на 4 клипа из 236, без него ни разу.
+# Нужен пакет onnxruntime. Замер на 236 клипах speechocean762 (дети 6–9 и взрослые 25+):
+# расхождений вердиктов 0, максимальное изменение вероятности 0,036, ошибок против
+# возраста столько же, сколько у fp32 (6 из 236). Исходник fp32 остаётся в models/ort с
+# закреплённой суммой, его же берут замеры и `bench-age-gender-android.sh`.
+quantize_age_gender() {
+  local src="$1" dst="$2"
+  # Без -I: onnxruntime обычно стоит в site-packages пользователя, изолированный python его не видит.
+  python3 -c '
+import sys
+try:
+    from onnxruntime.quantization import QuantType, quantize_dynamic
+except ImportError:
+    sys.exit("нужен onnxruntime c onnx для int8-копии age-gender: "
+             "python3 -m pip install onnxruntime onnx")
+quantize_dynamic(sys.argv[1], sys.argv[2], op_types_to_quantize=["MatMul", "Gemm"],
+                 weight_type=QuantType.QInt8, per_channel=True)
+' "${src}" "${dst}.part" || { rm -f "${dst}.part"; exit 1; }
+  mv "${dst}.part" "${dst}"
+}
 
 # Кладёт model.onnx из архива audEERING в набор ort под именем AGE_GENDER_FILE.
 fetch_age_gender() {
@@ -280,11 +329,22 @@ cp "${CACHE}/gtcrn_simple.onnx" "${MODELS}/denoiser.onnx"
 rm -f "${MODELS}/redimnet2-b6.onnx"
 ln "${MODELS}/ort/redimnet2-b6.onnx" "${MODELS}/redimnet2-b6.onnx" 2>/dev/null \
   || cp "${MODELS}/ort/redimnet2-b6.onnx" "${MODELS}/redimnet2-b6.onnx"
-# Модель «ребёнок или взрослый» тоже из набора ort; 363 МБ, поэтому копия только если ссылка
-# не получилась.
+# Модель «ребёнок или взрослый»: в основной набор кладётся int8-копия из набора ort. Копия
+# закреплена суммой: onnxruntime 1.31.1 даёт из одного исходника один и тот же файл, другая
+# версия может дать другой. Копия хранится в кэше загрузок и берётся с зеркала по сумме, так
+# что onnxruntime нужен, только если на зеркале её нет; тогда квантуется на месте, и сумма
+# должна совпасть.
+age_int8="${CACHE}/age-gender-int8.onnx"
+if [[ -f "${age_int8}" ]] && [[ "$(sha256_of "${age_int8}")" == "${AGE_GENDER_INT8_SHA256}" ]]; then
+  echo "есть: age-gender-int8.onnx"
+else
+  model_download "${age_int8}.part" "${AGE_GENDER_INT8_SHA256}" \
+    quantize_age_gender "${MODELS}/ort/age-gender.onnx" "${age_int8}.part" || exit 1
+  mv "${age_int8}.part" "${age_int8}"
+fi
 rm -f "${MODELS}/age-gender.onnx"
-ln "${MODELS}/ort/age-gender.onnx" "${MODELS}/age-gender.onnx" 2>/dev/null \
-  || cp "${MODELS}/ort/age-gender.onnx" "${MODELS}/age-gender.onnx"
+cp "${age_int8}" "${MODELS}/age-gender.onnx"
+cp "${emotion}" "${MODELS}/${EMOTION_FILE}"
 python3 -I "${ROOT}/scripts/spm-to-bpe-vocab.py" "${tokenizer}" "${MODELS}/asr-tokens.txt" "${MODELS}/asr-bpe.vocab"
 # Пример записи из архива GigaAM нужен для проверок на ноутбуке и устройстве, в манифест не входит.
 cp "${CACHE}/${GIGAAM}/test_wavs/example.wav" "${MODELS}/example.wav"

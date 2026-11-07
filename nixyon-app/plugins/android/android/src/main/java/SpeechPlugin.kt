@@ -2,6 +2,7 @@ package dev.demo.nixyon.speech
 
 import android.Manifest
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
@@ -11,6 +12,8 @@ import android.webkit.WebView
 import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.appcompat.app.AppCompatActivity
+import androidx.biometric.BiometricManager
+import androidx.fragment.app.FragmentActivity
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import app.tauri.PermissionState
@@ -56,6 +59,9 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
     private var webView: WebView? = null
     @Volatile
     private var importCancelled = AtomicBoolean(false)
+    private val installing = AtomicBoolean(false)
+    @Volatile
+    private var installCancelled = AtomicBoolean(false)
 
     @Command
     fun engineStatus(invoke: Invoke) {
@@ -179,6 +185,38 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    // Эмоция каждой реплики по голосу. Звук и ответы в лог не пишутся, только число реплик.
+    @Command
+    fun turnEmotions(invoke: Invoke) {
+        val args = invoke.parseArgs(TurnEmotionsArgs::class.java)
+        scope.launch {
+            try {
+                val turns = args.turns.map { EmotionTurn(it.id, it.startSec, it.endSec) }
+                val started = System.nanoTime()
+                val verdicts = engine.turnEmotions(File(args.wavPath), turns)
+                if (verdicts == null) {
+                    invoke.resolve(jsObject("available" to false, "turns" to JSONArray()))
+                    return@launch
+                }
+                Log.i(TAG, "эмоции: реплик ${verdicts.size}, ${(System.nanoTime() - started) / 1_000_000} мс")
+                val out = JSONArray()
+                for (v in verdicts) {
+                    out.put(jsObject("id" to v.id, "emotion" to (v.emotion ?: JSONObject.NULL)))
+                }
+                invoke.resolve(jsObject("available" to true, "turns" to out))
+            } catch (e: AnalysisException) {
+                if (e.code == AnalysisException.CANCELLED) Log.i(TAG, "эмоции отменены") else Log.e(TAG, "эмоции: ${e.code}: ${e.message}", e)
+                invoke.reject(e.message, e.code)
+            } catch (e: ModelsException) {
+                Log.e(TAG, "модель эмоций не загружена: ${e.code}: ${e.message}", e)
+                invoke.reject(e.message, e.code)
+            } catch (e: Throwable) {
+                Log.e(TAG, "эмоции не определены", e)
+                invoke.reject("internal error", AnalysisException.ENGINE_FAILED)
+            }
+        }
+    }
+
     // Значки строки состояния и навигации под тему интерфейса: светлые на тёмной теме,
     // тёмные на светлой. Без этого при ручной теме они следуют системной.
     @Command
@@ -272,21 +310,109 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
     // Команд для JS у плагина нет, интерфейс эту команду вызвать не может. В лог не пишется.
     // Ядро спрашивает ключ один раз за запуск, до подготовки хранилища, которая удаляет
     // недописанные файлы: поэтому записи, оборванные падением, восстанавливаются здесь.
+    // Пока ключ закрыт и вход по отпечатку включён, спрашивает палец; при отмене отвечает
+    // locked.
     @Command
     fun storageKey(invoke: Invoke) {
-        scope.launch {
-            try {
-                val key = keys.get()
-                recoverOnce(key)
-                val raw = key.encoded
-                val ret = jsObject("key" to JSONArray(raw.map { it.toInt() and 0xff }))
-                raw.fill(0)
-                invoke.resolve(ret)
-            } catch (e: Throwable) {
-                Log.e(TAG, "ключ данных недоступен", e)
-                invoke.reject("storage key failed", "storage_failed")
+        val host = activity as? FragmentActivity
+        if (host == null) {
+            invoke.reject("storage key failed", "storage_failed")
+            return
+        }
+        keys.unlock(host) { result ->
+            scope.launch {
+                try {
+                    val key = result.getOrThrow()
+                    recoverOnce(key)
+                    val raw = key.encoded
+                    val ret = jsObject("key" to JSONArray(raw.map { it.toInt() and 0xff }))
+                    raw.fill(0)
+                    invoke.resolve(ret)
+                } catch (e: StorageLockedException) {
+                    invoke.reject("storage locked", e.code)
+                } catch (e: Throwable) {
+                    Log.e(TAG, "ключ данных недоступен", e)
+                    invoke.reject("storage key failed", "storage_failed")
+                }
             }
         }
+    }
+
+    // Удаляет ключ, который система стёрла, чтобы начать с чистого хранилища. Плагин
+    // соглашается, только если последнее открытие нашло ключ стёртым.
+    @Command
+    fun resetStorageKey(invoke: Invoke) {
+        try {
+            keys.reset()
+            invoke.resolve()
+        } catch (e: StorageLockedException) {
+            invoke.reject("storage key is not lost", e.code)
+        } catch (e: Throwable) {
+            Log.e(TAG, "стёртый ключ данных не удалён", e)
+            invoke.reject("storage key reset failed", "storage_failed")
+        }
+    }
+
+    // Включён ли вход по отпечатку и есть ли на телефоне отпечаток.
+    @Command
+    fun biometricStatus(invoke: Invoke) {
+        try {
+            val status = keys.biometricStatus()
+            invoke.resolve(jsObject("enabled" to status.enabled, "available" to status.available))
+        } catch (e: Throwable) {
+            Log.e(TAG, "состояние входа по отпечатку не прочитано", e)
+            invoke.reject("biometric status failed", "storage_failed")
+        }
+    }
+
+    // Включает или выключает вход по отпечатку. Система спрашивает палец в обе стороны.
+    @Command
+    fun setBiometric(invoke: Invoke) {
+        val args = invoke.parseArgs(BiometricArgs::class.java)
+        val host = activity as? FragmentActivity
+        if (host == null) {
+            invoke.reject("biometric switch failed", "storage_failed")
+            return
+        }
+        keys.setBiometric(host, args.enabled) { result ->
+            result.fold(
+                onSuccess = { invoke.resolve() },
+                onFailure = { e ->
+                    if (e is StorageLockedException) {
+                        invoke.reject("biometric switch refused", e.code)
+                    } else {
+                        Log.e(TAG, "вход по отпечатку не переключён", e)
+                        invoke.reject("biometric switch failed", "storage_failed")
+                    }
+                },
+            )
+        }
+    }
+
+    // Добавление отпечатка в настройках Android. Прямой экран добавления есть с Android 11;
+    // раньше и там, где его нет, открываются настройки безопасности.
+    @Command
+    fun openBiometricSettings(invoke: Invoke) {
+        val enroll = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Intent(Settings.ACTION_BIOMETRIC_ENROLL)
+                .putExtra(Settings.EXTRA_BIOMETRIC_AUTHENTICATORS_ALLOWED, BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        } else {
+            null
+        }
+        for (intent in listOfNotNull(enroll, Intent(Settings.ACTION_SECURITY_SETTINGS))) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                activity.startActivity(intent)
+                invoke.resolve()
+                return
+            } catch (e: ActivityNotFoundException) {
+                Log.w(TAG, "экран настроек отпечатка не найден: ${intent.action}")
+            } catch (e: Throwable) {
+                Log.e(TAG, "настройки отпечатка не открылись", e)
+                break
+            }
+        }
+        invoke.reject("settings failed", "storage_failed")
     }
 
     // Один раз за процесс. Новая запись и импорт начинаются только после подготовки
@@ -406,6 +532,23 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
                 Log.e(TAG, "запись не сохранилась", e)
                 invoke.reject("internal error", MediaException.MIC_UNAVAILABLE)
             }
+        }
+    }
+
+    @Command
+    fun pauseRecording(invoke: Invoke) = setPaused(invoke, true)
+
+    @Command
+    fun resumeRecording(invoke: Invoke) = setPaused(invoke, false)
+
+    private fun setPaused(invoke: Invoke, paused: Boolean) {
+        val args = invoke.parseArgs(PauseArgs::class.java)
+        try {
+            val recorded = if (paused) recorder.pause() else recorder.resume()
+            RecordingService.update(activity.applicationContext, args.notificationTitle, recorded, paused)
+            invoke.resolve()
+        } catch (e: MediaException) {
+            invoke.reject(e.message, e.code)
         }
     }
 
@@ -632,6 +775,131 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         player.close()
     }
 
+    // Какие модели есть в каталоге, какие уже скачаны и не идёт ли загрузка, начатая
+    // до перезапуска приложения.
+    @Command
+    fun modelsStatus(invoke: Invoke) {
+        scope.launch {
+            try {
+                val catalog = ModelCatalog.read(activity.assets)
+                val folders = ModelFolders.of(activity)
+                val local = InstalledModels.read(folders)
+                val installed = AvailableModels.packs(local, local.ready(folders), BundledModels.read(activity.assets))
+                val pending = journal().read()
+                val packs = JSONArray()
+                for (pack in catalog.packs) {
+                    packs.put(
+                        jsObject(
+                            "key" to pack.key,
+                            "required" to pack.required,
+                            "size" to catalog.size(pack),
+                            "installed" to (pack in installed),
+                        ),
+                    )
+                }
+                invoke.resolve(
+                    jsObject(
+                        "packs" to packs,
+                        "downloading" to (pending != null),
+                        "pending" to JSONArray(pending?.packs?.map { it.key }.orEmpty()),
+                        "pendingAllowMetered" to (pending?.allowMetered ?: false),
+                        "disabled" to JSONArray(DisabledModels.of(activity).read().map { it.key }),
+                        "metered" to NetworkState.isMetered(activity),
+                    ),
+                )
+            } catch (e: ModelsException) {
+                Log.e(TAG, "состояние моделей: ${e.code}: ${e.message}", e)
+                invoke.reject(e.message, e.code)
+            } catch (e: Throwable) {
+                Log.e(TAG, "состояние моделей не прочиталось", e)
+                invoke.reject("internal error", ModelsException.DOWNLOAD_FAILED)
+            }
+        }
+    }
+
+    // Загрузка выбранных моделей с зеркала. Ход загрузки идёт в канал; после загрузки
+    // движок отпускает старые модели, следующая запись загрузит новый набор.
+    @Command
+    fun downloadModels(invoke: Invoke) {
+        val args = invoke.parseArgs(DownloadModelsArgs::class.java)
+        val packs = args.packs.map { key -> ModelPack.fromKey(key) }
+        if (packs.any { it == null }) {
+            invoke.reject("unknown model pack", ModelsException.BAD_MANIFEST)
+            return
+        }
+        if (!installing.compareAndSet(false, true)) {
+            invoke.reject("download already running", ModelsException.BUSY)
+            return
+        }
+        val flag = AtomicBoolean(false)
+        installCancelled = flag
+        scope.launch {
+            try {
+                val context = activity.applicationContext
+                val folders = ModelFolders.of(activity)
+                val installer = ModelInstaller(
+                    ModelCatalog.read(activity.assets),
+                    folders,
+                    ParallelFetcher(HttpRangeSource(), ModelInstaller.CONNECTIONS),
+                    journal(),
+                    ModelInstaller.freeBytesOf(folders.base),
+                )
+                val started = System.nanoTime()
+                ModelDownloadService.start(context, args.notificationTitle)
+                val canUseNetwork = { args.allowMetered || !NetworkState.isMetered(context) }
+                try {
+                    installer.install(packs.filterNotNull().toSet(), args.allowMetered, canUseNetwork, flag) { p ->
+                        args.onProgress?.send(jsObject("phase" to p.phase, "done" to p.done, "total" to p.total))
+                        ModelDownloadService.update(context, p.done, p.total)
+                    }
+                } finally {
+                    ModelDownloadService.stop(context)
+                }
+                engine.unload()
+                Log.i(TAG, "модели скачаны: ${(System.nanoTime() - started) / 1_000_000} мс")
+                invoke.resolve()
+            } catch (e: ModelsException) {
+                if (e.code == ModelsException.CANCELLED) Log.i(TAG, "загрузка моделей отменена") else Log.e(TAG, "загрузка моделей: ${e.code}: ${e.message}", e)
+                invoke.reject(e.message, e.code)
+            } catch (e: Throwable) {
+                Log.e(TAG, "загрузка моделей не удалась", e)
+                invoke.reject("internal error", ModelsException.DOWNLOAD_FAILED)
+            } finally {
+                installing.set(false)
+            }
+        }
+    }
+
+    // Выключает необязательные модели или включает их обратно. Движок отпускает модели речи,
+    // следующая запись загрузит набор уже без выключенных.
+    @Command
+    fun setModelsDisabled(invoke: Invoke) {
+        val args = invoke.parseArgs(ModelsDisabledArgs::class.java)
+        val packs = args.packs.map { ModelPack.fromKey(it) }
+        if (packs.any { it == null || it.required }) {
+            invoke.reject("bad model pack", ModelsException.BAD_MANIFEST)
+            return
+        }
+        scope.launch {
+            try {
+                DisabledModels.of(activity).write(packs.filterNotNull().toSet())
+                if (!engine.unload()) Log.i(TAG, "движок занят, выключенные модели уйдут со следующей загрузки")
+                invoke.resolve()
+            } catch (e: Exception) {
+                Log.e(TAG, "выключенные модели не сохранились", e)
+                invoke.reject("internal error", ModelsException.DOWNLOAD_FAILED)
+            }
+        }
+    }
+
+    @Command
+    fun cancelModelDownload(invoke: Invoke) {
+        installCancelled.set(true)
+        invoke.resolve()
+    }
+
+    private fun journal() = DownloadJournal(File(activity.noBackupFilesDir, DOWNLOAD_JOURNAL))
+
     @Command
     fun cancelImport(invoke: Invoke) {
         importCancelled.set(true)
@@ -647,6 +915,8 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         // На процесс, а не на экземпляр плагина: ядро спрашивает ключ один раз за процесс.
         private val recoveryDone = AtomicBoolean(false)
         private val recovered = AtomicReference<RecordingResult?>(null)
+        // Журнал начатой загрузки моделей; в резервную копию Android не попадает.
+        private const val DOWNLOAD_JOURNAL = "model-downloads.json"
         const val MICROPHONE = "microphone"
         const val NOTIFICATIONS = "notifications"
     }

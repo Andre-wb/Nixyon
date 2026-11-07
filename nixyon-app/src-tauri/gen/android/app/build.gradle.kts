@@ -14,9 +14,11 @@ val tauriProperties = Properties().apply {
     }
 }
 
-// Демо-сборка: модели внутри APK. Папку с подпапками models/ и llm/ задаёт свойство
-// nixyonModelsAssets, его ставит scripts/build-demo-apk.sh. Обычные сборки моделей не
-// содержат и берут их из папки приложения на устройстве.
+// Демо-сборка подписывается отладочным ключом: свойство nixyonDebugSigned ставит
+// scripts/build-demo-apk.sh. Полная демо-сборка несёт модели внутри APK: папку с
+// подпапками models/ и llm/ задаёт свойство nixyonModelsAssets. Лёгкая сборка и сборки для
+// разработки моделей не содержат, телефон качает их с зеркала.
+val debugSigned: Boolean = providers.gradleProperty("nixyonDebugSigned").orNull == "true"
 val modelsAssets: String? = providers.gradleProperty("nixyonModelsAssets").orNull
 
 android {
@@ -50,7 +52,7 @@ android {
             }
             // Демо ставится поверх отладочных сборок, поэтому подписано тем же отладочным
             // ключом. Сборка для магазина, если появится, получит свой ключ.
-            if (modelsAssets != null) {
+            if (debugSigned) {
                 signingConfig = signingConfigs.getByName("debug")
             }
             proguardFiles(

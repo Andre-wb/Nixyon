@@ -3,7 +3,7 @@ package dev.demo.nixyon.speech
 // Роли файлов в models.json: по ним плагин находит нужный файл, не завися от имён.
 // Необязательные роли может не быть в наборе: без живой модели запись идёт без живого текста,
 // без шумоподавителя длинные куски VAD не режутся, без модели audEERING у спикеров нет метки
-// «ребёнок или взрослый».
+// «ребёнок или взрослый», без GigaAM-Emo у реплик нет эмоции.
 enum class ModelRole(val key: String, val optional: Boolean = false) {
     VAD("vad"),
     ASR_ENCODER("asr_encoder"),
@@ -24,6 +24,8 @@ enum class ModelRole(val key: String, val optional: Boolean = false) {
     DENOISER("denoiser", optional = true),
     // audEERING wav2vec2: её hidden_states читает классификатор «ребёнок или взрослый».
     AGE_GENDER("age_gender", optional = true),
+    // GigaAM-Emo: эмоция каждой реплики (TurnEmotions).
+    EMOTION("emotion", optional = true),
     ;
 
     companion object {
