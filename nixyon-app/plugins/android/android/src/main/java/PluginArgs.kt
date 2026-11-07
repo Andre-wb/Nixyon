@@ -148,3 +148,8 @@ class ModelsDisabledArgs {
     // Ключи необязательных ModelPack, которые выключены; пусто: включены все.
     var packs: Array<String> = arrayOf()
 }
+
+@InvokeArg
+class BiometricArgs {
+    var enabled: Boolean = false
+}

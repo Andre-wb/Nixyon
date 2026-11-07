@@ -21,21 +21,23 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-// Ошибка для интерфейса: приложите палец (locked), на телефоне нет отпечатка или ключ
-// стёрт системой (storage_key_lost).
+// Ошибка для интерфейса: приложите палец (locked), на телефоне нет отпечатка у запертого
+// ключа (biometric_unavailable) или при включении входа (biometric_missing), ключ стёрт
+// системой (storage_key_lost).
 class StorageLockedException(val code: String) : Exception(code)
 
-// Ключ данных для шифрования файлов. Сам ключ хранится обёрнутым ключом Android Keystore,
-// который открывается только после настоящей проверки отпечатка (BiometricPrompt с
-// CryptoObject). Развёрнутый ключ остаётся в памяти процесса: запись в фоне и чтение
-// файлов после разблокировки отпечатка не просят его снова. Обёртка лежит в
-// noBackupFilesDir и в резервную копию не попадает.
+// Ключ данных для шифрования файлов. Сам ключ хранится обёрнутым ключом Android Keystore.
+// По умолчанию обёртка обычная и открывается без запроса. Если в настройках включён вход
+// по отпечатку, обёртка запирается ключом Keystore, который открывается только после
+// настоящей проверки отпечатка (BiometricPrompt с CryptoObject). Включено ли, видно по
+// тому, какая обёртка лежит на телефоне: отдельного флага нет, и рассинхрона с ним тоже.
+// Развёрнутый ключ остаётся в памяти процесса: запись в фоне и чтение файлов после
+// разблокировки не просят палец снова. Обёртки лежат в noBackupFilesDir и в резервную
+// копию не попадают.
 // Ключ под отпечатком система стирает, если на телефоне снять блокировку экрана. Тогда
 // новый ключ молча не создаётся: приложение сообщает, что старые записи не прочитать, и
 // начинает заново только по `reset`, после подтверждения пользователя. Временный сбой
-// Keystore ключ не заменяет. Прежняя обёртка без отпечатка переносится на новую
-// при первой разблокировке: для этого тоже нужен палец. Если на телефоне нет отпечатка,
-// блокировки нет совсем: ключ открывается сразу.
+// Keystore ключ не заменяет.
 class StorageKey(private val context: Context) {
     @Volatile
     private var cached: SecretKey? = null
@@ -75,10 +77,51 @@ class StorageKey(private val context: Context) {
     // только если последнее открытие нашло ключ стёртым: иначе это удаление живых данных.
     fun reset() {
         if (!lost) throw StorageLockedException(LOCKED)
-        File(context.noBackupFilesDir, BIO_FILE).delete()
-        keyStore().let { if (it.containsAlias(BIO_ALIAS)) it.deleteEntry(BIO_ALIAS) }
+        forgetSealed()
         lost = false
         Log.w(TAG_LOG, "стёртый ключ данных удалён по просьбе пользователя")
+    }
+
+    // Включён ли вход по отпечатку и есть ли отпечаток на телефоне.
+    fun biometricStatus(): BiometricStatus = BiometricStatus(
+        enabled = File(context.noBackupFilesDir, BIO_FILE).exists(),
+        available = canAuthenticate(),
+    )
+
+    // Включает или выключает вход по отпечатку, когда ключ уже открыт. Палец нужен в обе
+    // стороны: без него ключ не запереть, а выключение без пальца снимало бы защиту с
+    // разблокированного телефона в чужих руках. Ответ приходит в главном потоке.
+    fun setBiometric(activity: FragmentActivity, enabled: Boolean, onDone: (Result<Unit>) -> Unit) {
+        if (cached == null) {
+            onDone(Result.failure(StorageLockedException(LOCKED)))
+            return
+        }
+        if (biometricStatus().enabled == enabled) {
+            onDone(Result.success(Unit))
+            return
+        }
+        if (!canAuthenticate()) {
+            onDone(Result.failure(StorageLockedException(if (enabled) MISSING else UNAVAILABLE)))
+            return
+        }
+        if (!prompting.compareAndSet(false, true)) {
+            onDone(Result.failure(StorageLockedException(LOCKED)))
+            return
+        }
+        val finish = { result: Result<Unit> ->
+            prompting.set(false)
+            onDone(result)
+        }
+        try {
+            if (enabled) {
+                seal(activity, cached!!.encoded, finish) { Log.i(TAG_LOG, "вход по отпечатку включён") }
+            } else {
+                unseal(activity, finish)
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG_LOG, "вход по отпечатку не переключён", e)
+            finish(Result.failure(e))
+        }
     }
 
     private fun open(activity: FragmentActivity, finish: (Result<SecretKey>) -> Unit) {
@@ -96,7 +139,7 @@ class StorageKey(private val context: Context) {
             }
         }
         val state = KeyState(
-            canAuthenticate = BiometricManager.from(context).canAuthenticate(STRENGTH) == BiometricManager.BIOMETRIC_SUCCESS,
+            canAuthenticate = canAuthenticate(),
             bioFile = wrapped != null,
             bioFileValid = valid,
             bioKey = wrapping != null,
@@ -113,37 +156,67 @@ class StorageKey(private val context: Context) {
                 finish(Result.failure(StorageLockedException(KEY_LOST)))
             }
             KeyOpening.BIOMETRIC -> authenticate(activity, cipher, finish) { authed ->
-                SecretKeySpec(authed.doFinal(wrapped!!, IV, wrapped.size - IV), "AES")
+                val key = SecretKeySpec(authed.doFinal(wrapped!!, IV, wrapped.size - IV), "AES")
+                // Обычная обёртка могла остаться после оборванного переключения. Ключ заперт
+                // и цел, поэтому незапертая копия только ослабляет защиту.
+                forgetLegacy()
+                key
             }
             KeyOpening.MIGRATE -> {
-                // Прежняя обёртка не разворачивается: при запертом ключе это потеря, о которой
-                // надо сказать; без него, как и раньше, ключ создаётся заново.
+                // Обычная обёртка не разворачивается: при запертом ключе это потеря, о
+                // которой надо сказать.
                 val legacy = legacyKey()
-                if (legacy == null && state.bioFile) {
+                if (legacy == null) {
                     lost = true
                     finish(Result.failure(StorageLockedException(KEY_LOST)))
                 } else {
-                    create(activity, legacy, finish)
+                    seal(activity, legacy, finish) { SecretKeySpec(legacy, "AES") }
                 }
             }
-            KeyOpening.CREATE -> create(activity, null, finish)
         }
     }
 
-    // Новый ключ данных: либо перенесённый из прежней обёртки, либо случайный.
-    private fun create(activity: FragmentActivity, legacy: ByteArray?, finish: (Result<SecretKey>) -> Unit) {
-        val raw = legacy ?: ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
+    // Запирает ключ данных отпечатком. Запертая обёртка пишется целиком до удаления обычной:
+    // при падении посередине ключ остаётся хотя бы в одной из них.
+    private fun <T> seal(activity: FragmentActivity, raw: ByteArray, finish: (Result<T>) -> Unit, done: () -> T) {
         val cipher = Cipher.getInstance(TRANSFORM)
         cipher.init(Cipher.ENCRYPT_MODE, newBiometricKey())
         authenticate(activity, cipher, finish) { authed ->
             write(BIO_FILE, authed.iv + authed.doFinal(raw))
             forgetLegacy()
-            if (legacy == null) Log.i(TAG_LOG, "создан новый ключ данных")
-            SecretKeySpec(raw, "AES")
+            done()
         }
     }
 
-    // Прежняя обёртка без отпечатка: открывается без запроса и переносится на новую.
+    // Снимает отпечаток. Палец открывает запертую обёртку, так проверяется, что выключает
+    // владелец. Затем ключ пишется в обычную обёртку и только после этого удаляется
+    // запертая: при падении посередине останутся обе, и при запуске спросят палец.
+    private fun unseal(activity: FragmentActivity, finish: (Result<Unit>) -> Unit) {
+        val wrapped = read(BIO_FILE)
+        val wrapping = keyStore().getKey(BIO_ALIAS, null) as? SecretKey
+        if (wrapped == null || wrapping == null || wrapped.size != IV + KEY_BYTES + TAG) {
+            throw IllegalStateException("запертая обёртка ключа не читается")
+        }
+        val cipher = Cipher.getInstance(TRANSFORM)
+        cipher.init(Cipher.DECRYPT_MODE, wrapping, GCMParameterSpec(TAG * 8, wrapped, 0, IV))
+        authenticate(activity, cipher, finish) { authed ->
+            val raw = authed.doFinal(wrapped, IV, wrapped.size - IV)
+            try {
+                writePlain(raw)
+            } finally {
+                raw.fill(0)
+            }
+            forgetSealed()
+            Log.i(TAG_LOG, "вход по отпечатку выключен")
+        }
+    }
+
+    private fun forgetSealed() {
+        File(context.noBackupFilesDir, BIO_FILE).delete()
+        keyStore().let { if (it.containsAlias(BIO_ALIAS)) it.deleteEntry(BIO_ALIAS) }
+    }
+
+    // Обычная обёртка: открывается без запроса.
     private fun legacyKey(): ByteArray? {
         val wrapped = read(LEGACY_FILE) ?: return null
         val wrapping = keyStore().getKey(LEGACY_ALIAS, null) as? SecretKey
@@ -166,17 +239,24 @@ class StorageKey(private val context: Context) {
         keyStore().let { if (it.containsAlias(LEGACY_ALIAS)) it.deleteEntry(LEGACY_ALIAS) }
     }
 
-    // Телефон без отпечатка: ключ обёрнут обычным ключом Keystore, без блокировки. Если
-    // отпечаток появится позже, при следующем запуске данные перейдут на защищённую обёртку.
+    // Вход по отпечатку выключен: ключ обёрнут обычным ключом Keystore, без блокировки.
+    // Под отпечаток он переходит только по выбору в настройках.
     private fun openPlain(): SecretKey {
         legacyKey()?.let { return SecretKeySpec(it, "AES") }
         val raw = ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
-        val cipher = Cipher.getInstance(TRANSFORM)
-        cipher.init(Cipher.ENCRYPT_MODE, newWrappingKey(LEGACY_ALIAS, biometric = false))
-        write(LEGACY_FILE, cipher.iv + cipher.doFinal(raw))
+        writePlain(raw)
         Log.i(TAG_LOG, "создан новый ключ данных")
         return SecretKeySpec(raw, "AES")
     }
+
+    private fun writePlain(raw: ByteArray) {
+        val cipher = Cipher.getInstance(TRANSFORM)
+        cipher.init(Cipher.ENCRYPT_MODE, newWrappingKey(LEGACY_ALIAS, biometric = false))
+        write(LEGACY_FILE, cipher.iv + cipher.doFinal(raw))
+    }
+
+    private fun canAuthenticate(): Boolean =
+        BiometricManager.from(context).canAuthenticate(STRENGTH) == BiometricManager.BIOMETRIC_SUCCESS
 
     // Отпечаток нужен на каждое использование ключа. Смена отпечатков ключ не сбрасывает,
     // иначе после добавления нового пальца все файлы стали бы недоступны.
@@ -204,11 +284,11 @@ class StorageKey(private val context: Context) {
     }
 
     // Шифр уходит в BiometricPrompt: только им можно будет работать после проверки пальца.
-    private fun authenticate(
+    private fun <T> authenticate(
         activity: FragmentActivity,
         cipher: Cipher,
-        finish: (Result<SecretKey>) -> Unit,
-        use: (Cipher) -> SecretKey,
+        finish: (Result<T>) -> Unit,
+        use: (Cipher) -> T,
     ) {
         val callback = object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
@@ -260,6 +340,7 @@ class StorageKey(private val context: Context) {
         const val KEY_BYTES = 32
         const val LOCKED = "locked"
         const val UNAVAILABLE = "biometric_unavailable"
+        const val MISSING = "biometric_missing"
         const val KEY_LOST = "storage_key_lost"
         private const val STRENGTH = BiometricManager.Authenticators.BIOMETRIC_STRONG
     }

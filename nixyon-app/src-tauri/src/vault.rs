@@ -2,6 +2,7 @@
 //! центров и библиотеки голосов, настроек с горячими словами. Ключ данных хранит
 //! Kotlin обёрнутым ключом Android Keystore и отдаёт его ядру при первом обращении.
 
+pub mod biometric;
 mod data_key;
 mod files_store;
 mod format;
@@ -34,19 +35,19 @@ pub struct Storage {
     pub paths: StoragePaths,
 }
 
-/// Ключ не открыт: палец не приложен или отменён, на телефоне нет отпечатка или система
-/// стёрла ключ. Эти коды интерфейс показывает как есть; остальное считается сбоем
-/// хранилища.
+/// Ключ не открыт или вход по отпечатку не переключён: палец не приложен или отменён, на
+/// телефоне нет отпечатка или система стёрла ключ. Эти коды интерфейс показывает как есть;
+/// остальное считается сбоем хранилища.
 fn storage_key_error(e: nixyon_android::Error) -> CommandError {
     match e.rejected_code() {
-        Some(code @ ("locked" | "biometric_unavailable" | "storage_key_lost")) => {
-            CommandError::new(code)
-        }
+        Some(
+            code @ ("locked" | "biometric_unavailable" | "biometric_missing" | "storage_key_lost"),
+        ) => CommandError::new(code),
         _ => CommandError::logged(CommandError::STORAGE_FAILED, e),
     }
 }
 
-/// Открывает хранилище отпечатком. Приложение вызывает её первой при запуске: пока она не
+/// Открывает хранилище: отпечатком, если вход по нему включён. Приложение вызывает её первой при запуске: пока она не
 /// прошла, остальные команды не начинаются.
 #[tauri::command]
 pub async fn unlock_storage<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {

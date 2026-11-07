@@ -13,9 +13,12 @@ class KeyOpeningTest {
         legacyFile = false,
     )
 
+    private val plain = sealed.copy(bioFile = false, bioFileValid = false, bioKey = false, legacyFile = true)
+
     @Test
     fun intactSealedKeyAsksForTheFinger() {
         assertEquals(KeyOpening.BIOMETRIC, KeyOpenings.choose(sealed))
+        assertEquals(KeyOpening.BIOMETRIC, KeyOpenings.choose(sealed.copy(legacyFile = true)))
     }
 
     @Test
@@ -26,23 +29,25 @@ class KeyOpeningTest {
     }
 
     @Test
-    fun interruptedMigrationIsFinishedFromTheLegacyKey() {
+    fun brokenSealedWrapperIsResealedFromTheLegacyKey() {
         assertEquals(KeyOpening.MIGRATE, KeyOpenings.choose(sealed.copy(bioKey = false, legacyFile = true)))
     }
 
     @Test
-    fun withoutFingerprintSealedKeyIsUnavailableAndPlainKeyOpens() {
+    fun withoutFingerprintSealedKeyIsUnavailable() {
         assertEquals(KeyOpening.UNAVAILABLE, KeyOpenings.choose(sealed.copy(canAuthenticate = false)))
-        assertEquals(
-            KeyOpening.PLAIN,
-            KeyOpenings.choose(sealed.copy(canAuthenticate = false, bioFile = false, legacyFile = true)),
-        )
     }
 
     @Test
-    fun firstLaunchCreatesAndOldInstallMigrates() {
-        val fresh = sealed.copy(bioFile = false, bioFileValid = false, bioKey = false)
-        assertEquals(KeyOpening.CREATE, KeyOpenings.choose(fresh))
-        assertEquals(KeyOpening.MIGRATE, KeyOpenings.choose(fresh.copy(legacyFile = true)))
+    fun firstLaunchOpensWithoutFingerprintEvenWhenPhoneHasOne() {
+        val fresh = plain.copy(legacyFile = false)
+        assertEquals(KeyOpening.PLAIN, KeyOpenings.choose(fresh))
+        assertEquals(KeyOpening.PLAIN, KeyOpenings.choose(fresh.copy(canAuthenticate = false)))
+    }
+
+    @Test
+    fun plainKeyIsNotMovedUnderFingerprintByItself() {
+        assertEquals(KeyOpening.PLAIN, KeyOpenings.choose(plain))
+        assertEquals(KeyOpening.PLAIN, KeyOpenings.choose(plain.copy(canAuthenticate = false)))
     }
 }

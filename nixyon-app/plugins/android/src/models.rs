@@ -244,6 +244,18 @@ pub struct StorageKey {
     pub key: Vec<u8>,
 }
 
+/// Вход по отпечатку: включён ли он и есть ли на телефоне отпечаток, чтобы его включить.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BiometricStatus {
+    pub enabled: bool,
+    pub available: bool,
+}
+
+#[derive(Serialize)]
+pub struct BiometricRequest {
+    pub enabled: bool,
+}
+
 /// Протокол в PDF: блоки приходят JSON-строкой (как их сериализует `nixyon-render`),
 /// Kotlin верстает их в файл `path`.
 #[derive(Serialize)]

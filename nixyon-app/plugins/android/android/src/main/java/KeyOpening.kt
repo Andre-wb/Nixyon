@@ -1,18 +1,17 @@
 package dev.demo.nixyon.speech
 
-// Что делать с ключом данных при открытии приложения.
+// Что делать с ключом данных при открытии приложения. Вход по отпечатку включается в
+// настройках: без этого ключ обёрнут обычным ключом Keystore и открывается без запроса.
 enum class KeyOpening {
-    // Отпечатка на телефоне нет и запертого им ключа нет: ключ открывается без запроса.
+    // Вход по отпечатку выключен: ключ открывается без запроса, при первом запуске создаётся.
     PLAIN,
 
     // Ключ заперт отпечатком и цел: спросить палец и развернуть.
     BIOMETRIC,
 
-    // Есть прежняя обёртка без отпечатка: перенести ключ на новую, спросив палец.
+    // Ключ заперт отпечатком, но запертая обёртка не открывается, а прежняя без отпечатка
+    // цела: запереть ключ из неё заново, спросив палец.
     MIGRATE,
-
-    // Ключа ещё нет: создать новый под отпечатком.
-    CREATE,
 
     // Ключ заперт отпечатком, а на телефоне сейчас нет отпечатка.
     UNAVAILABLE,
@@ -34,10 +33,10 @@ data class KeyState(
 
 object KeyOpenings {
     fun choose(s: KeyState): KeyOpening {
-        if (!s.canAuthenticate) return if (s.bioFile) KeyOpening.UNAVAILABLE else KeyOpening.PLAIN
-        if (!s.bioFile) return if (s.legacyFile) KeyOpening.MIGRATE else KeyOpening.CREATE
+        // Под отпечаток ключ попадает только по выбору в настройках, сам не переносится.
+        if (!s.bioFile) return KeyOpening.PLAIN
+        if (!s.canAuthenticate) return KeyOpening.UNAVAILABLE
         if (s.bioFileValid && s.bioKey && !s.bioKeyInvalidated) return KeyOpening.BIOMETRIC
-        // Прежняя обёртка могла остаться, если перенос оборвался: ключ из неё ещё цел.
         return if (s.legacyFile) KeyOpening.MIGRATE else KeyOpening.LOST
     }
 }

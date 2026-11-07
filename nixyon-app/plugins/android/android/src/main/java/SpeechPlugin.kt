@@ -2,6 +2,7 @@ package dev.demo.nixyon.speech
 
 import android.Manifest
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
@@ -11,6 +12,7 @@ import android.webkit.WebView
 import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.appcompat.app.AppCompatActivity
+import androidx.biometric.BiometricManager
 import androidx.fragment.app.FragmentActivity
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
@@ -308,7 +310,8 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
     // Команд для JS у плагина нет, интерфейс эту команду вызвать не может. В лог не пишется.
     // Ядро спрашивает ключ один раз за запуск, до подготовки хранилища, которая удаляет
     // недописанные файлы: поэтому записи, оборванные падением, восстанавливаются здесь.
-    // Пока ключ закрыт, спрашивает отпечаток; без него или при отмене отвечает locked.
+    // Пока ключ закрыт и вход по отпечатку включён, спрашивает палец; при отмене отвечает
+    // locked.
     @Command
     fun storageKey(invoke: Invoke) {
         val host = activity as? FragmentActivity
@@ -348,6 +351,68 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
             Log.e(TAG, "стёртый ключ данных не удалён", e)
             invoke.reject("storage key reset failed", "storage_failed")
         }
+    }
+
+    // Включён ли вход по отпечатку и есть ли на телефоне отпечаток.
+    @Command
+    fun biometricStatus(invoke: Invoke) {
+        try {
+            val status = keys.biometricStatus()
+            invoke.resolve(jsObject("enabled" to status.enabled, "available" to status.available))
+        } catch (e: Throwable) {
+            Log.e(TAG, "состояние входа по отпечатку не прочитано", e)
+            invoke.reject("biometric status failed", "storage_failed")
+        }
+    }
+
+    // Включает или выключает вход по отпечатку. Система спрашивает палец в обе стороны.
+    @Command
+    fun setBiometric(invoke: Invoke) {
+        val args = invoke.parseArgs(BiometricArgs::class.java)
+        val host = activity as? FragmentActivity
+        if (host == null) {
+            invoke.reject("biometric switch failed", "storage_failed")
+            return
+        }
+        keys.setBiometric(host, args.enabled) { result ->
+            result.fold(
+                onSuccess = { invoke.resolve() },
+                onFailure = { e ->
+                    if (e is StorageLockedException) {
+                        invoke.reject("biometric switch refused", e.code)
+                    } else {
+                        Log.e(TAG, "вход по отпечатку не переключён", e)
+                        invoke.reject("biometric switch failed", "storage_failed")
+                    }
+                },
+            )
+        }
+    }
+
+    // Добавление отпечатка в настройках Android. Прямой экран добавления есть с Android 11;
+    // раньше и там, где его нет, открываются настройки безопасности.
+    @Command
+    fun openBiometricSettings(invoke: Invoke) {
+        val enroll = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Intent(Settings.ACTION_BIOMETRIC_ENROLL)
+                .putExtra(Settings.EXTRA_BIOMETRIC_AUTHENTICATORS_ALLOWED, BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        } else {
+            null
+        }
+        for (intent in listOfNotNull(enroll, Intent(Settings.ACTION_SECURITY_SETTINGS))) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                activity.startActivity(intent)
+                invoke.resolve()
+                return
+            } catch (e: ActivityNotFoundException) {
+                Log.w(TAG, "экран настроек отпечатка не найден: ${intent.action}")
+            } catch (e: Throwable) {
+                Log.e(TAG, "настройки отпечатка не открылись", e)
+                break
+            }
+        }
+        invoke.reject("settings failed", "storage_failed")
     }
 
     // Один раз за процесс. Новая запись и импорт начинаются только после подготовки

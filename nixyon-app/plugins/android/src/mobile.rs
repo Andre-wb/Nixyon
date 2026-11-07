@@ -181,6 +181,28 @@ impl<R: Runtime> Speech<R> {
             .map_err(Into::into)
     }
 
+    pub async fn biometric_status(&self) -> crate::Result<BiometricStatus> {
+        self.0
+            .run_mobile_plugin_async("biometricStatus", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Включает или выключает вход по отпечатку; система спрашивает палец.
+    pub async fn set_biometric(&self, enabled: bool) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("setBiometric", BiometricRequest { enabled })
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn open_biometric_settings(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("openBiometricSettings", ())
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn storage_key(&self) -> crate::Result<StorageKey> {
         self.0
             .run_mobile_plugin_async("storageKey", ())

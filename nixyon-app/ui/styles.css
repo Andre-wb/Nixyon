@@ -1452,13 +1452,15 @@ label.model-row {
   padding-bottom: var(--space-5);
 }
 
-/* Раздел моделей в настройках. */
-.settings-models {
+/* Разделы моделей и входа по отпечатку в настройках. */
+.settings-models,
+.settings-biometric {
   display: grid;
   gap: var(--space-2);
 }
 
-.settings-models[hidden] {
+.settings-models[hidden],
+.settings-biometric[hidden] {
   display: none;
 }
 

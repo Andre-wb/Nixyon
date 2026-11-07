@@ -215,6 +215,18 @@
           <label class="choice"><input type="radio" name="language" value="en"><span data-i18n="settings.language_en"></span></label>
         </div>
       </div>
+      <div class="settings-biometric" id="settings-biometric-block" hidden>
+        <h2 class="group-title" id="settings-security-title" data-i18n="settings.security"></h2>
+        <div class="card" role="group" aria-labelledby="settings-security-title">
+          <label class="model-row">
+            <span data-i18n="settings.biometric"></span>
+            <input class="switch" type="checkbox" role="switch" id="settings-biometric">
+          </label>
+        </div>
+        <p class="meta settings-note" data-i18n="settings.biometric_hint"></p>
+        <p class="status" id="settings-biometric-status" role="status"></p>
+        <button class="button button-secondary wide" id="settings-biometric-open" type="button" data-i18n="settings.biometric_open" hidden></button>
+      </div>
       <div class="settings-models" id="settings-models-block" hidden>
         <h2 class="group-title" id="settings-models-title" data-i18n="settings.models"></h2>
         <ul class="card models" id="settings-models" aria-labelledby="settings-models-title"></ul>

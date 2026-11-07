@@ -134,6 +134,19 @@ impl<R: Runtime> Speech<R> {
         Err(crate::Error::Unsupported)
     }
 
+    /// Отпечатка на ноутбуке нет, настройка в интерфейсе скрыта.
+    pub async fn biometric_status(&self) -> crate::Result<BiometricStatus> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn set_biometric(&self, _enabled: bool) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn open_biometric_settings(&self) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
     pub async fn render_pdf(&self, _path: String, _blocks: String) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }
