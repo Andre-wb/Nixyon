@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Уведомление «Идёт запись»; спрашивается вместе с микрофоном, отказ запись не блокирует. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Перед загрузкой моделей: платная ли сеть, чтобы спросить про мобильный трафик. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application>
         <service

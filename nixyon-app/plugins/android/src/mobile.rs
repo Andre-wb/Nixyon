@@ -205,4 +205,26 @@ impl<R: Runtime> Speech<R> {
             .await
             .map_err(Into::into)
     }
+
+    pub async fn models_status(&self) -> crate::Result<ModelsStatus> {
+        self.0
+            .run_mobile_plugin_async("modelsStatus", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Качает выбранные модели с зеркала. Ждёт до конца загрузки, отмены или ошибки.
+    pub async fn download_models(&self, request: DownloadModelsRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("downloadModels", request)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn cancel_model_download(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("cancelModelDownload", ())
+            .await
+            .map_err(Into::into)
+    }
 }

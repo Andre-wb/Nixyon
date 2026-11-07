@@ -5,7 +5,7 @@
 #   docker compose run --rm fetch         скачать sherpa-onnx, llama.cpp, модели, языковую модель и записи для тестов
 #   docker compose run --rm transcribe models models/example.wav out.json [число спикеров]
 #   docker compose run --rm app-check     fmt и clippy приложения, в том числе под Android
-#   docker compose run --rm apk           собрать APK со всеми моделями внутри (arm64), нужны models/ из fetch
+#   docker compose run --rm apk           собрать демо-APK без моделей (arm64)
 # UID и GID передаются, чтобы созданные файлы принадлежали владельцу репозитория:
 #   NIXYON_UID=$(id -u) NIXYON_GID=$(id -g) docker compose build
 

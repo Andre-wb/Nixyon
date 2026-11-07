@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Скачивает языковую модель для протокола встречи, сверяет SHA-256 и раскладывает её в
 # models/llm/ вместе с манифестом llm.json. Модель не входит в APK и в models.json:
-# на телефон её кладёт scripts/push-llm.sh. Скачанное хранится в models/_download/llm/.
+# телефон качает её с зеркала по каталогу (scripts/build-model-catalog.py), при разработке
+# её кладёт scripts/push-llm.sh. Скачанное хранится в models/_download/llm/.
+#
+#   scripts/fetch-llm.sh                  скачать модель и записать llm.json
+#   scripts/fetch-llm.sh --manifest-only  только llm.json, без модели: его сверяет с
+#                                         каталогом тест скриптов в CI
 #
 # Qwen3.5-4B Q3_K_M в сборке unsloth (Apache-2.0), ревизия закреплена. Квант выбран по
 # размеру: Q4_K_M весит 2,7 ГБ, Q3_K_M 2,3 ГБ. На тестовых встречах
@@ -27,6 +32,25 @@ SIZE=2293388448
 VERSION="qwen3.5-4b-q3_k_m-unsloth-${REVISION:0:8}"
 FILE="qwen3.5-4b-q3_k_m.gguf"
 
+write_manifest() {
+  printf '{\n  "version": "%s",\n  "model": { "path": "%s", "size": %s, "sha256": "%s" }\n}\n' \
+    "${VERSION}" "${FILE}" "${SIZE}" "${SHA256}" >"${DEST}/llm.json"
+  echo "готово: ${DEST}/llm.json"
+}
+
+case "${1:-}" in
+  "") ;;
+  --manifest-only)
+    mkdir -p "${DEST}"
+    write_manifest
+    exit 0
+    ;;
+  *)
+    echo "использование: scripts/fetch-llm.sh [--manifest-only]" >&2
+    exit 2
+    ;;
+esac
+
 mkdir -p "${CACHE}" "${DEST}"
 cached="${CACHE}/${NAME}"
 if [[ -f "${cached}" ]] && [[ "$(sha256_of "${cached}")" == "${SHA256}" ]]; then
@@ -40,6 +64,4 @@ fi
 # Жёсткая ссылка вместо копии: второй раз 2,3 ГБ на диске не нужны.
 rm -f "${DEST}/${FILE}"
 ln "${cached}" "${DEST}/${FILE}" 2>/dev/null || cp "${cached}" "${DEST}/${FILE}"
-printf '{\n  "version": "%s",\n  "model": { "path": "%s", "size": %s, "sha256": "%s" }\n}\n' \
-  "${VERSION}" "${FILE}" "${SIZE}" "${SHA256}" >"${DEST}/llm.json"
-echo "готово: ${DEST}/llm.json"
+write_manifest

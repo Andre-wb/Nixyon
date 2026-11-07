@@ -28,13 +28,15 @@ jobs:
 
       # Библиотеки sherpa, исходники llama.cpp и модели живут в кэше раннера между
       # прогонами; скрипты сверяют SHA-256 и ничего не качают заново, если файлы на месте.
+      # Языковая модель тестам не нужна: от неё берётся только llm.json, с ним тест скриптов
+      # сверяет каталог моделей в APK.
       - name: Библиотеки и модели
         run: |
           mkdir -p /cache/ci/third_party /cache/ci/models
           ln -sfn /cache/ci/third_party third_party
           ln -sfn /cache/ci/models models
           nixyon-ci step fetch "Библиотеки и модели" -- bash -c \
-            'scripts/fetch-sherpa.sh && scripts/fetch-llama-cpp.sh && scripts/fetch-models.sh && scripts/fetch-test-audio.sh'
+            'scripts/fetch-sherpa.sh && scripts/fetch-llama-cpp.sh && scripts/fetch-models.sh && scripts/fetch-llm.sh --manifest-only && scripts/fetch-test-audio.sh'
 
       - name: Форматирование
         run: |

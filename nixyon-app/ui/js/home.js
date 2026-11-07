@@ -3,6 +3,7 @@ import { $ } from "./dom.js";
 import { clock, dateTime } from "./format.js";
 import { K, t } from "./i18n.js";
 import { renderLive } from "./live.js";
+import { onModelsChange, openModels, speechReady } from "./models.js";
 import { showImport, transcribe } from "./processing.js";
 import { onLanguageChange, show } from "./screens.js";
 import { open, onTranscriptChange } from "./transcript.js";
@@ -190,6 +191,17 @@ export function failed(text, code) {
   if (text) notice(text, { code });
 }
 
+// Пока модели речи не скачаны, записывать и расшифровывать нечем: вместо записи и
+// выбора файла плашка с кнопкой загрузки. ready: модели только что скачались.
+function renderModels(ready) {
+  const missing = !speechReady();
+  $("models-missing").hidden = !missing;
+  $("count-group").hidden = missing;
+  $("recorder").hidden = missing;
+  $("import").hidden = missing;
+  if (ready && !missing) notice(t(K.models_ready), { info: true });
+}
+
 export function initHome() {
   $("count-unknown").addEventListener("click", () => {
     unknownCount = !unknownCount;
@@ -202,6 +214,8 @@ export function initHome() {
   $("open-app-settings").addEventListener("click", () => invoke("open_app_settings").catch(() => null));
   $("recovered-transcribe").addEventListener("click", transcribeRecovered);
   $("last").addEventListener("click", () => last && open(last));
+  $("models-open").addEventListener("click", openModels);
+  onModelsChange(renderModels);
   onTranscriptChange(setLast);
   onLanguageChange(() => {
     renderRecorder();

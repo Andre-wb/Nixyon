@@ -3,6 +3,7 @@
 
 import hashlib
 import http.server
+import json
 import os
 import shutil
 import subprocess
@@ -230,6 +231,42 @@ class PublishTest(unittest.TestCase):
         again = self.publish()
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertNotIn("в зеркале:", again.stdout)
+
+    def write_manifests(self, speech, llm):
+        (self.models / "llm").mkdir(exist_ok=True)
+        files = {}
+        for role, (path, data) in speech.items():
+            (self.models / path).write_bytes(data)
+            files[role] = {"path": path, "size": len(data), "sha256": sha(data)}
+        (self.models / "models.json").write_text(json.dumps({"version": "v", "files": files}))
+        path, data = llm
+        (self.models / "llm" / path).write_bytes(data)
+        model = {"path": path, "size": len(data), "sha256": sha(data)}
+        (self.models / "llm" / "llm.json").write_text(json.dumps({"version": "v", "model": model}))
+
+    def test_ready_files_from_the_manifests_are_published_for_the_phone(self):
+        self.write_manifests(
+            {"asr_encoder": ("asr-encoder.int8.onnx", b"encoder"), "asr_bpe_vocab": ("asr-bpe.vocab", b"vocab")},
+            ("model.gguf", b"language model"),
+        )
+        run = self.publish()
+        self.assertEqual(run.returncode, 0, run.stderr)
+        for data in (b"encoder", b"vocab", b"language model"):
+            self.assertEqual((self.mirror / sha(data)).read_bytes(), data)
+
+    def test_a_ready_file_that_differs_from_its_manifest_is_an_error(self):
+        self.write_manifests({"vad": ("vad.onnx", b"vad")}, ("model.gguf", b"language model"))
+        (self.models / "vad.onnx").write_bytes(b"changed")
+        run = self.publish()
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("сумма vad.onnx не совпала с манифестом", run.stderr)
+
+    def test_a_ready_file_missing_from_disk_is_an_error(self):
+        self.write_manifests({"vad": ("vad.onnx", b"vad")}, ("model.gguf", b"language model"))
+        (self.models / "vad.onnx").unlink()
+        run = self.publish()
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("нет vad.onnx из манифеста", run.stderr)
 
     def test_a_missing_mirror_folder_is_an_error(self):
         shutil.rmtree(self.mirror)

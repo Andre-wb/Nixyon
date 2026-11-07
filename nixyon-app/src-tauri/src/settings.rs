@@ -1,4 +1,5 @@
-//! Настройки приложения: язык интерфейса, тема и горячие слова для распознавания.
+//! Настройки приложения: язык интерфейса, тема, горячие слова для распознавания и
+//! показан ли экран загрузки моделей.
 //! Хранятся в `files/settings.json`.
 
 mod hotword_list;
@@ -39,6 +40,9 @@ pub struct Settings {
     /// Слова и имена, которые распознавание пишет охотнее; по одному на элемент.
     #[serde(default)]
     pub hotwords: Vec<String>,
+    /// Экран загрузки моделей уже показан: дальше он открывается только по кнопке.
+    #[serde(default)]
+    pub models_prompt_seen: bool,
 }
 
 pub use hotword_list::merge_hotwords;
@@ -150,6 +154,23 @@ pub async fn set_hotwords<R: Runtime>(
     .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
 
+/// Отмечает, что экран загрузки моделей показан: при следующем запуске он сам не откроется.
+#[tauri::command]
+pub async fn set_models_prompt_seen<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Settings, CommandError> {
+    let store = files_store(&app).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut settings = load(&store);
+        settings.models_prompt_seen = true;
+        save(&store, &settings)
+            .map(|()| settings)
+            .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
+    })
+    .await
+    .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,17 +185,20 @@ mod tests {
                 language: Language::En,
                 theme: Theme::Dark,
                 hotwords: vec!["Скайлс".into()],
+                models_prompt_seen: true,
             },
         )
         .unwrap();
         assert_eq!(load(&store).language, Language::En);
         assert_eq!(load(&store).hotwords, ["Скайлс"]);
         assert_eq!(load(&store).theme, Theme::Dark);
+        assert!(load(&store).models_prompt_seen);
         std::fs::write(store.dir().join(FILE), "{\"language\":\"de\"}").unwrap();
         assert_eq!(load(&store).language, Language::Auto);
         std::fs::write(store.dir().join(FILE), "{}").unwrap();
         assert_eq!(load(&store).language, Language::Auto);
         assert_eq!(load(&store).theme, Theme::Auto);
+        assert!(!load(&store).models_prompt_seen);
         std::fs::write(store.dir().join(FILE), "{\"theme\":\"sepia\"}").unwrap();
         assert_eq!(load(&store).theme, Theme::Auto);
     }

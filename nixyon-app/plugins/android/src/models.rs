@@ -346,6 +346,50 @@ pub struct PlayerEvent {
     pub sec: f64,
 }
 
+/// Модель или набор моделей из каталога в APK. `key`: "speech" (обязательный набор речи),
+/// "live", "denoiser", "age", "llm". `size`: сколько байт качать.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelPackStatus {
+    pub key: String,
+    pub required: bool,
+    pub size: u64,
+    pub installed: bool,
+}
+
+/// Что скачано и не идёт ли загрузка, начатая до перезапуска. `pending`: что в ней выбрано,
+/// `pending_allow_metered`: разрешена ли ей платная сеть. `metered`: телефон сейчас в
+/// платной сети, перед загрузкой интерфейс спрашивает.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelsStatus {
+    pub packs: Vec<ModelPackStatus>,
+    pub downloading: bool,
+    pub pending: Vec<String>,
+    pub pending_allow_metered: bool,
+    pub metered: bool,
+}
+
+/// Загрузка моделей с зеркала: ключи `ModelPackStatus`, ход загрузки идёт в канал.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadModelsRequest {
+    pub packs: Vec<String>,
+    pub allow_metered: bool,
+    /// Заголовок системного уведомления о загрузке на языке интерфейса.
+    pub notification_title: String,
+    pub on_progress: Channel<serde_json::Value>,
+}
+
+/// Ход загрузки в байтах. `phase`: "downloading", "waiting" (ждёт сети или Wi-Fi),
+/// "checking" (сверка сумм).
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct ModelDownloadProgress {
+    pub phase: String,
+    pub done: u64,
+    pub total: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,6 +428,21 @@ mod tests {
                 lines: vec!["добрый день".into(), "как".into()]
             }
         );
+    }
+
+    #[test]
+    fn models_status_and_download_progress_from_kotlin_are_understood() {
+        let status: ModelsStatus = serde_json::from_str(
+            r#"{"packs":[{"key":"speech","required":true,"size":320000000,"installed":false}],"downloading":true,"pending":["speech","llm"],"pendingAllowMetered":true,"metered":false}"#,
+        )
+        .unwrap();
+        assert_eq!(status.packs[0].key, "speech");
+        assert!(status.packs[0].required && !status.packs[0].installed);
+        assert_eq!(status.pending, ["speech", "llm"]);
+        assert!(status.pending_allow_metered);
+        let progress: ModelDownloadProgress =
+            serde_json::from_str(r#"{"phase":"waiting","done":10,"total":2293388448}"#).unwrap();
+        assert_eq!(progress.total, 2_293_388_448);
     }
 
     #[test]

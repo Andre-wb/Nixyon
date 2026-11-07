@@ -1,6 +1,7 @@
 import { invoke } from "./api.js";
 import { initExport } from "./export.js";
 import { failed, initHome, setLast } from "./home.js";
+import { initModels } from "./models.js";
 import { initPlayer } from "./player.js";
 import { initProcessing } from "./processing.js";
 import { applyHotwords, applySetting, initSettings } from "./settings.js";
@@ -35,8 +36,9 @@ async function start() {
   show("home");
   window.addEventListener("popstate", () => {
     if (handleModalBack()) return;
-    if (location.hash !== "#transcript" && location.hash !== "#voices") show("home");
+    if (location.hash !== "#transcript" && location.hash !== "#voices" && location.hash !== "#models") show("home");
   });
+  await initModels(Boolean(settings.models_prompt_seen));
   setLast(await invoke("last_transcript").catch(() => null));
 }
 

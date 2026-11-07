@@ -1,6 +1,7 @@
 import { channel, errorCode, errorText, invoke } from "./api.js";
 import { $, el } from "./dom.js";
 import { K, t } from "./i18n.js";
+import { onModelsChange } from "./models.js";
 import { onLanguageChange, openModal } from "./screens.js";
 import { onTranscriptChange, setTranscript, speakerName } from "./transcript.js";
 
@@ -106,13 +107,19 @@ export function prepareNames(next) {
   render();
 }
 
-// Кнопка видна, только если на телефоне есть языковая модель и кто-то подписан «Спикер N».
+async function checkAvailable() {
+  available = await invoke("summary_available").catch(() => false);
+  renderButton();
+}
+
+// Кнопка видна, только если на телефоне есть языковая модель и кто-то подписан «Спикер N»;
+// после загрузки моделей наличие модели проверяется заново.
 export async function initNames() {
   $("open-names").addEventListener("click", openNames);
   $("names-start").addEventListener("click", start);
   $("names-cancel").addEventListener("click", () => invoke("cancel_summary").catch(() => null));
   onTranscriptChange(prepareNames);
   onLanguageChange(render);
-  available = await invoke("summary_available").catch(() => false);
-  renderButton();
+  onModelsChange(checkAvailable);
+  await checkAvailable();
 }

@@ -1112,3 +1112,76 @@ dialog::backdrop {
 .summary-text[hidden] {
   display: none;
 }
+
+/* Экран загрузки моделей: список с флажками, у каждой модели описание и размер. */
+#count-group[hidden],
+.recorder[hidden],
+.models-progress[hidden] {
+  display: none;
+}
+
+.models {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.models li + li {
+  border-top: 1px solid var(--separator);
+}
+
+.model-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+}
+
+.model-row input {
+  width: 22px;
+  height: 22px;
+  margin: 1px 0 0;
+  accent-color: var(--accent-fill);
+}
+
+.model-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.model-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.model-size {
+  color: var(--label-secondary);
+  font-size: var(--text-footnote);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-top: 2px;
+}
+
+.models-total {
+  padding: 0 var(--space-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.models-progress {
+  display: grid;
+  gap: var(--space-2);
+}
+
+#models-phase {
+  font-variant-numeric: tabular-nums;
+}
+
+.models-actions {
+  display: grid;
+  gap: var(--space-2);
+}
