@@ -66,6 +66,17 @@ pub async fn stop_recording<R: Runtime>(app: AppHandle<R>) -> Result<RecordingSa
     app.speech().stop_recording().await.map_err(plugin_error)
 }
 
+/// Ставит запись на паузу: микрофон открыт, звук не пишется. Продолжается тем же файлом.
+#[tauri::command]
+pub async fn pause_recording<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    app.speech().pause_recording().await.map_err(plugin_error)
+}
+
+#[tauri::command]
+pub async fn resume_recording<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    app.speech().resume_recording().await.map_err(plugin_error)
+}
+
 /// Запись с микрофона, оборванная падением приложения: её восстанавливает плагин, когда ядро
 /// берёт ключ, до удаления недописанных файлов. Поэтому команда сначала ждёт подготовки
 /// хранилища. Путь пустой, если восстанавливать нечего; запись отдаётся один раз.

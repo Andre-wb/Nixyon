@@ -285,8 +285,8 @@ Nixyon расшифровывает записи встреч на русско�
 - [`src-tauri`](nixyon-app/src-tauri/src): Rust-часть приложения. Команды Tauri
   регистрируются в [`lib.rs`](nixyon-app/src-tauri/src/lib.rs):
   - расшифровка: `transcribe`, `cancel_transcription`, `last_transcript`;
-  - запись и импорт: `start_recording`, `stop_recording`, `import_audio`, `cancel_import`,
-    `open_app_settings`;
+  - запись и импорт: `start_recording`, `stop_recording`, `pause_recording`,
+    `resume_recording`, `import_audio`, `cancel_import`, `open_app_settings`;
   - правка: `rename_speaker`, `merge_speakers`, `edit_turn_text`;
   - статистика и поиск: `meeting_stats`, `search_transcript`;
   - плеер: `open_playback`, `play_audio`, `pause_audio`, `close_playback`;

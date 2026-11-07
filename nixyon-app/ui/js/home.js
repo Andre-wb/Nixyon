@@ -21,8 +21,12 @@ const STOP_REASONS = {
 let unknownCount = true;
 let count = 2;
 let recording = false;
+let paused = false;
 let liveLines = [];
 let startedAt = 0;
+// Пауза: когда её поставили и сколько всего длилась до текущей.
+let pausedAt = 0;
+let pausedMs = 0;
 let timer = null;
 let last = null;
 // Запись, восстановленная после падения приложения, пока её не расшифровали.
@@ -86,12 +90,20 @@ function startOf(path) {
   return match ? new Date(Number(match[1])) : new Date();
 }
 
+// Сколько записано без пауз, в миллисекундах.
+function elapsedMs(now = Date.now()) {
+  return now - startedAt - pausedMs - (paused ? now - pausedAt : 0);
+}
+
 function renderRecorder() {
   $("screen-home").classList.toggle("recording", recording);
+  $("screen-home").classList.toggle("paused", paused);
   $("record-label").textContent = t(recording ? K.home_stop : K.home_record);
   $("record").setAttribute("aria-label", t(recording ? K.home_stop : K.home_record));
   $("timer").hidden = !recording;
-  if (recording) $("timer").textContent = `${t(K.home_recording)}, ${clock((Date.now() - startedAt) / 1000)}`;
+  if (recording) $("timer").textContent = `${t(paused ? K.home_paused : K.home_recording)}, ${clock(elapsedMs() / 1000)}`;
+  $("record-pause").hidden = !recording;
+  $("record-pause-label").textContent = t(paused ? K.home_resume : K.home_pause);
   $("import").disabled = recording;
 }
 
@@ -110,7 +122,7 @@ async function startRecording() {
   try {
     await startMicrophone(
       channel((event) => {
-        if (event.type === "level") setLevel(event.dbfs);
+        if (event.type === "level" && !paused) setLevel(event.dbfs);
         if (event.type === "live") setLive(event.lines);
         if (event.type === "stopped") finishRecording(event, STOP_REASONS[event.reason]);
       }),
@@ -133,8 +145,27 @@ async function stopRecording() {
   }
 }
 
+// Кнопка паузы: первое нажатие ставит запись на паузу, второе продолжает её в том же файле.
+async function togglePause() {
+  if (!recording) return;
+  const pause = !paused;
+  try {
+    await invoke(pause ? "pause_recording" : "resume_recording");
+  } catch (error) {
+    notice(errorText(error), { code: errorCode(error) });
+    return;
+  }
+  const now = Date.now();
+  if (pause) pausedAt = now;
+  else pausedMs += now - pausedAt;
+  paused = pause;
+  renderRecorder();
+}
+
 function resetRecorder() {
   recording = false;
+  paused = false;
+  pausedMs = 0;
   clearInterval(timer);
   setLevel(-90);
   setLive([]);
@@ -210,6 +241,7 @@ export function initHome() {
   $("count-less").addEventListener("click", () => setCount(unknownCount ? count : count - 1));
   $("count-more").addEventListener("click", () => setCount(unknownCount ? count : count + 1));
   $("record").addEventListener("click", () => (recording ? stopRecording() : startRecording()));
+  $("record-pause").addEventListener("click", togglePause);
   $("import").addEventListener("click", importFile);
   $("open-app-settings").addEventListener("click", () => invoke("open_app_settings").catch(() => null));
   $("recovered-transcribe").addEventListener("click", transcribeRecovered);

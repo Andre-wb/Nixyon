@@ -47,6 +47,8 @@ class AudioRecorder(
     ) {
         // Первая причина остановки остаётся: пользователь, лимит, место или обрыв.
         val stopReason = AtomicReference<String?>(null)
+        // Пока пауза, микрофон открыт, но звук не пишется и не идёт в живой текст.
+        @Volatile var paused = false
         val gate = MicGate(REOPEN_MS)
         val startedAt = SystemClock.elapsedRealtime()
         var result: RecordingResult? = null
@@ -101,6 +103,16 @@ class AudioRecorder(
         }
     }
 
+    // Пауза и продолжение: та же запись, тот же файл. Время на паузе в длительность не входит.
+    fun pause() = setPaused(true)
+
+    fun resume() = setPaused(false)
+
+    private fun setPaused(paused: Boolean) {
+        val s = synchronized(lock) { session } ?: throw MediaException(MediaException.NOT_RECORDING, "запись не идёт")
+        s.paused = paused
+    }
+
     // Останавливает запись и ждёт, пока файл будет дописан и сохранён.
     fun stop(reason: String): RecordingResult {
         val s = synchronized(lock) { session } ?: throw MediaException(MediaException.NOT_RECORDING, "запись не идёт")
@@ -130,6 +142,7 @@ class AudioRecorder(
                         continue
                     }
                 }
+                if (s.paused) continue
                 for (i in 0 until n) Pcm16.put(bytes, 2 * i, buffer[i].toInt())
                 s.writer.write(bytes, n * 2)
                 s.live?.offer(buffer, n)

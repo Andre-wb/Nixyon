@@ -470,6 +470,26 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    @Command
+    fun pauseRecording(invoke: Invoke) {
+        try {
+            recorder.pause()
+            invoke.resolve()
+        } catch (e: MediaException) {
+            invoke.reject(e.message, e.code)
+        }
+    }
+
+    @Command
+    fun resumeRecording(invoke: Invoke) {
+        try {
+            recorder.resume()
+            invoke.resolve()
+        } catch (e: MediaException) {
+            invoke.reject(e.message, e.code)
+        }
+    }
+
     // Свёрнутому приложению без foreground service Android даёт вместо звука тишину,
     // поэтому, если сервис не запустился, запись останавливается и сохраняется; интерфейс
     // узнаёт причину из события. С сервисом запись продолжается в фоне.
