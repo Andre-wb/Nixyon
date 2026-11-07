@@ -363,6 +363,8 @@ pub struct SaveOutcome {
 #[serde(rename_all = "camelCase")]
 pub struct PlayerOpenRequest {
     pub path: String,
+    /// Название для экрана блокировки и уведомления.
+    pub title: String,
     pub on_event: Channel<serde_json::Value>,
 }
 
@@ -377,6 +379,37 @@ pub struct PlayerOpened {
 #[serde(rename_all = "camelCase")]
 pub struct PlayRequest {
     pub from_sec: Option<f64>,
+}
+
+/// Скорость проигрывания: 1 — обычная.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackSpeedRequest {
+    pub speed: f64,
+}
+
+/// Отрезок записи в секундах: кусок речи или реплика одного участника.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackRange {
+    pub start_sec: f64,
+    pub end_sec: f64,
+}
+
+/// Отрезки, которые играют подряд, всё остальное пропускается. Без `limited` играется вся
+/// запись, и `ranges` не читается.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackRangesRequest {
+    pub limited: bool,
+    pub ranges: Vec<PlaybackRange>,
+}
+
+/// Перемотка на столько секунд от текущего места; отрицательное — назад.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkipRequest {
+    pub delta_sec: f64,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]

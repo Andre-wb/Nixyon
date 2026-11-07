@@ -2,4 +2,9 @@
 <resources>
     <string name="storage_unlock_title">Откройте Nixyon</string>
     <string name="storage_unlock_cancel">Отмена</string>
+    <string name="playback_channel">Прослушивание</string>
+    <string name="playback_back">Назад на 10 секунд</string>
+    <string name="playback_forward">Вперёд на 10 секунд</string>
+    <string name="playback_play">Играть</string>
+    <string name="playback_pause">Пауза</string>
 </resources>

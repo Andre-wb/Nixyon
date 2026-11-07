@@ -145,6 +145,27 @@ impl<R: Runtime> Speech<R> {
             .map_err(Into::into)
     }
 
+    pub async fn player_set_speed(&self, request: PlaybackSpeedRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("playerSetSpeed", request)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn player_set_ranges(&self, request: PlaybackRangesRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("playerSetRanges", request)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn player_skip(&self, request: SkipRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("playerSkip", request)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn player_close(&self) -> crate::Result<()> {
         self.0
             .run_mobile_plugin_async("playerClose", ())

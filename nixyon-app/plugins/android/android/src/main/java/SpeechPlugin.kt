@@ -556,8 +556,9 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
     // поэтому, если сервис не запустился, запись останавливается и сохраняется; интерфейс
     // узнаёт причину из события. С сервисом запись продолжается в фоне.
     override fun onStop(activity: AppCompatActivity) {
-        // Проигрывание в фоне не нужно: свёрнутое приложение встаёт на паузу.
-        if (player.isOpen) player.pause()
+        // Проигрывание в фоне идёт, только если его держит сервис с уведомлением; без него
+        // свёрнутое приложение встаёт на паузу.
+        if (player.isOpen && !PlaybackService.active.get()) player.pause()
         if (recorder.isRecording && !RecordingService.active.get()) {
             scope.launch {
                 try {
@@ -731,7 +732,7 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
     fun playerOpen(invoke: Invoke) {
         val args = invoke.parseArgs(PlayerOpenArgs::class.java)
         try {
-            val duration = player.open(args.path) { event ->
+            val duration = player.open(args.path, args.title) { event ->
                 args.onEvent?.send(jsObject("type" to event.type, "sec" to event.sec))
             }
             invoke.resolve(jsObject("durationSec" to duration))
@@ -762,6 +763,27 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun playerPause(invoke: Invoke) {
         player.pause()
+        invoke.resolve()
+    }
+
+    @Command
+    fun playerSetSpeed(invoke: Invoke) {
+        val args = invoke.parseArgs(PlaybackSpeedArgs::class.java)
+        player.setSpeed(args.speed)
+        invoke.resolve()
+    }
+
+    @Command
+    fun playerSetRanges(invoke: Invoke) {
+        val args = invoke.parseArgs(PlaybackRangesArgs::class.java)
+        player.setRanges(if (args.limited) args.ranges.map { PlaybackSpan(it.startSec, it.endSec) } else null)
+        invoke.resolve()
+    }
+
+    @Command
+    fun playerSkip(invoke: Invoke) {
+        val args = invoke.parseArgs(SkipArgs::class.java)
+        player.skip(args.deltaSec)
         invoke.resolve()
     }
 

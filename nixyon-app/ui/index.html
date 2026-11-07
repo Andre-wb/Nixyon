@@ -150,11 +150,20 @@
       <p class="meta search-count" id="search-count" aria-live="polite"></p>
       <ol class="turns" id="turns"></ol>
       <div class="player" id="player" hidden>
-        <button class="icon-button player-toggle" id="player-toggle" type="button">
-          <svg class="icon" id="player-icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>
-          <svg class="icon" id="player-icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>
-        </button>
-        <span class="player-time" id="player-time"></span>
+        <div class="player-row">
+          <button class="icon-button player-skip" id="player-back" type="button" data-i18n-label="player.back">−10</button>
+          <button class="icon-button player-toggle" id="player-toggle" type="button">
+            <svg class="icon" id="player-icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>
+            <svg class="icon" id="player-icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>
+          </button>
+          <button class="icon-button player-skip" id="player-forward" type="button" data-i18n-label="player.forward">+10</button>
+          <span class="player-time" id="player-time"></span>
+        </div>
+        <div class="player-row player-options">
+          <div class="player-speeds" id="player-speeds" role="group" data-i18n-label="player.speed"></div>
+          <select class="player-speaker" id="player-speaker" data-i18n-label="player.speaker_label"></select>
+          <button class="chip" id="player-skip-silence" type="button" aria-pressed="false" data-i18n="player.skip_silence"></button>
+        </div>
       </div>
     </section>
 

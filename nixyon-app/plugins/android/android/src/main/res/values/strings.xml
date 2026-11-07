@@ -2,4 +2,9 @@
 <resources>
     <string name="storage_unlock_title">Unlock Nixyon</string>
     <string name="storage_unlock_cancel">Cancel</string>
+    <string name="playback_channel">Playback</string>
+    <string name="playback_back">Back 10 seconds</string>
+    <string name="playback_forward">Forward 10 seconds</string>
+    <string name="playback_play">Play</string>
+    <string name="playback_pause">Pause</string>
 </resources>
