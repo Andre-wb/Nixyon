@@ -35,7 +35,9 @@ Nixyon расшифровывает записи встреч на русско�
 ## Возможности
 
 - **Запись с микрофона.** Запись идёт в фоновой службе с уведомлением, до 3 часов, на диск
-  сразу пишется зашифрованный WAV. Нужно не меньше 200 МБ свободного места.
+  сразу пишется зашифрованный WAV. Нужно не меньше 200 МБ свободного места. Кнопка «Пауза»
+  под записью останавливает запись без завершения: «Продолжить» дописывает в тот же файл,
+  а время на паузе в длительность и лимит не входит.
 - **Импорт записи.** Системный выбор файла; Android раскодирует m4a, mp3, wav, ogg, opus
   и flac. Файл длиннее 3 часов не принимается.
 - **Живой текст во время записи.** Черновой текст от потоковой модели появляется, пока идёт
@@ -70,6 +72,13 @@ Nixyon расшифровывает записи встреч на русско�
   без слов, флагов и метаданных расшифровки. Файл можно сохранить через системный
   диалог или отправить через «Поделиться».
 - **Плеер:** исходная запись проигрывается с любого места.
+  - скорость 0,75×, 1×, 1,5× и 2× без изменения тона голоса;
+  - перемотка на 10 секунд назад и вперёд;
+  - пропуск тишины: играются только куски речи, пауза дольше секунды между словами
+    пропускается. Куски берутся из разметки расшифровки, VAD заново не запускается;
+  - прослушивание одного участника: его реплики идут подряд, реплики остальных пропускаются;
+  - управление с экрана блокировки, из шторки и с гарнитуры (MediaSession). Пока проигрывание
+    идёт в уведомлении, свёрнутое приложение его не останавливает.
 - **Языки интерфейса:** русский и английский, переключатель «Авто / Русский / English».
   Темы: «Авто / Светлая / Тёмная».
 - **Шифрование данных** на устройстве, ключ хранится в Android Keystore.
@@ -289,7 +298,9 @@ Nixyon расшифровывает записи встреч на русско�
     `resume_recording`, `import_audio`, `cancel_import`, `open_app_settings`;
   - правка: `rename_speaker`, `merge_speakers`, `edit_turn_text`;
   - статистика и поиск: `meeting_stats`, `search_transcript`;
-  - плеер: `open_playback`, `play_audio`, `pause_audio`, `close_playback`;
+  - плеер: `open_playback`, `play_audio`, `pause_audio`, `close_playback`,
+    `set_playback_speed`, `set_playback_ranges` (отрезки речи или реплик одного участника),
+    `skip_audio` (перемотка на заданное число секунд);
   - голоса: `list_voices`, `add_voice`, `delete_voice`, `remember_voice`,
     `discard_voice_recording`;
   - настройки: `get_settings`, `set_language`, `set_theme`, `set_system_bars`, `set_hotwords`;
@@ -304,8 +315,9 @@ Nixyon расшифровывает записи встреч на русско�
   и папка `voice_model/` дают Kotlin модель голоса через JNI: модель читается из файла или
   несжатой прямо из APK по дескриптору, смещению и длине. Kotlin-код в
   [`android/src/main/java`](nixyon-app/plugins/android/android/src/main/java):
-  - запись и импорт: `AudioRecorder`, `RecordingService`, `RecordingTarget`, `RecordingsDir`,
-    `SamplesDir`, `AudioImporter`, `LevelMeter`, `WavPcm16Writer`, `WavPcm16Reader`;
+  - запись и импорт: `AudioRecorder` (пауза и продолжение), `RecordingService`,
+    `RecordingTarget`, `RecordingsDir`, `SamplesDir`, `AudioImporter`, `LevelMeter`,
+    `WavPcm16Writer`, `WavPcm16Reader`;
   - анализ: `SpeechEngine`, `SpeechModels`, `SpeechAnalyzer`, `SpeechSegmenter`,
     `LiveTranscriber`, `SampleEmbedder`, `PaddedBounds`, `WindowSpans`, `SegmentsWriter`,
     `SpansWriter`, `PhaseTiming`;
@@ -317,11 +329,14 @@ Nixyon расшифровывает записи встреч на русско�
     `LlmProgress`, `MeetingLlmNative` и JNI-обёртка над llama.cpp в
     [`cpp/meeting_llm.cpp`](nixyon-app/plugins/android/android/src/main/cpp/meeting_llm.cpp);
   - шифрование: `StorageKey`, `SealedFormat`, `SealedOutput`, `SealedMediaSource`;
-  - PDF и плеер: `ProtocolPdf`, `ProtocolBlock`, `AudioPlayer`.
+  - PDF и плеер: `ProtocolPdf`, `ProtocolBlock`, `AudioPlayer` (скорость, отрезки, перемотка),
+    `PlaybackSession` (MediaSession для экрана блокировки и гарнитуры), `PlaybackService`
+    (foreground service с уведомлением и кнопками);
 - [`ui`](nixyon-app/ui): интерфейс на HTML, CSS и JS без сборщика. Модули в
   [`ui/js`](nixyon-app/ui/js): экраны, главный экран с записью, обработка, живой текст,
-  расшифровка, лента реплик, плеер, поиск, голоса, статистика, протокол, экспорт,
-  настройки, тема, i18n. Словари в [`ui/locales`](nixyon-app/ui/locales).
+  расшифровка, лента реплик, плеер, отрезки для прослушивания (`playback-spans.js`), поиск,
+  голоса, статистика, протокол, экспорт, настройки, тема, i18n. Словари в
+  [`ui/locales`](nixyon-app/ui/locales).
 - [`src-tauri/gen/android`](nixyon-app/src-tauri/gen/android): Gradle-проект Android.
   minSdk 24, targetSdk и compileSdk 37, только `arm64-v8a`, NDK 30.0.16248370.
 
@@ -329,7 +344,8 @@ Nixyon расшифровывает записи встреч на русско�
 
 - разрешения плагина: `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
   `POST_NOTIFICATIONS`, `ACCESS_NETWORK_STATE` (платная ли сеть перед загрузкой моделей),
-  `FOREGROUND_SERVICE_DATA_SYNC` (загрузка моделей в свёрнутом приложении);
+  `FOREGROUND_SERVICE_DATA_SYNC` (загрузка моделей в свёрнутом приложении),
+  `FOREGROUND_SERVICE_MEDIA_PLAYBACK` (проигрывание расшифровки в свёрнутом приложении);
   в манифесте приложения есть ещё `INTERNET`;
 - файлы экспорта отдаются наружу через `FileProvider` из манифеста приложения, открыта
   только папка `cache/exports`;
