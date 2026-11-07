@@ -115,6 +115,7 @@
   "fillers.skipped": "Skipped turns: {n}. They are too long for the model.",
   "fillers.title": "Filler words",
   "fillers.unanswered": "The model did not answer for turns: {n}. Run them again.",
+  "fillers.will_delete": "This turn will be deleted: it has only filler words.",
   "fillers.working": "Removing filler words",
   "home.count_label": "How many participants",
   "home.count_less": "Fewer participants",

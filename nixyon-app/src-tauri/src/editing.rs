@@ -129,13 +129,16 @@ pub async fn delete_turn<R: Runtime>(
 }
 
 /// Правка текста реплики из листа слов-паразитов. Замена идёт, только если текст реплики
-/// всё ещё такой, каким был при проверке: реплику могли поправить вручную.
+/// всё ещё такой, каким был при проверке: реплику могли поправить вручную. `delete`:
+/// реплика из одних паразитов удаляется целиком.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnTextChange {
     pub id: u32,
     pub before: String,
     pub after: String,
+    #[serde(default)]
+    pub delete: bool,
 }
 
 /// Расшифровка после замены и сколько правок не встало: их реплики поправили вручную
@@ -167,7 +170,8 @@ pub async fn apply_turn_texts<R: Runtime>(
     .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
 
-/// Заменяет текст реплик, текст которых не менялся с проверки. Возвращает число пропущенных.
+/// Заменяет текст реплик или удаляет реплики, текст которых не менялся с проверки.
+/// Возвращает число пропущенных.
 fn apply_changes(t: &mut Transcript, changes: &[TurnTextChange]) -> Result<u32, EditError> {
     let mut skipped = 0;
     for change in changes {
@@ -175,7 +179,9 @@ fn apply_changes(t: &mut Transcript, changes: &[TurnTextChange]) -> Result<u32, 
             .turns
             .iter()
             .any(|x| x.id == change.id && x.text == change.before);
-        if current {
+        if current && change.delete {
+            remove_turn(t, change.id)?;
+        } else if current {
             edit_text(t, change.id, &change.after)?;
         } else {
             skipped += 1;
@@ -204,7 +210,22 @@ mod tests {
             id,
             before: before.into(),
             after: after.into(),
+            delete: false,
         }
+    }
+
+    #[test]
+    fn turn_made_only_of_fillers_is_deleted_by_its_change() {
+        let mut t = sample();
+        let first = t.turns[0].clone();
+        let count = t.turns.len();
+        let gone = TurnTextChange {
+            delete: true,
+            ..change(first.id, &first.text, "")
+        };
+        assert_eq!(apply_changes(&mut t, &[gone]), Ok(0));
+        assert_eq!(t.turns.len(), count - 1);
+        assert!(t.turns.iter().all(|x| x.id != first.id));
     }
 
     #[test]

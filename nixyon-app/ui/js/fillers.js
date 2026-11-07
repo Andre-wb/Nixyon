@@ -85,8 +85,9 @@ function render() {
     item.append(
       el("p", "meta", t(K.turn_check_before)),
       el("p", "turn-check-text", change.before),
-      el("p", "meta", t(K.turn_check_after)),
-      el("p", "turn-check-text", change.after),
+      ...(change.delete
+        ? [el("p", "filler-delete", t(K.fillers_will_delete))]
+        : [el("p", "meta", t(K.turn_check_after)), el("p", "turn-check-text", change.after)]),
     );
     return item;
   });
@@ -123,7 +124,7 @@ async function run(ids) {
 
 async function apply() {
   if (!result?.changes.length) return;
-  const changes = result.changes.map(({ id, before, after }) => ({ id, before, after }));
+  const changes = result.changes.map(({ id, before, after, delete: remove }) => ({ id, before, after, delete: remove }));
   try {
     const applied = await invoke("apply_turn_texts", { changes });
     setTranscript(applied.transcript);

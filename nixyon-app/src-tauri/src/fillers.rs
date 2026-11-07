@@ -1,8 +1,10 @@
 //! Слова-паразиты: языковая модель на телефоне убирает их из выбранных фраз или из всего
 //! диалога. Фразы без таких слов модели не отправляются, поэтому лимит тратится только на
-//! нужное. Ответ модели принимается, только если он получается из фразы вычёркиванием
-//! слов-паразитов, без других правок слов и их порядка. Правки не сохраняются: интерфейс показывает «было» и «стало»,
-//! замена идёт правкой `apply_turn_texts`.
+//! нужное. Модель получает по одной фразе: в пачке из нескольких она начинает повторять
+//! фразы как есть. Ответ принимается, только если он получается из фразы вычёркиванием
+//! слов-паразитов, без других правок слов и их порядка. Фраза, в которой кроме паразитов
+//! ничего нет, предлагается к удалению без модели. Правки не сохраняются: интерфейс
+//! показывает «было» и «стало», замена идёт правкой `apply_turn_texts`.
 
 use std::collections::HashMap;
 
@@ -19,40 +21,47 @@ use crate::transcription::{CommandError, last_transcript};
 const UNKNOWN_TURN: &str = "unknown_turn";
 
 /// Слова, которые убираются, если ничего не значат. Многословные записаны через пробел.
+/// Заминки записаны во всех частых написаниях, «типо» так пишет распознавание. Слова,
+/// которые часто несут смысл («так», «да», «вообще», «слушай», «в принципе»), сюда не
+/// входят: этот список разрешает модели вычёркивать.
 const FILLERS: &[&str] = &[
     "э",
-    "эм",
     "ээ",
+    "эээ",
+    "эм",
+    "эмм",
     "мм",
+    "ммм",
     "ну",
     "вот",
     "типа",
+    "типо",
     "короче",
     "значит",
+    "собственно",
     "как бы",
     "так сказать",
     "это самое",
     "в общем",
+    "в общем-то",
 ];
 
 /// Фраза длиннее этого не идёт в модель: её ответ должен оставаться в лимите.
 const MAX_TURN_CHARS: usize = 1500;
-/// Фразы одного запроса к модели: пачка, а не по одной фразе.
-const BATCH_CHARS: usize = 2000;
-/// Предел длины ответа на одну пачку. Ответ не длиннее пачки: русская пачка в 2000 знаков
+/// Предел длины ответа на одну фразу. Ответ не длиннее фразы: русский текст в 2000 знаков
 /// занимает около 600 токенов модели.
 const MAX_TOKENS: u32 = 1024;
 
 /// Инструкция модели. Русская при любом языке интерфейса, как и остальные инструкции.
 const SYSTEM: &str = "Ты убираешь слова-паразиты из реплик разговора. Слова-паразиты: \
-«э», «эм», «ну», «вот», «типа», «короче», «значит», «как бы», «так сказать», «это самое», \
-«в общем» и похожие, которые ничего не значат. Убирай их только там, где они ничего не \
+«э», «эээ», «эм», «ммм», «ну», «вот», «типа», «типо», «короче», «значит», «собственно», \
+«как бы», «так сказать», «это самое», «в общем», «в общем-то», если они ничего не значат. Убирай их только там, где они ничего не \
 несут. Не добавляй новых слов, не перефразируй, не меняй смысл, сохраняй язык и знаки \
 препинания. Каждая реплика дана строкой «номер: текст». Ответь теми же строками «номер: \
 текст» с очищенным текстом, без пояснений. Если паразитов в реплике нет, повтори её как \
 есть.";
 
-/// Ход работы: сколько пачек готово из скольких.
+/// Ход работы: сколько фраз модель уже обработала из скольких.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct FillerProgress {
@@ -60,13 +69,15 @@ pub struct FillerProgress {
     pub total: u32,
 }
 
-/// Предложенная правка одной фразы. `before`: текст, каким он был при проверке.
+/// Предложенная правка одной фразы. `before`: текст, каким он был при проверке. `delete`:
+/// фраза состоит из одних паразитов и удаляется целиком, `after` тогда пустой.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct FillerChange {
     pub id: u32,
     pub before: String,
     pub after: String,
+    pub delete: bool,
 }
 
 /// Итог проверки. Ничего не сохраняется.
@@ -116,6 +127,7 @@ pub async fn remove_filler_words<R: Runtime>(
 
     let total = u32::try_from(plan.batches.len()).unwrap_or(u32::MAX);
     let mut result = FillerResult {
+        changes: plan.deletions,
         skipped: plan.skipped,
         ..FillerResult::default()
     };
@@ -167,33 +179,42 @@ fn select(turns: &[Turn], ids: Option<&[u32]>) -> Result<Vec<Turn>, CommandError
         .collect())
 }
 
-/// Пачки фраз для модели. Фразы без слов-паразитов в пачки не попадают.
+/// Что делать с выбранными фразами. Фразы без слов-паразитов сюда не попадают; фразы из
+/// одних паразитов удаляются без модели, остальные идут в модель по одной.
 struct Plan {
     batches: Vec<Vec<(u32, String)>>,
+    deletions: Vec<FillerChange>,
     skipped: u32,
 }
 
 fn plan(turns: &[Turn]) -> Plan {
-    let mut batches: Vec<Vec<(u32, String)>> = Vec::new();
-    let mut size = 0;
-    let mut skipped = 0;
+    let mut p = Plan {
+        batches: Vec::new(),
+        deletions: Vec::new(),
+        skipped: 0,
+    };
     for turn in turns.iter().filter(|t| has_filler(&t.text)) {
-        let len = turn.text.chars().count();
-        if len > MAX_TURN_CHARS {
-            skipped += 1;
-            continue;
-        }
-        let fits = !batches.is_empty() && size + len <= BATCH_CHARS;
-        if !fits {
-            batches.push(Vec::new());
-            size = 0;
-        }
-        size += len;
-        if let Some(batch) = batches.last_mut() {
-            batch.push((turn.id, turn.text.clone()));
+        if only_fillers(&turn.text) {
+            p.deletions.push(FillerChange {
+                id: turn.id,
+                before: turn.text.clone(),
+                after: String::new(),
+                delete: true,
+            });
+        } else if turn.text.chars().count() > MAX_TURN_CHARS {
+            p.skipped += 1;
+        } else {
+            p.batches.push(vec![(turn.id, turn.text.clone())]);
         }
     }
-    Plan { batches, skipped }
+    p
+}
+
+/// Во фразе нет ничего, кроме слов-паразитов и знаков.
+fn only_fillers(text: &str) -> bool {
+    let all = words(text);
+    let before: Vec<&str> = all.split(' ').collect();
+    !all.is_empty() && only_fillers_removed(&before, &[])
 }
 
 /// Слова в нижнем регистре через пробел: сравнение не зависит от знаков и регистра.
@@ -206,9 +227,16 @@ fn words(text: &str) -> String {
         .join(" ")
 }
 
+/// Паразиты разбиты на слова так же, как текст: «в общем-то» сравнивается как «в общем то».
+fn filler_words() -> Vec<String> {
+    FILLERS.iter().map(|f| words(f)).collect()
+}
+
 fn has_filler(text: &str) -> bool {
     let padded = format!(" {} ", words(text));
-    FILLERS.iter().any(|f| padded.contains(&format!(" {f} ")))
+    filler_words()
+        .iter()
+        .any(|f| padded.contains(&format!(" {f} ")))
 }
 
 /// Фразы пачки нумеруются по порядку 1, 2, 3…: так модели проще не сбиться, а номер
@@ -253,6 +281,7 @@ fn changes_from(batch: &[(u32, String)], raw: &str) -> BatchReply {
                 id: *id,
                 before: before.clone(),
                 after,
+                delete: false,
             });
         }
     }
@@ -283,7 +312,8 @@ fn clean_turn(before: &str, reply: &str) -> Option<String> {
 /// таблицей «сколько слов фразы и ответа уже сопоставлено»: жадный проход ошибается, когда
 /// паразит совпадает с обычным словом рядом («как бы как»).
 fn only_fillers_removed(before: &[&str], after: &[&str]) -> bool {
-    let fillers: Vec<Vec<&str>> = FILLERS.iter().map(|f| f.split(' ').collect()).collect();
+    let joined = filler_words();
+    let fillers: Vec<Vec<&str>> = joined.iter().map(|f| f.split(' ').collect()).collect();
     let width = after.len() + 1;
     let mut reached = vec![false; (before.len() + 1) * width];
     reached[0] = true;
@@ -347,12 +377,45 @@ mod tests {
     }
 
     #[test]
-    fn long_selection_is_split_into_batches() {
-        let text = format!("ну {}", "а".repeat(900));
-        let turns: Vec<Turn> = (1..=5).map(|id| turn(id, &text)).collect();
+    fn each_phrase_goes_to_the_model_alone() {
+        let turns: Vec<Turn> = (1..=5).map(|id| turn(id, "Ну, мы пришли.")).collect();
         let p = plan(&turns);
-        assert_eq!(p.batches.len(), 3);
-        assert_eq!(p.batches.iter().map(Vec::len).sum::<usize>(), 5);
+        assert_eq!(p.batches.len(), 5);
+        assert!(p.batches.iter().all(|b| b.len() == 1));
+    }
+
+    #[test]
+    fn phrase_made_only_of_fillers_is_deleted_without_the_model() {
+        let turns = [
+            turn(1, "Вот."),
+            turn(2, "Короче, вот..."),
+            turn(3, "Типо"),
+            turn(4, "Ну, мы пришли."),
+        ];
+        let p = plan(&turns);
+        let deleted: Vec<u32> = p.deletions.iter().map(|c| c.id).collect();
+        assert_eq!(deleted, [1, 2, 3]);
+        assert!(p.deletions.iter().all(|c| c.delete && c.after.is_empty()));
+        let sent: Vec<u32> = p.batches.iter().flatten().map(|(id, _)| *id).collect();
+        assert_eq!(sent, [4]);
+    }
+
+    #[test]
+    fn speech_recognition_spellings_and_hesitations_count_as_fillers() {
+        assert!(has_filler("Мы типо пришли."));
+        assert!(has_filler("Эээ, я не знаю."));
+        assert!(has_filler("Ммм, может быть."));
+        assert!(has_filler("Собственно, всё."));
+        assert!(!has_filler("Пять м до двери."));
+    }
+
+    #[test]
+    fn hyphenated_filler_is_matched_like_the_text() {
+        assert!(only_fillers("В общем-то."));
+        assert_eq!(
+            clean_turn("В общем-то, мы готовы.", "Мы готовы."),
+            Some("Мы готовы.".into())
+        );
     }
 
     #[test]
@@ -384,6 +447,7 @@ mod tests {
                 id: 7,
                 before: "Ну, это, эм, хорошо.".into(),
                 after: "Это хорошо.".into(),
+                delete: false,
             }]
         );
     }

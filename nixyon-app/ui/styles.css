@@ -862,6 +862,13 @@ p {
   overflow-wrap: anywhere;
 }
 
+/* Фраза из одних паразитов: вместо «стало» пометка, что она уйдёт целиком. */
+.filler-delete {
+  color: var(--danger);
+  font-size: var(--text-footnote);
+  font-weight: 600;
+}
+
 .filler-change {
   display: grid;
   gap: var(--space-1);
