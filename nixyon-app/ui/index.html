@@ -10,6 +10,16 @@
   <script src="js/app.js" type="module"></script>
 </head>
 <body>
+  <!-- Экран блокировки: пока ключ данных не открыт отпечатком, остальное приложение
+       не начинает работу. Отмена не закрывает приложение, а оставляет кнопку повтора. -->
+  <div class="lock" id="lock" role="dialog" aria-modal="true" aria-labelledby="lock-title" hidden>
+    <div class="lock-body">
+      <h1 class="title" id="lock-title" data-i18n="lock.title"></h1>
+      <p class="meta" data-i18n="lock.hint"></p>
+      <p class="error" id="lock-error" role="alert"></p>
+      <button class="button button-primary wide" id="lock-retry" type="button" data-i18n="lock.open"></button>
+    </div>
+  </div>
   <main>
     <section class="screen" id="screen-home" aria-labelledby="home-title" hidden>
       <header class="bar">

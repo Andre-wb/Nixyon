@@ -37,6 +37,7 @@ pub fn run() {
             editing::delete_turn,
             editing::apply_turn_texts,
             fillers::remove_filler_words,
+            vault::unlock_storage,
             statistics::meeting_stats,
             searching::search_transcript,
             playback::open_playback,

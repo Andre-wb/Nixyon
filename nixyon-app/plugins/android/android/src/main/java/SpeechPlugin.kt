@@ -11,6 +11,7 @@ import android.webkit.WebView
 import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.appcompat.app.AppCompatActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import app.tauri.PermissionState
@@ -275,19 +276,29 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
     // Команд для JS у плагина нет, интерфейс эту команду вызвать не может. В лог не пишется.
     // Ядро спрашивает ключ один раз за запуск, до подготовки хранилища, которая удаляет
     // недописанные файлы: поэтому записи, оборванные падением, восстанавливаются здесь.
+    // Пока ключ закрыт, спрашивает отпечаток; без него или при отмене отвечает locked.
     @Command
     fun storageKey(invoke: Invoke) {
-        scope.launch {
-            try {
-                val key = keys.get()
-                recoverOnce(key)
-                val raw = key.encoded
-                val ret = jsObject("key" to JSONArray(raw.map { it.toInt() and 0xff }))
-                raw.fill(0)
-                invoke.resolve(ret)
-            } catch (e: Throwable) {
-                Log.e(TAG, "ключ данных недоступен", e)
-                invoke.reject("storage key failed", "storage_failed")
+        val host = activity as? FragmentActivity
+        if (host == null) {
+            invoke.reject("storage key failed", "storage_failed")
+            return
+        }
+        keys.unlock(host) { result ->
+            scope.launch {
+                try {
+                    val key = result.getOrThrow()
+                    recoverOnce(key)
+                    val raw = key.encoded
+                    val ret = jsObject("key" to JSONArray(raw.map { it.toInt() and 0xff }))
+                    raw.fill(0)
+                    invoke.resolve(ret)
+                } catch (e: StorageLockedException) {
+                    invoke.reject("storage locked", e.code)
+                } catch (e: Throwable) {
+                    Log.e(TAG, "ключ данных недоступен", e)
+                    invoke.reject("storage key failed", "storage_failed")
+                }
             }
         }
     }

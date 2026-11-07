@@ -2,6 +2,7 @@ import { invoke } from "./api.js";
 import { initExport } from "./export.js";
 import { failed, initHome, setLast } from "./home.js";
 import { initModels } from "./models.js";
+import { unlockApp } from "./lock.js";
 import { initPlayer } from "./player.js";
 import { initProcessing } from "./processing.js";
 import { applyHotwords, applySetting, initSettings } from "./settings.js";
@@ -17,6 +18,7 @@ import { applyTheme } from "./theme.js";
 import { initVoices } from "./voices.js";
 
 async function start() {
+  await unlockApp();
   const settings = await invoke("get_settings").catch(() => ({ language: "auto", theme: "auto" }));
   applyTheme(settings.theme);
   applySetting(settings.language);

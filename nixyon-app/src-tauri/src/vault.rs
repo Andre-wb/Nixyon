@@ -34,6 +34,22 @@ pub struct Storage {
     pub paths: StoragePaths,
 }
 
+/// Ключ не открыт: палец не приложен или отменён, либо на телефоне нет отпечатка. Эти
+/// коды интерфейс показывает как есть; всё остальное — сбой хранилища.
+fn storage_key_error(e: nixyon_android::Error) -> CommandError {
+    match e.rejected_code() {
+        Some(code @ ("locked" | "biometric_unavailable")) => CommandError::new(code),
+        _ => CommandError::logged(CommandError::STORAGE_FAILED, e),
+    }
+}
+
+/// Открывает хранилище отпечатком. Приложение вызывает её первой при запуске: пока она не
+/// прошла, остальные команды не начинаются.
+#[tauri::command]
+pub async fn unlock_storage<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    storage(&app).await.map(|_| ())
+}
+
 /// Папки приложения и хранилище с ключом. Первый вызов после запуска получает ключ и
 /// готовит хранилище; остальные ждут его, поэтому ни одна команда не тронет файлы раньше.
 pub async fn storage<R: Runtime>(app: &AppHandle<R>) -> Result<Storage, CommandError> {
@@ -51,7 +67,7 @@ pub async fn storage<R: Runtime>(app: &AppHandle<R>) -> Result<Storage, CommandE
                 .speech()
                 .storage_key()
                 .await
-                .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
+                .map_err(storage_key_error)?;
             let key = Arc::new(DataKey::from_bytes(&raw.key).ok_or_else(|| {
                 CommandError::logged(CommandError::STORAGE_FAILED, "ключ данных не той длины")
             })?);

@@ -685,6 +685,31 @@ p {
   overflow-wrap: anywhere;
 }
 
+/* Экран блокировки поверх всего приложения, пока ключ данных не открыт отпечатком. */
+.lock {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  background: var(--bg);
+}
+
+.lock[hidden] {
+  display: none;
+}
+
+.lock-body {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+
 /* Слова-паразиты: флажок «Выбрать все», список фраз с флажками и правки «было» и «стало». */
 .filler-all {
   display: flex;
