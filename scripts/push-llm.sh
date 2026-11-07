@@ -18,7 +18,7 @@ file="$(grep -o '"path": "[^"]*"' "${SOURCE}/llm.json" | cut -d'"' -f4)"
 adb shell mkdir -p "${REMOTE}"
 # Пока манифеста нет, приложение не видит модель и не возьмёт недокачанный файл.
 adb shell rm -f "${REMOTE}/llm.json"
-echo "закидываю: ${file} (2,7 ГБ)"
+echo "закидываю: ${file} (2,3 ГБ)"
 adb push "${SOURCE}/${file}" "${REMOTE}/${file}"
 adb push "${SOURCE}/llm.json" "${REMOTE}/llm.json"
 echo "готово: ${REMOTE}"

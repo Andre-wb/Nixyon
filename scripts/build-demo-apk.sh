@@ -40,7 +40,22 @@ fi
 
 rm -rf "${STAGE}"
 mkdir -p "${STAGE}/models"
-cp "${MODELS}/models.json" "${STAGE}/models/models.json"
+# Роли, которые телефон не читает, в APK не кладутся: audEERING (age_gender, 363 МБ) даёт
+# только метку «ребёнок или взрослый» у спикеров, а фильтр музыки (tagging_*) на телефоне
+# не используется. Обе роли необязательны (ModelRole.kt), приложение без них работает,
+# поэтому из манифеста внутри APK они исключаются вместе с файлами.
+SKIP_ROLES="age_gender tagging_model tagging_labels"
+python3 -I -c '
+import json, sys
+skip = set(sys.argv[3].split())
+manifest = json.load(open(sys.argv[1]))
+manifest["files"] = {role: f for role, f in manifest["files"].items() if role not in skip}
+with open(sys.argv[2], "w") as out:
+    json.dump(manifest, out, ensure_ascii=False, indent=2)
+    out.write("\n")
+for f in manifest["files"].values():
+    print(f["path"], f["size"], f["sha256"])
+' "${MODELS}/models.json" "${STAGE}/models/models.json" "${SKIP_ROLES}" >"${STAGE}/models/.entries"
 while read -r path size sum; do
   file="${MODELS}/${path}"
   [[ -f "${file}" ]] || { echo "ошибка: нет ${file}" >&2; exit 1; }
@@ -48,13 +63,10 @@ while read -r path size sum; do
   [[ "$(sha256 "${file}")" == "${sum}" ]] || { echo "ошибка: SHA-256 ${path} не совпал с models.json" >&2; exit 1; }
   cp "${file}" "${STAGE}/models/${path}"
   echo "модель: ${path}"
-done < <(python3 -I -c '
-import json, sys
-for f in json.load(open(sys.argv[1]))["files"].values():
-    print(f["path"], f["size"], f["sha256"])
-' "${MODELS}/models.json")
+done <"${STAGE}/models/.entries"
+rm -f "${STAGE}/models/.entries"
 
-# Языковая модель (2,7 ГБ) ставится в папку жёсткой ссылкой, если можно: вторая копия на
+# Языковая модель (2,3 ГБ) ставится в папку жёсткой ссылкой, если можно: вторая копия на
 # диске не нужна. Gradle всё равно копирует её при сборке.
 mkdir -p "${STAGE}/llm"
 cp "${MODELS}/llm/llm.json" "${STAGE}/llm/llm.json"

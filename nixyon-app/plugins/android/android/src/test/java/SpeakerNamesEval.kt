@@ -12,7 +12,7 @@ import java.net.URI
 // ловушки (кто упомянут в третьем лице, чьё имя звучит в обращении самого участника) не проходят.
 //
 // С моделью: запустить llama-server с той же моделью, что на телефоне, и указать его адрес:
-//   llama-server -m qwen3.5-4b-q4_k_m.gguf --port 8099 -c 4096 -ngl 0 --jinja
+//   llama-server -m qwen3.5-4b-q3_k_m.gguf --port 8099 -c 4096 -ngl 0 --jinja
 //   cd nixyon-app/src-tauri/gen/android
 //   NIXYON_LLAMA_SERVER=http://127.0.0.1:8099 ./gradlew :nixyon-android:testDebugUnitTest --tests '*SpeakerNamesEval*'
 // Запросы и ответы модели идут в stderr, таблица итогов в stdout теста (отчёт Gradle,

@@ -326,7 +326,7 @@ Nixyon расшифровывает записи встреч на русско�
 
 ### Протокол встречи
 
-- Модель: Qwen3.5-4B в квантовании Q4_K_M (GGUF, около 2,7 ГБ), движок llama.cpp тега
+- Модель: Qwen3.5-4B в квантовании Q3_K_M (GGUF, около 2,3 ГБ), движок llama.cpp тега
   `b12005`. Gradle собирает его через CMake в библиотеку `nixyon_llm` вместе с плагином.
 - Модель загружается на один запрос и выгружается. Контекст 4096 токенов, не больше
   4 потоков, ответ до 1024 токенов.
@@ -451,9 +451,9 @@ Nixyon расшифровывает записи встреч на русско�
 
 ### Языковая модель: `scripts/fetch-llm.sh`
 
-[`scripts/fetch-llm.sh`](scripts/fetch-llm.sh) качает `Qwen3.5-4B-Q4_K_M.gguf` из
+[`scripts/fetch-llm.sh`](scripts/fetch-llm.sh) качает `Qwen3.5-4B-Q3_K_M.gguf` из
 [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) с закреплённой
-ревизией. Он кладёт модель в `models/llm/qwen3.5-4b-q4_k_m.gguf` (жёсткой ссылкой, если можно)
+ревизией. Он кладёт модель в `models/llm/qwen3.5-4b-q3_k_m.gguf` (жёсткой ссылкой, если можно)
 и пишет манифест `models/llm/llm.json`. В `models.json` эта модель не входит.
 
 ### Библиотеки
@@ -546,7 +546,7 @@ scripts/fetch-sherpa.sh       # библиотеки sherpa-onnx и ONNX Runtime
 scripts/fetch-models.sh       # модели в models/ и models/ort/, нужен токен GitHub
 scripts/fetch-test-audio.sh   # записи и диалоги для тестов с моделями (models/dialogs/)
 scripts/fetch-llama-cpp.sh    # исходники llama.cpp, только для APK
-scripts/fetch-llm.sh          # языковая модель, 2,7 ГБ, только для протокола встречи
+scripts/fetch-llm.sh          # языковая модель, 2,3 ГБ, только для протокола встречи
 scripts/fetch-noise.sh        # необязательно: зашумлённые копии диалогов
 ```
 
@@ -610,7 +610,8 @@ scripts/build-demo-apk.sh
 2. Проверяет отладочный ключ `~/.android/debug.keystore`. Если ключа нет, создаёт его так
    же, как Android Studio.
 3. Копирует модели строго по `models.json` и `llm.json`, сверяя размер и SHA-256 каждого
-   файла. Берутся все роли манифеста, в том числе `tagging_*`, которые телефон не читает.
+   файла. Роли, которые телефон не читает (`age_gender` — 363 МБ метки «ребёнок или
+   взрослый», и `tagging_*`), в APK не кладутся: они исключаются и из манифеста внутри APK.
 4. Собирает APK командой `cargo tauri android build --apk --target aarch64 --ci` со свойством
    Gradle `nixyonModelsAssets`, подпись отладочным ключом. После сборки удаляет
    промежуточные копии ресурсов Gradle: с языковой моделью они занимают гигабайты.
@@ -621,6 +622,15 @@ scripts/build-demo-apk.sh
 Готовый файл:
 `nixyon-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`.
 Установка: `adb install -r <файл>`.
+
+Размер готового APK — около 2,7 ГБ: языковая модель Q3_K_M (2,3 ГБ), модели
+распознавания (~340 МБ) и нативные библиотеки (~65 МБ). Модели для распознавания
+`fetch-models.sh` скачивает один раз и переиспользует; при первом запуске этой команды
+`fetch-llm.sh` докачивает Q3_K_M (2,3 ГБ). Старый квант Q4_K_M (2,7 ГБ) больше не нужен —
+удалите `models/_download/llm/Qwen3.5-4B-Q4_K_M.gguf`, если он остался на диске.
+
+Если менялась языковая модель или её квант, прогоните `scripts/llm-meeting-eval.sh`:
+промпт и пороги качества подбирались под Q4_K_M.
 
 ## Docker
 
