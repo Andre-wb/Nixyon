@@ -62,6 +62,7 @@ mod tests {
                 asr: "asr".into(),
                 embedding: "emb".into(),
             },
+            language: nixyon_core::SpeechLanguage::Ru,
             speakers: ids
                 .into_iter()
                 .map(|id| Speaker {

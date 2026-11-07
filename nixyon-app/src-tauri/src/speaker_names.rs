@@ -102,7 +102,7 @@ fn naming_input(transcript: &Transcript) -> (Vec<NamingSpeaker>, Vec<NamingTurn>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nixyon_core::{AudioInfo, EngineInfo, Speaker, Turn};
+    use nixyon_core::{AudioInfo, EngineInfo, Speaker, SpeechLanguage, Turn};
 
     fn speaker(id: u32, name: Option<&str>) -> Speaker {
         Speaker {
@@ -144,6 +144,7 @@ mod tests {
                 asr: String::new(),
                 embedding: String::new(),
             },
+            language: SpeechLanguage::Ru,
             speakers: vec![
                 speaker(1, Some(" Анна ")),
                 speaker(2, None),

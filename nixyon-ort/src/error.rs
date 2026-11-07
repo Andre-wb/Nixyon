@@ -17,6 +17,8 @@ pub enum OrtError {
     Runtime(String),
     #[error("модель вернула неожиданный ответ: {0}")]
     BadOutput(String),
+    #[error("запись не читается: {0}")]
+    Audio(String),
     #[error("сессия модели недоступна после сбоя в другом потоке")]
     Poisoned,
 }

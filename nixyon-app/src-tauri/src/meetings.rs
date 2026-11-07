@@ -97,7 +97,7 @@ pub fn exists(store: &FilesStore, id: &MeetingId) -> bool {
 
 #[cfg(test)]
 pub fn test_transcript(created_at: &str) -> Transcript {
-    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION};
+    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, SpeechLanguage};
     Transcript {
         schema_version: SCHEMA_VERSION,
         created_at: created_at.into(),
@@ -111,6 +111,7 @@ pub fn test_transcript(created_at: &str) -> Transcript {
             asr: "v1".into(),
             embedding: "embedding.onnx".into(),
         },
+        language: SpeechLanguage::Ru,
         speakers: Vec::new(),
         turns: Vec::new(),
     }

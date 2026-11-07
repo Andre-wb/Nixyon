@@ -96,7 +96,11 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
             try {
                 val windows = WindowSpans.fromRequest(args.windowSec, args.stepSec, SpeechModels.SAMPLE_RATE)
                 val neural = neuralRequest(args.spansPath, args.neuralBlockSec)
-                val summary = engine.analyze(File(args.wavPath), File(args.outPath), windows, args.hotwords, neural) { phase, done, total ->
+                val overlaps = OverlapRequest.of(args.overlapsPath, args.overlapThreshold, args.minOverlapSec)
+                val language = args.language?.let {
+                    SpeechLanguage.fromCode(it) ?: throw AnalysisException(AnalysisException.ENGINE_FAILED, "неизвестный язык речи $it")
+                }
+                val summary = engine.analyze(File(args.wavPath), File(args.outPath), windows, args.hotwords, language, neural, overlaps) { phase, done, total ->
                     args.onProgress?.send(jsObject("phase" to phase, "doneSec" to done, "totalSec" to total))
                 }
                 Log.i(TAG, "разбор: кусков речи ${summary.segments}, запись ${summary.durationSec} с")
@@ -108,6 +112,7 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
                         "asrModels" to summary.asrModels,
                         "embeddingModel" to summary.embeddingModel,
                         "sameSpeakerCosine" to summary.sameSpeakerCosine,
+                        "language" to summary.language.code,
                     ),
                 )
             } catch (e: AnalysisException) {
@@ -288,7 +293,9 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         scope.launch {
             try {
                 val started = System.nanoTime()
-                val summary = summarizer.summarizeMeeting(args.system, args.user, args.maxTokens, progressTo(args.onProgress))
+                val language = SpeechLanguage.fromCode(args.language)
+                    ?: throw LlmException(LlmException.FAILED, "неизвестный язык встречи ${args.language}")
+                val summary = summarizer.summarizeMeeting(args.system, args.user, args.maxTokens, language, progressTo(args.onProgress))
                 Log.i(TAG, "протокол встречи: ${(System.nanoTime() - started) / 1_000_000} мс, частей ${summary.parts}, сведений ${summary.combines}")
                 invoke.resolve(jsObject("text" to summary.text))
             } catch (e: LlmException) {

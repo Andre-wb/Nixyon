@@ -3,7 +3,9 @@
 # диалоги с разметкой в models/dialogs/:
 #   real3: три человека из тестовых записей sherpa-onnx (китайская речь);
 #   ru2, ru4, ru6: 2, 4 и 6 человек из VoxForge RU (лицензия GPLv3, только локально);
-#   ru4_fast, ru4_overlap: клипы ru4 со сменой голоса без паузы и с наложением речи.
+#   ru4_fast, ru4_overlap: клипы ru4 со сменой голоса без паузы и с наложением речи;
+#   en2, en4, en6: 2, 4 и 6 человек из английской VoxForge (лицензия GPLv3, только
+#   локально), три женщины и трое мужчин с родным английским.
 # Границы речи клипов VoxForge берутся из scripts/data/voxforge-speech-bounds.json,
 # опечатки текстов PROMPTS правятся по scripts/data/voxforge-text-fixes.json.
 # Скачанное хранится в models/_download/test-audio/ и повторно не качается.
@@ -16,6 +18,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CACHE="${ROOT}/models/_download/test-audio"
 OUT="${ROOT}/models/dialogs"
 VOXFORGE_URL="http://www.repository.voxforge1.org/downloads/Russian/Trunk/Audio/Main/16kHz_16bit"
+VOXFORGE_EN_URL="http://www.repository.voxforge1.org/downloads/SpeechCorpus/Trunk/Audio/Main/16kHz_16bit"
 SHERPA_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models"
 
 VOXFORGE=(
@@ -31,6 +34,22 @@ VOXFORGE=(
   "uvgeek-20150531-fau.tgz ddb43b9083ab8dd6b0f01e2c9cdc63e014c73f74d5fa3b73104f0603a543bad1"
   "zend-20110502-qab.tgz df1f01a27a3d53c4ab1f6891fe5410df05916ff160628a44c81ed825c2990a05"
   "zend-20110502-txq.tgz ca906ce910cfbe6a62cda298240b27e73e6e8fe7ebb0833c83715c0605830785"
+)
+
+# Английская VoxForge: две первые по имени сессии каждого человека.
+VOXFORGE_EN=(
+  "Anniepoo-20140308-bft.tgz 3c98ecd8d04311e4581eae7c09bc3550848ef14ffc3b96027afd10767bce0475"
+  "Anniepoo-20140308-byi.tgz dabe51253c566106460d06904e74a43db4c8f55e60b8ce8e74aa1cda30f7fc1c"
+  "camdixon-20130819-cea.tgz a153cda6601549a5fa1a07c028d14cdfd85786837f3f342e415fadb453c78b18"
+  "camdixon-20130819-cua.tgz 09bd5fa015f2bc7aaa54970b885865ebe8c464cc301c88a28121bb250d11c128"
+  "Catbells-20110421-lxg.tgz 3d50617326201f5a7bf70403e093a024dfaf1715ebdf5a40baaad209492f2aa3"
+  "Catbells-20110527-zjd.tgz 896586b1e0ae12b0670a3105af8a5d90015360f87f787838311ddb80aebf7052"
+  "tomhannen-20080409.tgz bd7add6a2cad5a5b59b052b72e3e4a2d44ff97faf0da6f8ab4ddb2c1dc637c45"
+  "tomhannen-20080410-bfg.tgz 05b0c0a269a216347f1937ccdef195949e008e36122a7935374feae8bf720b76"
+  "Melissa-20081211-apn.tgz c5f382f19dca9bb95c4384198349334c811c7b6b5a97b24f985d4f3fc835c57e"
+  "Melissa-20081211-ehn.tgz 4d51dea6c09cc0c72b67763eab48a6b8e70a66e668afba732da12d6fc7ea4794"
+  "tsmock-20110613-thv.tgz 258f58549499f1bf27ac47fa236e48c6e1c19074e071d488a7a38fc2385f8a73"
+  "tsmock-20110613-zmu.tgz 53d7661f5f4d70f252ebd50e729547e071be337044ceed09dd795f48b8045b17"
 )
 
 SHERPA=(
@@ -75,7 +94,7 @@ fetch() {
   mv "${target}.part" "${target}"
 }
 
-mkdir -p "${CACHE}/voxforge" "${CACHE}/sherpa" "${OUT}"
+mkdir -p "${CACHE}/voxforge" "${CACHE}/voxforge-en" "${CACHE}/sherpa" "${OUT}"
 
 for entry in "${VOXFORGE[@]}"; do
   name="${entry%% *}"
@@ -83,6 +102,15 @@ for entry in "${VOXFORGE[@]}"; do
   dir="${CACHE}/voxforge/${name%.tgz}"
   if [[ ! -d "${dir}" ]]; then
     tar -xzf "${CACHE}/voxforge/${name}" -C "${CACHE}/voxforge"
+  fi
+done
+
+for entry in "${VOXFORGE_EN[@]}"; do
+  name="${entry%% *}"
+  fetch "${VOXFORGE_EN_URL}/${name}" "${CACHE}/voxforge-en/${name}" "${entry##* }"
+  dir="${CACHE}/voxforge-en/${name%.tgz}"
+  if [[ ! -d "${dir}" ]]; then
+    tar -xzf "${CACHE}/voxforge-en/${name}" -C "${CACHE}/voxforge-en"
   fi
 done
 

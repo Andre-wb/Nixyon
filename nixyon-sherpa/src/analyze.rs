@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use nixyon_core::{CancelFlag, EngineOptions, SegmentResult, SpeechEdges, hotwords_line, par_map};
+use nixyon_core::{
+    CancelFlag, EngineOptions, Pool, SegmentResult, SpeechEdges, hotwords_line, par_map,
+};
+use sherpa_onnx::OfflineRecognizer;
 
 use crate::asr_groups::asr_groups;
 use crate::config::{
@@ -116,16 +119,24 @@ pub fn recognize_bounds(
     options: &EngineOptions,
     cancel: &CancelFlag,
 ) -> Result<Vec<SegmentResult>, SherpaError> {
-    let hotwords = hotwords_line(&options.hotwords);
-    if !hotwords.is_empty() && models.decoding() == Decoding::Greedy {
+    // Горячие слова есть только у распознавателя с поиском по лучам. Английский всегда
+    // идёт жадным поиском (`Decoding::for_language`), его горячие слова не используются;
+    // горячие слова при жадном поиске, выбранном при загрузке, остаются ошибкой.
+    if !options.hotwords.is_empty() && models.decoding() == Decoding::Greedy {
         return Err(SherpaError::HotwordsNeedBeam);
     }
+    let hotwords = match models.decoding().for_language(options.language) {
+        Decoding::Greedy => String::new(),
+        Decoding::HotwordBeam { .. } => hotwords_line(&options.hotwords),
+    };
+    let recognizers = models.recognizers().of(options.language)?;
+    let recognizers = recognizers.as_ref();
     if !options.asr_groups {
         return par_map(bounds, models.asr_jobs(), |&(from, to)| {
             if cancel.is_cancelled() {
                 return Err(SherpaError::Cancelled);
             }
-            recognize_region(models, from, to, &samples[from..to], &hotwords)
+            recognize_region(recognizers, from, to, &samples[from..to], &hotwords)
         })
         .into_iter()
         .collect();
@@ -135,7 +146,7 @@ pub fn recognize_bounds(
         if cancel.is_cancelled() {
             return Err(SherpaError::Cancelled);
         }
-        recognize_group(models, samples, group, &hotwords)
+        recognize_group(recognizers, samples, group, &hotwords)
     });
     let mut segments = Vec::with_capacity(bounds.len());
     for part in parts {
@@ -147,13 +158,13 @@ pub fn recognize_bounds(
 // Группа распознаётся одним отрезком, слова раздаются по её кускам. Без времени токенов
 // куски группы распознаются по одному.
 fn recognize_group(
-    models: &SherpaModels,
+    recognizers: &Pool<OfflineRecognizer>,
     samples: &[f32],
     group: &[(usize, usize)],
     hotwords: &str,
 ) -> Result<Vec<SegmentResult>, SherpaError> {
     let (first, last) = (group[0].0, group[group.len() - 1].1);
-    let whole = recognize_region(models, first, last, &samples[first..last], hotwords)?;
+    let whole = recognize_region(recognizers, first, last, &samples[first..last], hotwords)?;
     if group.len() == 1 {
         return Ok(vec![whole]);
     }
@@ -170,7 +181,9 @@ fn recognize_group(
             .collect()),
         None => group
             .iter()
-            .map(|&(from, to)| recognize_region(models, from, to, &samples[from..to], hotwords))
+            .map(|&(from, to)| {
+                recognize_region(recognizers, from, to, &samples[from..to], hotwords)
+            })
             .collect(),
     }
 }
@@ -189,15 +202,14 @@ fn piece_segment(from: usize, to: usize, piece: PieceText) -> SegmentResult {
 }
 
 fn recognize_region(
-    models: &SherpaModels,
+    recognizers: &Pool<OfflineRecognizer>,
     from: usize,
     to: usize,
     samples: &[f32],
     hotwords: &str,
 ) -> Result<SegmentResult, SherpaError> {
     let (start, end) = bounds_seconds(from, to);
-    let result = models
-        .recognizers()
+    let result = recognizers
         .with(|recognizer| {
             let stream = if hotwords.is_empty() {
                 recognizer.create_stream()

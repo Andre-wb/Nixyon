@@ -11,7 +11,8 @@ package dev.demo.nixyon.speech
 // generate: один ответ модели на текст встречи (user) с ходом работы; бросает LlmException.
 // Ход работы для интерфейса: пока идут части и сведение читает их, фаза READING от 0 до
 // SCALE по всей встрече; ответ сведения как обычно, фаза WRITING.
-class LongSummary(private val generate: (user: String, progress: LlmProgress) -> String) {
+// language: язык речи встречи, на нём просится сведение частей.
+class LongSummary(private val language: SpeechLanguage, private val generate: (user: String, progress: LlmProgress) -> String) {
     // Сколько частей и сведений понадобилось: для лога.
     var parts = 0
         private set
@@ -59,7 +60,7 @@ class LongSummary(private val generate: (user: String, progress: LlmProgress) ->
 
     private fun combine(header: String, protocols: List<String>, progress: LlmProgress, isFinal: Boolean, depth: Int): String {
         val tooLong = try {
-            val answer = generate(MeetingParts.combineRequest(header, protocols), if (isFinal) combineProgress(progress) else waiting(progress))
+            val answer = generate(MeetingParts.combineRequest(header, protocols, language), if (isFinal) combineProgress(progress) else waiting(progress))
             combines++
             return MeetingParts.cleanAnswer(answer)
         } catch (e: LlmException) {

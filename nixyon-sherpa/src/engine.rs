@@ -67,6 +67,7 @@ fn code(e: &SherpaError) -> &'static str {
         | SherpaError::BadBlock(_)
         | SherpaError::SegmentationFailed { .. }
         | SherpaError::Voice(_)
+        | SherpaError::Language(_)
         | SherpaError::Poisoned => "engine_failed",
         SherpaError::BadWave(_) | SherpaError::SampleRate { .. } => "bad_audio",
         SherpaError::SampleTooShort(_) => "sample_too_short",

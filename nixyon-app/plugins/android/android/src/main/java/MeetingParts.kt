@@ -60,17 +60,29 @@ object MeetingParts {
     }
 
     // Запрос на сведение протоколов частей в один. Инструкция и вид ответа остаются от
-    // протокола (system из ядра), здесь только что делать с частями.
-    fun combineRequest(header: String, protocols: List<String>): String {
+    // протокола (system из ядра), здесь только что делать с частями; язык тот же, что у
+    // инструкции: язык речи встречи.
+    fun combineRequest(header: String, protocols: List<String>, language: SpeechLanguage): String {
         val sb = StringBuilder()
         if (header.isNotEmpty()) sb.append(header).append("\n\n")
         sb.append(
-            "Встреча длинная, поэтому протокол составлен по частям. Ниже протоколы частей по порядку. " +
-                "Составь из них один протокол всей встречи в том же виде: краткое содержание всей встречи, " +
-                "все решения и все задачи без повторов.",
+            when (language) {
+                SpeechLanguage.RU ->
+                    "Встреча длинная, поэтому протокол составлен по частям. Ниже протоколы частей по порядку. " +
+                        "Составь из них один протокол всей встречи в том же виде: краткое содержание всей встречи, " +
+                        "все решения и все задачи без повторов."
+                SpeechLanguage.EN ->
+                    "The meeting is long, so the minutes were written in parts. Below are the minutes of the parts in order. " +
+                        "Combine them into one set of minutes for the whole meeting in the same format: a summary of the whole meeting, " +
+                        "all decisions and all tasks without repeats."
+            },
         )
         protocols.forEachIndexed { i, protocol ->
-            sb.append("\n\nПротокол части ").append(i + 1).append(" из ").append(protocols.size).append(":\n").append(protocol)
+            val label = when (language) {
+                SpeechLanguage.RU -> "Протокол части ${i + 1} из ${protocols.size}:"
+                SpeechLanguage.EN -> "Minutes of part ${i + 1} of ${protocols.size}:"
+            }
+            sb.append("\n\n").append(label).append('\n').append(protocol)
         }
         return sb.append('\n').toString()
     }

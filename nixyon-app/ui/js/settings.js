@@ -5,6 +5,7 @@ import { languageChanged, show } from "./screens.js";
 import { initSettingsBiometric, renderSettingsBiometric } from "./settings-biometric.js";
 import { initSettingsLlmGpu, renderSettingsLlmGpu } from "./settings-llm-gpu.js";
 import { initSettingsModels, renderSettingsModels } from "./settings-models.js";
+import { initSettingsSpeech, renderSettingsSpeech } from "./settings-speech.js";
 import { initSettingsStorage, renderSettingsStorage } from "./settings-storage.js";
 import { applyTheme, themeSetting } from "./theme.js";
 
@@ -44,6 +45,7 @@ export function initSettings() {
     for (const radio of document.querySelectorAll('input[name="theme"]')) {
       radio.checked = radio.value === themeSetting();
     }
+    renderSettingsSpeech();
     $("hotwords").value = hotwords.join("\n");
     $("hotwords-status").textContent = "";
     $("settings-models-status").textContent = "";
@@ -60,6 +62,7 @@ export function initSettings() {
   initSettingsBiometric();
   initSettingsStorage();
   initSettingsLlmGpu();
+  initSettingsSpeech();
   $("hotwords-save").addEventListener("click", saveHotwords);
   for (const radio of document.querySelectorAll('input[name="theme"]')) {
     radio.addEventListener("change", async () => {

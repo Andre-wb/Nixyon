@@ -27,14 +27,16 @@ import com.k2fsa.sherpa.onnx.VadModelConfig
 // хватает памяти: перед языковой моделью или моделью audEERING их можно отпустить
 // (SpeechEngine.unload), следующий разбор загрузит их заново.
 // Vad и шумоподавитель хранят состояние потока, поэтому здесь только их конфиги: на каждую
-// обработку создаётся свой экземпляр. live: потоковая модель для живого текста, null,
+// обработку создаётся свой экземпляр. recognizers: распознаватель одного языка за раз, сразу
+// грузится русский. live: потоковая модель для живого текста, null,
 // если её нет в наборе. denoiserConfig: шумоподавление для VAD, null, если его нет в наборе.
 class SpeechModels private constructor(
     val located: LocatedModels,
     val vadConfig: VadModelConfig,
-    val recognizer: OfflineRecognizer,
+    val recognizers: LanguageRecognizers,
     val voice: VoiceModel,
     val diarizer: OfflineSpeakerDiarization,
+    val powerset: PowersetModel,
     val live: OnlineRecognizer?,
     private val denoiserConfig: OfflineSpeechDenoiserModelConfig?,
 ) {
@@ -46,22 +48,25 @@ class SpeechModels private constructor(
     // пользуется (ModelSlot); после этого ни одну из них трогать нельзя.
     fun release() {
         live?.let { runCatching { it.release() } }
+        runCatching { powerset.close() }
         runCatching { diarizer.release() }
         runCatching { voice.close() }
-        runCatching { recognizer.release() }
+        runCatching { recognizers.release() }
     }
 
     companion object {
         const val SAMPLE_RATE = 16000
-        // У GigaAM признаки задаёт сама модель (метаданные is_giga_am), 80 будет переопределено.
+        // У GigaAM и Parakeet признаки задаёт сама модель через метаданные NeMo, 80 будет
+        // переопределено.
         private const val FEATURE_DIM = 80
-        private const val GIGAAM_MODEL_TYPE = "nemo_transducer"
+        // GigaAM и Parakeet оба выгружены из NeMo, тип модели у них один.
+        private const val NEMO_MODEL_TYPE = "nemo_transducer"
         private const val MAX_SPEECH_SECONDS = 20f
 
         // Порог низкий, как в движке на ноутбуке: при 0,5 VAD пропускал тихую речь и
         // короткие слова целиком, а ложный кусок без речи распознаётся пустым текстом.
         private const val VAD_THRESHOLD = 0.2f
-        // Поиск по лучам всегда, чтобы горячие слова работали без второй копии модели.
+        // Русский: поиск по лучам всегда, чтобы горячие слова работали без второй копии модели.
         // Значения те же, что у движка на ноутбуке (nixyon-sherpa: config::recognizer,
         // HOTWORD_SCORE, BEAM_PATHS); слова разбиваются на токены словарём BPE той же модели.
         private const val DECODING_METHOD = "modified_beam_search"
@@ -90,7 +95,6 @@ class SpeechModels private constructor(
             val threads = CpuCores.computeThreads
             val vadConfig = vadConfig(located)
             val denoiserConfig = if (manifest.hasDenoiser) denoiserConfig(located) else null
-            val recognizerConfig = recognizerConfig(located, threads)
             val diarizationConfig = diarizationConfig(located, threads)
             // Что уже загружено: если следующая модель не загрузится, оно отпускается в
             // обратном порядке.
@@ -100,14 +104,19 @@ class SpeechModels private constructor(
                 // при первой записи.
                 Vad(source.assetManager, vadConfig).release()
                 denoiserConfig?.let { OnlineSpeechDenoiser(source.assetManager, OnlineSpeechDenoiserConfig(it)).release() }
-                val recognizer = OfflineRecognizer(source.assetManager, recognizerConfig)
-                    .also { loaded.add(it::release) }
+                val recognizers = LanguageRecognizers(SpeechLanguage.RU) { language ->
+                    OfflineRecognizer(source.assetManager, recognizerConfig(located, language, threads))
+                }.also { loaded.add(it::release) }
                 val voice = VoiceModel.open(source, manifest.file(VoiceChoice.ROLE), threads)
                     .also { loaded.add(it::close) }
                 val diarizer = OfflineSpeakerDiarization(source.assetManager, diarizationConfig)
                     .also { loaded.add(it::release) }
+                // Та же модель сегментации, что у диаризатора, но напрямую: по ней ищутся
+                // перекрытия голосов.
+                val powerset = PowersetModel.open(source, manifest.file(ModelRole.SEGMENTATION), threads)
+                    .also { loaded.add(it::close) }
                 val live = if (manifest.hasLiveModel) OnlineRecognizer(source.assetManager, liveConfig(located)) else null
-                return SpeechModels(located, vadConfig, recognizer, voice, diarizer, live, denoiserConfig)
+                return SpeechModels(located, vadConfig, recognizers, voice, diarizer, powerset, live, denoiserConfig)
             } catch (e: Throwable) {
                 loaded.asReversed().forEach { release -> runCatching(release) }
                 if (e is ModelsException) throw e
@@ -132,19 +141,40 @@ class SpeechModels private constructor(
                 numThreads = DENOISER_THREADS,
             )
 
-        private fun recognizerConfig(located: LocatedModels, threads: Int): OfflineRecognizerConfig {
+        // Английский (Parakeet) жадным поиском без горячих слов, см. SpeechLanguage.hotwords.
+        private const val GREEDY_METHOD = "greedy_search"
+
+        // Распознаватель языка: GigaAM для русского, Parakeet для английского.
+        private fun recognizerConfig(located: LocatedModels, language: SpeechLanguage, threads: Int): OfflineRecognizerConfig {
             val source = located.source
             val manifest = located.manifest
+            val (encoder, decoder, joiner, tokens) = language.asrRoles
+            if (!language.hotwords) {
+                return OfflineRecognizerConfig(
+                    featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
+                    modelConfig = OfflineModelConfig(
+                        transducer = OfflineTransducerModelConfig(
+                            encoder = source.pathOf(manifest.file(encoder)),
+                            decoder = source.pathOf(manifest.file(decoder)),
+                            joiner = source.pathOf(manifest.file(joiner)),
+                        ),
+                        tokens = source.pathOf(manifest.file(tokens)),
+                        modelType = NEMO_MODEL_TYPE,
+                        numThreads = threads,
+                    ),
+                    decodingMethod = GREEDY_METHOD,
+                )
+            }
             return OfflineRecognizerConfig(
                 featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
                 modelConfig = OfflineModelConfig(
                     transducer = OfflineTransducerModelConfig(
-                        encoder = source.pathOf(manifest.file(ModelRole.ASR_ENCODER)),
-                        decoder = source.pathOf(manifest.file(ModelRole.ASR_DECODER)),
-                        joiner = source.pathOf(manifest.file(ModelRole.ASR_JOINER)),
+                        encoder = source.pathOf(manifest.file(encoder)),
+                        decoder = source.pathOf(manifest.file(decoder)),
+                        joiner = source.pathOf(manifest.file(joiner)),
                     ),
-                    tokens = source.pathOf(manifest.file(ModelRole.ASR_TOKENS)),
-                    modelType = GIGAAM_MODEL_TYPE,
+                    tokens = source.pathOf(manifest.file(tokens)),
+                    modelType = NEMO_MODEL_TYPE,
                     numThreads = threads,
                     modelingUnit = MODELING_UNIT,
                     bpeVocab = source.pathOf(manifest.file(ModelRole.ASR_BPE_VOCAB)),

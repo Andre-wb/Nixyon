@@ -1,4 +1,5 @@
-//! Движок распознавания для ноутбука на крейте sherpa-onnx: VAD, GigaAM, эмбеддинги голоса,
+//! Движок распознавания для ноутбука на крейте sherpa-onnx: VAD, определение языка Whisper,
+//! GigaAM для русской речи и Parakeet для английской, эмбеддинги голоса,
 //! нейросегментация pyannote, потоковое распознавание для живого текста, шумоподавление GTCRN.
 //! Параметры совпадают с Kotlin-плагином, чтобы ноутбук и телефон давали одинаковый результат.
 
@@ -12,6 +13,8 @@ mod decoding;
 mod denoise;
 mod engine;
 mod error;
+mod language;
+mod language_recognizers;
 mod long_pieces;
 mod manifest;
 mod models;
@@ -28,6 +31,7 @@ mod split_by_pieces;
 mod streaming;
 mod vad_denoiser;
 mod voice_spans;
+mod whisper_language;
 
 pub use analyze::{analyze, bounds_seconds, recognize, recognize_bounds, speech_bounds};
 pub use analyze_recording::{analyze_default, analyze_recording};
@@ -36,6 +40,7 @@ pub use decoding::{BEAM_PATHS, Decoding, HOTWORD_SCORE};
 pub use denoise::denoise_wav;
 pub use engine::SherpaEngine;
 pub use error::SherpaError;
+pub use language::{detect_language, detect_wav_language};
 
 pub use manifest::{ModelManifest, ModelRole};
 pub use models::SherpaModels;
@@ -47,3 +52,4 @@ pub use segment_embeddings::embed_segments;
 pub use sherpa_voice::SherpaVoice;
 pub use streaming::{LiveText, StreamModel};
 pub use voice_spans::{embed_spans, segment_speech, voice_spans};
+pub use whisper_language::WhisperLanguage;

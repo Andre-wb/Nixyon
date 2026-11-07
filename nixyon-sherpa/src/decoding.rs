@@ -1,3 +1,5 @@
+use nixyon_core::SpeechLanguage;
+
 /// Прибавка за каждый токен горячего слова. По замеру на 6 записях 1,5 даёт наименьший
 /// WER; от 3,0 модель начинает вставлять слова из списка там, где их не говорили.
 /// То же значение в SpeechModels.kt.
@@ -18,6 +20,18 @@ pub enum Decoding {
     HotwordBeam { score: f32, paths: i32 },
 }
 
+impl Decoding {
+    /// Способ поиска для распознавателя языка `language`. Английский всегда жадным поиском:
+    /// поиск по лучам sherpa-onnx 2.0.1 на Parakeet TDT теряет фразы в кусках из нескольких
+    /// фраз (на en2 из трёх фраз куска осталось две), поэтому горячих слов у него нет.
+    pub fn for_language(self, language: SpeechLanguage) -> Decoding {
+        match language {
+            SpeechLanguage::Ru => self,
+            SpeechLanguage::En => Decoding::Greedy,
+        }
+    }
+}
+
 impl Default for Decoding {
     /// Как в приложении: поиск по лучам всегда, чтобы горячие слова работали без второй
     /// копии модели; без слов текст тот же, что у жадного поиска, но дольше.
@@ -26,5 +40,21 @@ impl Default for Decoding {
             score: HOTWORD_SCORE,
             paths: BEAM_PATHS,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn english_is_always_greedy_and_russian_keeps_its_decoding() {
+        let beam = Decoding::default();
+        assert_eq!(beam.for_language(SpeechLanguage::Ru), beam);
+        assert_eq!(beam.for_language(SpeechLanguage::En), Decoding::Greedy);
+        assert_eq!(
+            Decoding::Greedy.for_language(SpeechLanguage::Ru),
+            Decoding::Greedy
+        );
     }
 }

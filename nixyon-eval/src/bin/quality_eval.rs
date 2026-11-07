@@ -4,7 +4,7 @@
 //! Набор: `<корень>/<набор>/dataset.json` и `clips.jsonl` (scripts/build-dataset-index.py).
 //! Из каждого набора берётся столько минут звука, сколько попросили, клипы выбираются
 //! перемешанными, но всегда одинаково. Каждый клип идёт через весь конвейер приложения с
-//! настройками по умолчанию, число спикеров «не знаю».
+//! настройками по умолчанию, число спикеров «не знаю», язык речи определяется по клипу.
 //! В папку отчёта пишутся `report.md` (он же печатается в конце), `summary.json` (итоги по
 //! наборам), `clips/<набор>.jsonl` (каждый клип, худшие раньше) и `audio/<набор>/<номер>.wav`
 //! (звук худших клипов). В stderr идут строки `@progress` для хаба.
@@ -29,7 +29,7 @@ use std::sync::mpsc;
 use std::time::Instant;
 
 use nixyon_audio::TARGET_SAMPLE_RATE;
-use nixyon_core::{AudioInfo, CancelFlag, EngineInfo};
+use nixyon_core::{AudioInfo, CancelFlag, EngineInfo, SpeechLanguage};
 use nixyon_eval::{
     ClipDer, ClipHypothesis, ClipResult, Dataset, DatasetScore, ExcludedClips, IndexClip,
     KEEP_RUNS, PlanItem, ProgressMeter, QualitySummary, RunInfo, SPEECH_GAP_SEC, SetClip, Truth,
@@ -42,7 +42,9 @@ use nixyon_ort::{OrtManifest, OrtRole};
 use nixyon_pipeline::{
     MIN_SPEAKER_SEC, PipelineError, PipelineOptions, SpeakerCount, TranscriptMeta, build_transcript,
 };
-use nixyon_sherpa::{Decoding, ModelManifest, SherpaEngine, SherpaModels, analyze_default};
+use nixyon_sherpa::{
+    Decoding, ModelManifest, SherpaEngine, SherpaModels, analyze_default, detect_wav_language,
+};
 use serde::{Serialize, Serializer};
 
 const USAGE: &str = "использование: quality_eval <папка моделей> <корень наборов> --out <папка отчёта> \
@@ -687,15 +689,23 @@ fn recognize(
 ) -> Result<(ClipHypothesis, Vec<SpeakerSpan>), String> {
     let converted = clip_to_wav16k(audio, wav)?;
     let cancel = CancelFlag::new();
-    let (segments, spans) =
-        analyze_default(engine, wav, options, &cancel).map_err(|e| format!("движок: {e}"))?;
+    // Куски речи от языка не зависят, язык в опциях здесь любой.
+    let language = detect_wav_language(
+        engine.models(),
+        wav,
+        &options.engine_options(SpeechLanguage::Ru),
+        &cancel,
+    )
+    .map_err(|e| format!("язык: {e}"))?;
+    let (segments, spans) = analyze_default(engine, wav, options, language, &cancel)
+        .map_err(|e| format!("движок: {e}"))?;
     match build_transcript(
         segments,
         &spans,
         &[],
         SpeakerCount::Auto,
         options,
-        meta(id, converted.duration_sec),
+        meta(id, converted.duration_sec, language),
         &cancel,
     ) {
         Ok(transcript) => {
@@ -723,7 +733,7 @@ fn recognize(
     }
 }
 
-fn meta(id: &str, duration_sec: f64) -> TranscriptMeta {
+fn meta(id: &str, duration_sec: f64, language: SpeechLanguage) -> TranscriptMeta {
     TranscriptMeta {
         created_at: String::new(),
         audio: AudioInfo {
@@ -736,6 +746,7 @@ fn meta(id: &str, duration_sec: f64) -> TranscriptMeta {
             asr: String::new(),
             embedding: String::new(),
         },
+        language,
     }
 }
 

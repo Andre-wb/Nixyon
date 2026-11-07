@@ -41,7 +41,9 @@ pub async fn search_transcript<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, Speaker, Transcript, Turn};
+    use nixyon_core::{
+        AudioInfo, EngineInfo, SCHEMA_VERSION, Speaker, SpeechLanguage, Transcript, Turn,
+    };
 
     fn sample() -> Transcript {
         let turn = |id, text: &str| Turn {
@@ -67,6 +69,7 @@ mod tests {
                 asr: "a".into(),
                 embedding: "e".into(),
             },
+            language: SpeechLanguage::Ru,
             speakers: vec![Speaker {
                 id: 1,
                 name: None,

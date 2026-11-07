@@ -15,8 +15,15 @@ class AnalyzeArgs {
     // Нейросегментация: файл для отрезков и длина блока в секундах; 0: не нужна.
     var spansPath: String? = null
     var neuralBlockSec: Double = 0.0
+    // Перекрытия по модели сегментации: файл для итога, порог и наименьшая длина в секундах;
+    // без файла не нужны.
+    var overlapsPath: String? = null
+    var overlapThreshold: Float = 0f
+    var minOverlapSec: Double = 0.0
     // Горячие слова через «/»; пусто: без них.
     var hotwords: String = ""
+    // Язык речи: "ru" или "en"; null: определить по записи.
+    var language: String? = null
     var onProgress: Channel? = null
 }
 
@@ -108,6 +115,8 @@ class SummaryArgs {
     lateinit var system: String
     lateinit var user: String
     var maxTokens: Int = 0
+    // Язык встречи: "ru" или "en".
+    lateinit var language: String
     var onProgress: Channel? = null
 }
 

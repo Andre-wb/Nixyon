@@ -17,6 +17,10 @@ import { prepareNames } from "./names.js";
 import { loadVoices } from "./voices.js";
 
 const OVERLAP_FLAG = "overlap";
+// Голос слышен, а слова распознались не все; у хода без текста не распознано ничего.
+const UNCLEAR_FLAG = "unclear";
+// Голос мало похож на спикера хода: спикер лучший из найденных, но может быть не тем.
+const SPEAKER_UNSURE_FLAG = "speaker_unsure";
 
 let current = null;
 // Своё название открытой встречи; null: встреча называется датой и временем.
@@ -164,7 +168,15 @@ function render() {
     const meta = `${speakerName(current, turn.speaker)}, ${clock(turn.start)}`;
     const emotion = emotionChip(turn, () => openEmotion(turn, meta, setTranscript));
     head.append(el("span", "turn-name", speakerName(current, turn.speaker)), time, emotion, actions);
+    if (turn.flags?.includes(SPEAKER_UNSURE_FLAG)) {
+      head.append(el("span", "turn-flag", t(K.transcript_speaker_unsure)));
+    }
     if (turn.flags?.includes(OVERLAP_FLAG)) head.append(el("span", "turn-flag", t(K.transcript_overlap)));
+    // Ход без текста: неразборчивая речь или второй говорящий в перекрытии. Человека
+    // слышно, слова не распознаны.
+    const silent = !turn.text.trim();
+    const unclear = turn.flags?.includes(UNCLEAR_FLAG);
+    if (unclear && !silent) head.append(el("span", "turn-flag", t(K.transcript_unclear_part)));
     const text = el("p", "turn-text", turn.text);
     text.dataset.turnId = String(turn.id);
     // Тап по слову играет с него; у хода без времени слов тап играет ход с начала.
@@ -174,6 +186,13 @@ function render() {
       else if (!turn.words?.length) playFrom(turn.start);
     });
     item.append(head, text);
+    // Пометка вместо текста стоит отдельно от .turn-text: поиск и подсветка слов
+    // перерисовывают текст хода и затёрли бы её.
+    if (silent) {
+      const mark = el("p", "turn-unclear", t(K.transcript_unclear));
+      mark.addEventListener("click", () => playFrom(turn.start));
+      item.append(mark);
+    }
     fragment.append(item);
   }
   turns.replaceChildren(fragment);

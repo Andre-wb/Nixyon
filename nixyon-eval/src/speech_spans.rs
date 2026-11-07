@@ -41,7 +41,7 @@ pub fn speech_spans(transcript: &Transcript, max_gap: f64) -> Vec<SpeakerSpan> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nixyon_core::{AudioInfo, EngineInfo, Turn, Word};
+    use nixyon_core::{AudioInfo, EngineInfo, SpeechLanguage, Turn, Word};
 
     fn word(start: f64, end: f64) -> Word {
         Word {
@@ -78,6 +78,7 @@ mod tests {
                 asr: String::new(),
                 embedding: String::new(),
             },
+            language: SpeechLanguage::Ru,
             speakers: Vec::new(),
             turns,
         }

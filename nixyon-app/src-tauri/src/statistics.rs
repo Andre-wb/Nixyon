@@ -29,7 +29,9 @@ pub async fn meeting_stats<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, Speaker, Transcript, Turn};
+    use nixyon_core::{
+        AudioInfo, EngineInfo, SCHEMA_VERSION, Speaker, SpeechLanguage, Transcript, Turn,
+    };
     use nixyon_pipeline::MONOLOGUE_SEC;
 
     fn sample() -> Transcript {
@@ -65,6 +67,7 @@ mod tests {
                 asr: "a".into(),
                 embedding: "e".into(),
             },
+            language: SpeechLanguage::Ru,
             speakers: vec![speaker(1), speaker(2)],
             turns: vec![turn(1, 1, 0.0, 6.0), turn(2, 2, 5.0, 8.0)],
         }

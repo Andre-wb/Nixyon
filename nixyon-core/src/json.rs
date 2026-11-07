@@ -36,6 +36,7 @@ mod tests {
                 asr: "giga-am-v3".into(),
                 embedding: "campplus".into(),
             },
+            language: crate::SpeechLanguage::Ru,
             speakers: vec![
                 Speaker {
                     id: 1,
@@ -137,6 +138,23 @@ mod tests {
         value["turns"][1].as_object_mut().unwrap().remove("flags");
         let back = from_json(&value.to_string()).unwrap();
         assert!(back.turns[1].flags.is_empty());
+    }
+
+    #[test]
+    fn transcript_without_language_reads_as_russian_and_english_survives() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(&to_json(&sample()).unwrap()).unwrap();
+        value.as_object_mut().unwrap().remove("language");
+        let old = from_json(&value.to_string()).unwrap();
+        assert_eq!(old.language, crate::SpeechLanguage::Ru);
+        let mut english = sample();
+        english.language = crate::SpeechLanguage::En;
+        let json = to_json(&english).unwrap();
+        assert!(json.contains("\"language\": \"en\""), "{json}");
+        assert_eq!(
+            from_json(&json).unwrap().language,
+            crate::SpeechLanguage::En
+        );
     }
 
     #[test]

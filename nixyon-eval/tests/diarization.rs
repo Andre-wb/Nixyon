@@ -6,7 +6,9 @@
 use std::path::{Path, PathBuf};
 
 use nixyon_audio::convert_to_wav16k;
-use nixyon_core::{CancelFlag, EngineOptions, SegmentResult, SpeechEdges, SpeechEngine};
+use nixyon_core::{
+    CancelFlag, EngineOptions, SegmentResult, SpeechEdges, SpeechEngine, SpeechLanguage,
+};
 use nixyon_eval::Truth;
 use nixyon_metrics::{DER_COLLAR_SEC, DerBreakdown, SpeakerSpan, diarization_errors};
 use nixyon_pipeline::{PipelineOptions, SpeakerCount, label_segments};
@@ -47,7 +49,7 @@ fn analyze(engine: &SherpaEngine, wav: &Path) -> Vec<SegmentResult> {
             // Деление на спикеров по кускам VAD просит строгие края, как `eval --no-neural`.
             &EngineOptions {
                 edges: SpeechEdges::Tight,
-                ..PipelineOptions::default().engine_options()
+                ..PipelineOptions::default().engine_options(SpeechLanguage::Ru)
             },
             &CancelFlag::new(),
         )

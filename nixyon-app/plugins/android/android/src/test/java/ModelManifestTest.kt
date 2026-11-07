@@ -41,6 +41,9 @@ class ModelManifestTest {
     @Test
     fun missingRoleOrHalfALiveModelIsRejected() {
         assertEquals(ModelsException.BAD_MANIFEST, rejected(manifest(required - ModelRole.VAD)))
+        for (role in listOf(ModelRole.ASR_EN_ENCODER, ModelRole.ASR_EN_TOKENS, ModelRole.LID_ENCODER, ModelRole.LID_DECODER)) {
+            assertEquals(role.key, ModelsException.BAD_MANIFEST, rejected(manifest(required - role)))
+        }
         assertEquals(ModelsException.BAD_MANIFEST, rejected(manifest(required + ModelRole.LIVE_ENCODER)))
     }
 

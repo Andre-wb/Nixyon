@@ -1,4 +1,4 @@
-use nixyon_core::{Turn, Word};
+use nixyon_core::{OVERLAP_FLAG, Turn, Word};
 
 use crate::speaker_names::is_dash;
 
@@ -25,8 +25,14 @@ pub(crate) fn fix_split_sentences(mut turns: Vec<Turn>) -> Vec<Turn> {
         let (before, after) = turns.split_at_mut(i);
         move_tail(&mut before[i - 1], &mut after[0]);
     }
-    turns.retain(|t| !t.text.trim().is_empty());
+    // Ход без текста остаётся, если это неразборчивая речь или перекрытие: он показывает,
+    // что человек говорил.
+    turns.retain(|t| !t.text.trim().is_empty() || t.is_unclear() || is_overlap(t));
     absorb_stray_punctuation(turns)
+}
+
+fn is_overlap(t: &Turn) -> bool {
+    t.flags.iter().any(|f| f == OVERLAP_FLAG)
 }
 
 fn consistent_words(t: &Turn) -> bool {
@@ -217,5 +223,17 @@ mod tests {
         t.turns[1].flags = vec!["overlap".into()];
         let f = fix_split_sentences(t.turns);
         assert_eq!(shape(&f), [(1, "Вы учитесь? Я"), (2, "учусь.")]);
+    }
+
+    #[test]
+    fn empty_overlap_turn_stays_and_other_empty_turns_go() {
+        let mut t = transcript(&[
+            (1, 0.0, 3.0, "Привет."),
+            (2, 1.0, 2.0, ""),
+            (3, 4.0, 5.0, " "),
+        ]);
+        t.turns[1].flags = vec![OVERLAP_FLAG.into()];
+        let f = fix_split_sentences(t.turns);
+        assert_eq!(shape(&f), [(1, "Привет."), (2, "")]);
     }
 }

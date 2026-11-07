@@ -1,5 +1,5 @@
 {
-  "version": "giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8",
+  "version": "giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8+parakeet-tdt-0.6b-v3-int8+whisper-tiny-lid-int8",
   "files": {
     "vad": {
       "path": "vad.onnx",
@@ -80,6 +80,36 @@
       "path": "emotion.int8.onnx",
       "size": 257093387,
       "sha256": "fe1c1b182624180dc66c4275d9f79de506a4af9a169c6e8fed497427d45c6316"
+    },
+    "asr_en_encoder": {
+      "path": "asr-en-encoder.int8.onnx",
+      "size": 652282294,
+      "sha256": "1afbe69c1ffdabee94755f42e4daf1d93549131a3da11356bda84fcef0f2c479"
+    },
+    "asr_en_decoder": {
+      "path": "asr-en-decoder.int8.onnx",
+      "size": 11845274,
+      "sha256": "0222a86147299d4dee90edf95b6d13827edb42ad8b7c9cf0b2582f030937c0b5"
+    },
+    "asr_en_joiner": {
+      "path": "asr-en-joiner.int8.onnx",
+      "size": 6355277,
+      "sha256": "cbd02f3696e9944970111fb439d9c3fd365a80374565f13f2b9c7007d253fc98"
+    },
+    "asr_en_tokens": {
+      "path": "asr-en-tokens.txt",
+      "size": 93939,
+      "sha256": "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"
+    },
+    "lid_encoder": {
+      "path": "lid-encoder.int8.onnx",
+      "size": 12937772,
+      "sha256": "d24fb083ae3b1041fc24e97971d60e280c9342201fbb67b0ab428a8b4a51a434"
+    },
+    "lid_decoder": {
+      "path": "lid-decoder.int8.onnx",
+      "size": 89855401,
+      "sha256": "d2fece8dd42771f1df975c6c0445770d0c292bf7547c2cae04a6c0cc57540925"
     }
   }
 }

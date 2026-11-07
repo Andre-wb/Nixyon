@@ -1,17 +1,18 @@
 use std::path::Path;
 
 use sherpa_onnx::{
-    OfflineRecognizer, OfflineSpeakerDiarization, SpeakerEmbeddingExtractor, VadModelConfig,
-    VoiceActivityDetector,
+    OfflineSpeakerDiarization, SpeakerEmbeddingExtractor, VadModelConfig, VoiceActivityDetector,
 };
 
-use nixyon_core::{BlockSegmenter, Pool, SpeechEdges, VoiceEmbedder};
+use nixyon_core::{BlockSegmenter, LanguageDetector, SpeechEdges, SpeechLanguage, VoiceEmbedder};
 
+use crate::language_recognizers::LanguageRecognizers;
 use crate::music_check::MusicCheck;
 use crate::parallel::Parallel;
 use crate::pyannote_segmenter::PyannoteSegmenter;
 use crate::sherpa_voice::SherpaVoice;
 use crate::vad_denoiser::VadDenoiser;
+use crate::whisper_language::WhisperLanguage;
 use crate::{Decoding, ModelManifest, SherpaError, config};
 
 /// Загруженные модели. VAD хранит состояние потока, поэтому здесь только его
@@ -20,9 +21,10 @@ pub struct SherpaModels {
     version: String,
     vad_config: VadModelConfig,
     tight_vad_config: VadModelConfig,
-    /// Распознаватели: несколько, чтобы куски речи распознавались параллельно.
-    recognizers: Pool<OfflineRecognizer>,
-    decoding: Decoding,
+    /// Распознаватели одного языка: несколько, чтобы куски речи распознавались параллельно.
+    recognizers: LanguageRecognizers,
+    /// Определение языка записи.
+    language: WhisperLanguage,
     /// Модель голоса: по умолчанию из набора, для замера её можно заменить.
     voice: Box<dyn VoiceEmbedder>,
     /// Есть, только если в наборе есть модель нейросегментации или её дали извне.
@@ -85,15 +87,11 @@ impl SherpaModels {
         let tight_vad_config = config::vad(manifest, SpeechEdges::Tight);
         // Пробное создание: ошибка в модели VAD видна при загрузке, а не при первой записи.
         Self::new_vad(&vad_config)?;
-        let recognizer_config = config::recognizer(manifest, decoding, threads)?;
-        let recognizer = || {
-            OfflineRecognizer::create(&recognizer_config)
-                .ok_or(SherpaError::CreateFailed("распознаватель"))
-        };
-        let first_recognizer = recognizer()?;
-        let other_recognizers = (1..asr_jobs)
-            .map(|_| recognizer())
-            .collect::<Result<Vec<_>, _>>()?;
+        // Сразу грузится русский: основной язык приложения. Английский грузится, когда
+        // придёт английская запись.
+        let recognizers =
+            LanguageRecognizers::load(manifest, SpeechLanguage::Ru, decoding, threads, asr_jobs)?;
+        let language = WhisperLanguage::load(manifest)?;
         let embedder = || {
             SpeakerEmbeddingExtractor::create(&config::embedder(manifest, threads))
                 .ok_or(SherpaError::CreateFailed("модель голоса"))
@@ -119,8 +117,8 @@ impl SherpaModels {
             version: manifest.version().to_string(),
             vad_config,
             tight_vad_config,
-            recognizers: Pool::with_first(first_recognizer, other_recognizers),
-            decoding,
+            recognizers,
+            language,
             voice: Box::new(SherpaVoice::pooled(first, rest)),
             segmenter,
             music,
@@ -182,17 +180,22 @@ impl SherpaModels {
         }
     }
 
-    pub(crate) fn recognizers(&self) -> &Pool<OfflineRecognizer> {
+    pub(crate) fn recognizers(&self) -> &LanguageRecognizers {
         &self.recognizers
     }
 
     /// Сколько кусков речи распознаётся параллельно.
     pub fn asr_jobs(&self) -> usize {
-        self.recognizers.len()
+        self.recognizers.jobs()
     }
 
     pub fn decoding(&self) -> Decoding {
-        self.decoding
+        self.recognizers.decoding()
+    }
+
+    /// Определение языка записи.
+    pub fn language_detector(&self) -> &dyn LanguageDetector {
+        &self.language
     }
 
     /// Модель голоса, которой считаются все эмбеддинги.

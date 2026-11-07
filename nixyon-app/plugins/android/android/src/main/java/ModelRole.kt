@@ -15,6 +15,14 @@ enum class ModelRole(val key: String, val optional: Boolean = false) {
     REDIMNET2("redimnet2"),
     SEGMENTATION("segmentation"),
     ASR_BPE_VOCAB("asr_bpe_vocab"),
+    // Parakeet TDT 0.6B v3: английская речь.
+    ASR_EN_ENCODER("asr_en_encoder"),
+    ASR_EN_DECODER("asr_en_decoder"),
+    ASR_EN_JOINER("asr_en_joiner"),
+    ASR_EN_TOKENS("asr_en_tokens"),
+    // Whisper tiny: язык записи, русский или английский (SpeechLanguageDetector).
+    LID_ENCODER("lid_encoder"),
+    LID_DECODER("lid_decoder"),
     LIVE_ENCODER("live_encoder", optional = true),
     LIVE_DECODER("live_decoder", optional = true),
     LIVE_JOINER("live_joiner", optional = true),

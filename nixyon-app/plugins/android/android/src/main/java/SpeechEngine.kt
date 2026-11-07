@@ -41,30 +41,43 @@ class SpeechEngine(private val context: Context) {
         }
 
     // Одна обработка за раз: модели общие, а две обработки поделили бы ядра пополам.
+    // language: язык речи; null: определить по записи.
     // spans: нейросегментация вторым проходом (файл отрезков и длина блока), null: без неё.
+    // overlaps: поиск перекрытий по модели сегментации, null: без него. Оба прохода идут в
+    // фазе голосов и делят её полосу пополам.
     suspend fun analyze(
         wav: File,
         out: File,
         windows: WindowSpans?,
         hotwords: String,
+        language: SpeechLanguage?,
         spans: NeuralRequest?,
+        overlaps: OverlapRequest?,
         progress: (phase: String, doneSec: Double, totalSec: Double) -> Unit,
     ): AnalysisSummary = exclusive {
         val flag = AtomicBoolean(false)
         cancelled = flag
         val models = ensureLoaded()
         var phase = PhaseTiming(models.voice)
-        val summary = SpeechAnalyzer(models, windows, hotwords).run(wav, out, flag) { done, total ->
+        val summary = SpeechAnalyzer(models, windows, hotwords, language).run(wav, out, flag) { done, total ->
             progress(PHASE_RECOGNIZE, done, total)
         }
         phase.log(PHASE_RECOGNIZE, summary.durationSec)
+        val parts = listOfNotNull(spans, overlaps).size
         if (spans != null) {
             phase = PhaseTiming(models.voice)
-            val found = SpeechSegmenter(models, spans.blockSec).run(wav, summary.speech, flag) { done, total ->
-                progress(PHASE_VOICES, done, total)
-            }
+            val share = SplitProgress(0, parts) { done, total -> progress(PHASE_VOICES, done, total) }
+            val found = SpeechSegmenter(models, spans.blockSec).run(wav, summary.speech, flag, share::report)
             phase.log(PHASE_VOICES, summary.durationSec)
             SpansWriter.write(spans.out, found)
+        }
+        if (overlaps != null) {
+            phase = PhaseTiming(models.voice)
+            val share = SplitProgress(parts - 1, parts) { done, total -> progress(PHASE_VOICES, done, total) }
+            val pass = AnalysisProgress(flag, share::report)
+            models.powerset.scan(wav, overlaps, flag) { done -> pass.report(done, summary.durationSec) }
+            pass.done(summary.durationSec)
+            phase.log(PHASE_OVERLAPS, summary.durationSec)
         }
         summary
     }
@@ -194,5 +207,7 @@ class SpeechEngine(private val context: Context) {
         // Этапы прогресса; Rust переводит их в этапы интерфейса.
         const val PHASE_RECOGNIZE = "recognize"
         const val PHASE_VOICES = "voices"
+        // Только для строки замера в логе: в интерфейсе это та же фаза голосов.
+        private const val PHASE_OVERLAPS = "overlaps"
     }
 }

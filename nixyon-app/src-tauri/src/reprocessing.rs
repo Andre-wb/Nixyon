@@ -100,8 +100,10 @@ pub async fn reprocess_turn<R: Runtime>(
     let files_dir = PathBuf::from(&dirs.files);
     let cache_dir = PathBuf::from(&dirs.cache);
     let store_for_load = store.clone();
-    let (turn, audio) = tauri::async_runtime::spawn_blocking(move || {
+    // Фрагмент распознаётся на языке встречи: по одной реплике язык не определить надёжно.
+    let (turn, audio, language) = tauri::async_runtime::spawn_blocking(move || {
         let (meeting_id, transcript) = crate::meetings::load(&store_for_load, &meeting)?;
+        let language = transcript.language;
         let turn = transcript
             .turns
             .into_iter()
@@ -109,7 +111,7 @@ pub async fn reprocess_turn<R: Runtime>(
             .ok_or_else(|| CommandError::new(UNKNOWN_TURN))?;
         let audio =
             audio_file::path(&files_dir, &meeting_id).ok_or_else(|| CommandError::new(NO_AUDIO))?;
-        Ok::<_, CommandError>((turn, audio))
+        Ok::<_, CommandError>((turn, audio, language))
     })
     .await
     .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))??;
@@ -169,7 +171,11 @@ pub async fn reprocess_turn<R: Runtime>(
             step_sec: 0.0,
             spans_path: None,
             neural_block_sec: 0.0,
+            overlaps_path: None,
+            overlap_threshold: 0.0,
+            min_overlap_sec: 0.0,
             hotwords,
+            language: Some(language),
             on_progress: Channel::new(move |body| {
                 if let InvokeResponseBody::Json(text) = body
                     && let Ok(p) = serde_json::from_str::<AnalyzeProgress>(&text)
@@ -218,6 +224,8 @@ pub async fn reprocess_turn<R: Runtime>(
                 system: SYSTEM.to_owned(),
                 user,
                 max_tokens: CHECK_MAX_TOKENS,
+                // Инструкция русская, ответ ждём по-русски.
+                language: nixyon_core::SpeechLanguage::Ru,
                 on_progress: Channel::new(move |body| {
                     if let InvokeResponseBody::Json(text) = body
                         && let Ok(p) = serde_json::from_str::<SummaryProgress>(&text)

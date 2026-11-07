@@ -55,7 +55,7 @@ pub fn score_record(run: &RecordRun<'_>) -> Result<RecordScore, MetricsError> {
 
 #[cfg(test)]
 mod tests {
-    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, Speaker, Turn};
+    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, Speaker, SpeechLanguage, Turn};
     use nixyon_metrics::ErrorCount;
 
     use super::*;
@@ -87,6 +87,7 @@ mod tests {
                 asr: String::new(),
                 embedding: String::new(),
             },
+            language: SpeechLanguage::Ru,
             speakers: (1..=speakers)
                 .map(|id| Speaker {
                     id,

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use nixyon_core::SpeechLanguage;
 use serde::Deserialize;
 
 use crate::{SherpaError, StreamModel};
@@ -14,17 +15,49 @@ pub enum ModelRole {
     AsrJoiner,
     AsrTokens,
     Embedding,
+    /// Parakeet для английской речи.
+    AsrEnEncoder,
+    AsrEnDecoder,
+    AsrEnJoiner,
+    AsrEnTokens,
+    /// Whisper tiny: определение языка записи.
+    LidEncoder,
+    LidDecoder,
 }
 
 impl ModelRole {
-    pub const ALL: [ModelRole; 6] = [
+    pub const ALL: [ModelRole; 12] = [
         ModelRole::Vad,
         ModelRole::AsrEncoder,
         ModelRole::AsrDecoder,
         ModelRole::AsrJoiner,
         ModelRole::AsrTokens,
         ModelRole::Embedding,
+        ModelRole::AsrEnEncoder,
+        ModelRole::AsrEnDecoder,
+        ModelRole::AsrEnJoiner,
+        ModelRole::AsrEnTokens,
+        ModelRole::LidEncoder,
+        ModelRole::LidDecoder,
     ];
+
+    /// Файлы распознавателя языка: кодировщик, декодер, объединитель и токены.
+    pub fn asr(language: SpeechLanguage) -> [ModelRole; 4] {
+        match language {
+            SpeechLanguage::Ru => [
+                ModelRole::AsrEncoder,
+                ModelRole::AsrDecoder,
+                ModelRole::AsrJoiner,
+                ModelRole::AsrTokens,
+            ],
+            SpeechLanguage::En => [
+                ModelRole::AsrEnEncoder,
+                ModelRole::AsrEnDecoder,
+                ModelRole::AsrEnJoiner,
+                ModelRole::AsrEnTokens,
+            ],
+        }
+    }
 
     pub fn key(self) -> &'static str {
         match self {
@@ -34,6 +67,12 @@ impl ModelRole {
             ModelRole::AsrJoiner => "asr_joiner",
             ModelRole::AsrTokens => "asr_tokens",
             ModelRole::Embedding => "embedding",
+            ModelRole::AsrEnEncoder => "asr_en_encoder",
+            ModelRole::AsrEnDecoder => "asr_en_decoder",
+            ModelRole::AsrEnJoiner => "asr_en_joiner",
+            ModelRole::AsrEnTokens => "asr_en_tokens",
+            ModelRole::LidEncoder => "lid_encoder",
+            ModelRole::LidDecoder => "lid_decoder",
         }
     }
 }
@@ -49,8 +88,8 @@ struct RawFile {
     path: String,
 }
 
-/// Необязательные роли: модель нейросегментации и словарь BPE для горячих слов. В основном
-/// наборе они есть, а в наборах для замера (models/variants) их может не быть.
+/// Необязательные роли: модель нейросегментации и словарь BPE GigaAM для горячих слов. В
+/// основном наборе они есть, а в наборах для замера (models/variants) их может не быть.
 const SEGMENTATION_KEY: &str = "segmentation";
 const BPE_VOCAB_KEY: &str = "asr_bpe_vocab";
 /// Необязательная потоковая модель для живого текста: четыре файла Zipformer вместе или
@@ -143,7 +182,8 @@ impl ModelManifest {
         self.optional(self.segmentation.as_deref())
     }
 
-    /// Путь словаря BPE для горячих слов, если он есть в наборе.
+    /// Путь словаря BPE GigaAM для горячих слов, если он есть в наборе. У Parakeet словаря
+    /// нет: английская речь идёт без горячих слов (`Decoding::for_language`).
     pub fn bpe_vocab_path(&self) -> Option<String> {
         self.optional(self.bpe_vocab.as_deref())
     }
@@ -290,6 +330,47 @@ mod tests {
         );
         let with = ModelManifest::parse(Path::new("/m"), &text).unwrap();
         assert_eq!(with.bpe_vocab_path().as_deref(), Some("/m/bpe.vocab"));
+    }
+
+    #[test]
+    fn english_recognizer_and_language_id_are_required() {
+        for role in [
+            ModelRole::AsrEnEncoder,
+            ModelRole::AsrEnTokens,
+            ModelRole::LidEncoder,
+            ModelRole::LidDecoder,
+        ] {
+            let files: Vec<String> = ModelRole::ALL
+                .iter()
+                .filter(|r| **r != role)
+                .map(|r| format!(r#""{}": {{ "path": "m.onnx" }}"#, r.key()))
+                .collect();
+            let without = format!(
+                r#"{{ "version": "v1", "files": {{ {} }} }}"#,
+                files.join(",")
+            );
+            let err = ModelManifest::parse(Path::new("/m"), &without).unwrap_err();
+            assert!(err.to_string().contains(role.key()), "{err}");
+        }
+    }
+
+    #[test]
+    fn each_language_has_its_own_recognizer_files() {
+        let ru = ModelRole::asr(SpeechLanguage::Ru).map(ModelRole::key);
+        let en = ModelRole::asr(SpeechLanguage::En).map(ModelRole::key);
+        assert_eq!(
+            ru,
+            ["asr_encoder", "asr_decoder", "asr_joiner", "asr_tokens"]
+        );
+        assert_eq!(
+            en,
+            [
+                "asr_en_encoder",
+                "asr_en_decoder",
+                "asr_en_joiner",
+                "asr_en_tokens"
+            ]
+        );
     }
 
     fn with_live(keys: &[&str]) -> String {

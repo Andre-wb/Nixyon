@@ -1,8 +1,8 @@
-use nixyon_core::{Transcript, Word};
+use nixyon_core::{Transcript, Turn, Word};
 
 use crate::clock::srt_timestamp;
 use crate::labels::Labels;
-use crate::names::speaker_name;
+use crate::names::turn_speaker_name;
 use crate::spread::spread_words;
 use crate::txt::one_line;
 
@@ -67,16 +67,40 @@ impl Cue {
     }
 }
 
+// Слова титров хода. У неразборчивой речи пометка вместо текста растягивается на весь ход,
+// а после распознанной части встаёт словом до конца хода.
+fn shown_words(turn: &Turn, labels: &Labels) -> Vec<Word> {
+    if !turn.is_unclear() {
+        return spread_words(turn);
+    }
+    let mut words = match &turn.words {
+        Some(words) if !words.is_empty() => words.clone(),
+        _ => {
+            let mut shown = turn.clone();
+            shown.text = labels.turn_text(turn);
+            shown.words = None;
+            return spread_words(&shown);
+        }
+    };
+    let from = words.last().map_or(turn.start, |w| w.end);
+    words.push(Word {
+        text: labels.unclear.clone(),
+        start: from,
+        end: turn.end.max(from),
+    });
+    words
+}
+
 /// Субтитры SRT: титр не длиннее 6 с, до двух строк по 42 знака, имя говорящего в
 /// первом титре каждого хода. Время слов берётся из движка или раскладывается по буквам.
 pub fn render_srt(transcript: &Transcript, labels: &Labels) -> String {
     let mut cues: Vec<Cue> = Vec::new();
     for turn in &transcript.turns {
-        let words = spread_words(turn);
+        let words = shown_words(turn, labels);
         let Some(first) = words.first() else {
             continue;
         };
-        let name = one_line(&speaker_name(transcript, turn.speaker, labels));
+        let name = one_line(&turn_speaker_name(transcript, turn, labels));
         let prefix = match labels.emotion(turn.emotion) {
             Some(emotion) => format!("{name} ({}): ", one_line(emotion)),
             None => format!("{name}: "),

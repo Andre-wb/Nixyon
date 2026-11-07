@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{AudioInfo, EngineInfo, Speaker, Turn};
+use crate::{AudioInfo, EngineInfo, Speaker, SpeechLanguage, Turn};
 
 /// Версия формата файла расшифровки.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -13,6 +13,9 @@ pub struct Transcript {
     pub created_at: String,
     pub audio: AudioInfo,
     pub engine: EngineInfo,
+    /// Язык речи записи. В файлах, записанных до английского, поля нет: они русские.
+    #[serde(default)]
+    pub language: SpeechLanguage,
     pub speakers: Vec<Speaker>,
     pub turns: Vec<Turn>,
 }

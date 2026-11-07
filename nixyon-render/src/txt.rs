@@ -2,7 +2,7 @@ use nixyon_core::Transcript;
 
 use crate::clock::clock;
 use crate::labels::Labels;
-use crate::names::speaker_name;
+use crate::names::turn_speaker_name;
 
 /// Простой текст: заголовок со сводкой, затем ходы блоками «имя, время» и текст.
 pub fn render_txt(transcript: &Transcript, labels: &Labels, recorded_at: Option<&str>) -> String {
@@ -29,10 +29,10 @@ pub fn render_txt(transcript: &Transcript, labels: &Labels, recorded_at: Option<
             .unwrap_or_default();
         out.push_str(&format!(
             "\n{}, {}{}\n{}\n",
-            one_line(&speaker_name(transcript, turn.speaker, labels)),
+            one_line(&turn_speaker_name(transcript, turn, labels)),
             clock(turn.start),
             emotion,
-            one_line(&turn.text)
+            one_line(&labels.turn_text(turn))
         ));
     }
     out

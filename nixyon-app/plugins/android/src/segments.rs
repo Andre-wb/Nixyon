@@ -39,6 +39,10 @@ pub enum SegmentsError {
     },
     #[error("у отрезка нейросегментации {index} неверное время")]
     BadSpan { index: usize },
+    #[error("у перекрытия {index} неверное время")]
+    BadOverlap { index: usize },
+    #[error("окно модели сегментации {index} битое")]
+    BadOverlapWindow { index: usize },
 }
 
 pub fn read_segments(path: &Path) -> Result<Vec<SegmentResult>, SegmentsError> {

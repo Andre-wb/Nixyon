@@ -1,5 +1,6 @@
 use nixyon_core::{
-    AudioInfo, EngineInfo, SCHEMA_VERSION, SegmentResult, Speaker, Transcript, Turn, Word,
+    AudioInfo, EngineInfo, SCHEMA_VERSION, SegmentResult, Speaker, SpeechLanguage, Transcript,
+    Turn, Word,
 };
 
 use crate::TranscriptMeta;
@@ -22,6 +23,7 @@ pub fn transcript(turns: &[(u32, f64, f64, &str)]) -> Transcript {
             asr: "asr".into(),
             embedding: "emb".into(),
         },
+        language: SpeechLanguage::Ru,
         speakers: ids
             .into_iter()
             .map(|id| Speaker {
@@ -91,5 +93,6 @@ pub fn meta() -> TranscriptMeta {
             asr: "asr".into(),
             embedding: "emb".into(),
         },
+        language: SpeechLanguage::Ru,
     }
 }

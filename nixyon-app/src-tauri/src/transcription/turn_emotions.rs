@@ -35,7 +35,7 @@ pub fn apply_emotions(transcript: &mut Transcript, emotions: &TurnEmotions) {
 #[cfg(test)]
 mod tests {
     use nixyon_android::TurnEmotionVerdict;
-    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, Turn, TurnEmotion};
+    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, SpeechLanguage, Turn, TurnEmotion};
 
     use super::*;
 
@@ -53,6 +53,7 @@ mod tests {
                 asr: "asr".into(),
                 embedding: "emb".into(),
             },
+            language: SpeechLanguage::Ru,
             speakers: Vec::new(),
             turns: turns
                 .iter()

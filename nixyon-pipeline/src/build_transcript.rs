@@ -1,5 +1,6 @@
 use nixyon_core::{
-    CancelFlag, SCHEMA_VERSION, SegmentResult, Speaker, Transcript, Turn, VoiceSample, VoiceSpan,
+    CancelFlag, ModelOverlaps, SCHEMA_VERSION, SegmentResult, Speaker, Transcript, Turn,
+    VoiceSample, VoiceSpan,
 };
 
 use crate::neural_turns::neural_turns;
@@ -8,6 +9,7 @@ use crate::sentence_fix::fix_split_sentences;
 use crate::speaker_labels::label_segments;
 use crate::speaker_names::{apply_names, intro_names};
 use crate::turns::glue_turns;
+use crate::unclear_speech::unclear_segment;
 use crate::word_cut::cut_by_words;
 use crate::words::tokens_to_words;
 use crate::{
@@ -15,7 +17,9 @@ use crate::{
 };
 
 /// Вторая фаза: из кусков речи от движка собирает расшифровку со спикерами.
-/// Куски без текста отбрасываются; ходы одного спикера с короткой паузой склеиваются.
+/// Куски без текста отбрасываются, кроме тех, где нейросегментация слышит голос: они
+/// остаются ходами без текста с пометкой неразборчивой речи. Ходы одного спикера с
+/// короткой паузой склеиваются.
 /// `spans`: отрезки нейросегментации, нужны только при `options.neural_segmentation`.
 /// `samples`: образцы голоса; спикер, похожий на образец, получает его имя.
 pub fn build_transcript(
@@ -34,7 +38,7 @@ pub fn build_transcript(
 /// То же, что `build_transcript`, и вдобавок центры голосов спикеров расшифровки (по
 /// возрастанию номера): по ним голос запоминают в библиотеку.
 pub fn build_transcript_with_centers(
-    mut segments: Vec<SegmentResult>,
+    segments: Vec<SegmentResult>,
     spans: &[VoiceSpan],
     samples: &[VoiceSample],
     count: SpeakerCount,
@@ -42,15 +46,59 @@ pub fn build_transcript_with_centers(
     meta: TranscriptMeta,
     cancel: &CancelFlag,
 ) -> Result<(Transcript, Vec<SpeakerCenter>), PipelineError> {
+    let segmentation = Segmentation {
+        spans,
+        overlaps: &ModelOverlaps::default(),
+    };
+    build_transcript_from(
+        segments,
+        segmentation,
+        samples,
+        count,
+        options,
+        meta,
+        cancel,
+    )
+}
+
+/// Что дала нейросегментация записи.
+#[derive(Debug, Clone, Copy)]
+pub struct Segmentation<'a> {
+    /// Отрезки говорящих, нужны при `options.neural_segmentation`.
+    pub spans: &'a [VoiceSpan],
+    /// Перекрытия по модели сегментации и окна вокруг них, нужны способам ходов без
+    /// текста, которые берут перекрытия из модели (`options.silent_overlaps`).
+    pub overlaps: &'a ModelOverlaps,
+}
+
+/// То же, что `build_transcript_with_centers`, с перекрытиями по модели сегментации.
+pub fn build_transcript_from(
+    mut segments: Vec<SegmentResult>,
+    segmentation: Segmentation<'_>,
+    samples: &[VoiceSample],
+    count: SpeakerCount,
+    options: &PipelineOptions,
+    meta: TranscriptMeta,
+    cancel: &CancelFlag,
+) -> Result<(Transcript, Vec<SpeakerCenter>), PipelineError> {
     check(cancel)?;
-    segments.retain(|s| !s.text.trim().is_empty());
+    segments.retain(|s| {
+        !s.text.trim().is_empty()
+            || (options.neural_segmentation && unclear_segment(s, segmentation.spans))
+    });
     if segments.is_empty() {
         return Err(PipelineError::NoSpeech);
     }
     segments.sort_by(|a, b| a.start.total_cmp(&b.start));
 
     let (turns, centers) = if options.neural_segmentation {
-        neural_turns(&segments, spans, count, options)
+        neural_turns(
+            &segments,
+            segmentation.spans,
+            segmentation.overlaps,
+            count,
+            options,
+        )
     } else {
         vad_turns(segments, count, options)
     };
@@ -74,6 +122,7 @@ pub fn build_transcript_with_centers(
         created_at: meta.created_at,
         audio: meta.audio,
         engine: meta.engine,
+        language: meta.language,
         speakers: ids
             .into_iter()
             .map(|id| Speaker {
@@ -371,6 +420,99 @@ mod tests {
         .unwrap();
         let texts: Vec<&str> = t.turns.iter().map(|x| x.text.as_str()).collect();
         assert_eq!(texts, ["первый", "второй"]);
+    }
+
+    #[test]
+    fn voiced_segment_without_text_stays_as_unclear_speech_of_its_speaker() {
+        use nixyon_core::{UNCLEAR_FLAG, VoiceSpan};
+
+        let span = |start: f64, end: f64, id: usize| VoiceSpan {
+            start,
+            end,
+            embedding: voice(id, 0.0),
+        };
+        let segs = vec![
+            with_tokens(segment(0.0, 2.0, "добрый день", voice(1, 0.0))),
+            segment(2.5, 5.0, "", voice(2, 0.0)),
+            with_tokens(segment(5.5, 7.5, "начнём", voice(1, 0.1))),
+            // Щелчок без голоса в сегментации пропадает, как раньше.
+            segment(8.0, 9.5, "", voice(2, 0.0)),
+        ];
+        let spans = vec![span(0.0, 2.0, 1), span(2.5, 5.0, 2), span(5.5, 7.5, 1)];
+        let t = build_transcript(
+            segs.clone(),
+            &spans,
+            &[],
+            SpeakerCount::Known(2),
+            &PipelineOptions::default(),
+            meta(),
+            &CancelFlag::new(),
+        )
+        .unwrap();
+        let shape: Vec<(u32, &str, bool)> = t
+            .turns
+            .iter()
+            .map(|x| (x.speaker, x.text.as_str(), x.flags == [UNCLEAR_FLAG]))
+            .collect();
+        assert_eq!(
+            shape,
+            [
+                (1, "добрый день", false),
+                (2, "", true),
+                (1, "начнём", false)
+            ]
+        );
+        assert_eq!((t.turns[1].start, t.turns[1].end), (2.5, 5.0));
+        assert_eq!(t.turns[1].words, None);
+        assert_eq!(t.speaker(2).unwrap().words, 0);
+
+        // Без нейросегментации голос не подтвердить: кусок без текста пропадает.
+        let vad_only = PipelineOptions {
+            neural_segmentation: false,
+            ..PipelineOptions::default()
+        };
+        let plain = build_transcript(
+            segs,
+            &spans,
+            &[],
+            SpeakerCount::Known(2),
+            &vad_only,
+            meta(),
+            &CancelFlag::new(),
+        )
+        .unwrap();
+        assert!(plain.turns.iter().all(|x| !x.text.is_empty()));
+    }
+
+    #[test]
+    fn speech_that_is_heard_but_not_recognized_at_all_is_still_a_transcript() {
+        use nixyon_core::VoiceSpan;
+
+        let segs = vec![
+            segment(0.0, 3.0, "", voice(1, 0.0)),
+            segment(4.0, 6.0, "", voice(2, 0.0)),
+        ];
+        let spans: Vec<VoiceSpan> = segs
+            .iter()
+            .map(|s| VoiceSpan {
+                start: s.start,
+                end: s.end,
+                embedding: s.embedding.clone(),
+            })
+            .collect();
+        let t = build_transcript(
+            segs,
+            &spans,
+            &[],
+            SpeakerCount::Known(2),
+            &PipelineOptions::default(),
+            meta(),
+            &CancelFlag::new(),
+        )
+        .unwrap();
+        assert_eq!(t.turns.len(), 2);
+        assert!(t.turns.iter().all(|x| x.is_unclear() && x.text.is_empty()));
+        assert_eq!(t.speakers.len(), 2);
     }
 
     #[test]

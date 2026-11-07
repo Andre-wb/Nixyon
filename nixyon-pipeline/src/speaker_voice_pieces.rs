@@ -16,13 +16,17 @@ pub struct SpeakerPieces {
 }
 
 /// Для каждого спикера самые длинные реплики, всего не больше `max_sec` секунд; последняя
-/// обрезается по остатку. Реплики, где говорят сразу несколько, и короче
-/// `VOICE_PIECE_MIN_SEC` не берутся: там голос не одного спикера или его слишком мало.
+/// обрезается по остатку. Реплики, где говорят сразу несколько, с неуверенным спикером и
+/// короче `VOICE_PIECE_MIN_SEC` не берутся: там голос не одного спикера, может быть
+/// чужим или его слишком мало.
 /// Спикер без подходящих реплик не попадает в ответ. Порядок по номеру спикера.
 pub fn speaker_voice_pieces(transcript: &Transcript, max_sec: f64) -> Vec<SpeakerPieces> {
     let mut turns: BTreeMap<u32, Vec<(f64, f64, u32)>> = BTreeMap::new();
     for t in &transcript.turns {
-        if t.duration() >= VOICE_PIECE_MIN_SEC && !t.flags.iter().any(|f| f == OVERLAP_FLAG) {
+        if t.duration() >= VOICE_PIECE_MIN_SEC
+            && !t.flags.iter().any(|f| f == OVERLAP_FLAG)
+            && !t.is_speaker_unsure()
+        {
             turns
                 .entry(t.speaker)
                 .or_default()
@@ -69,9 +73,17 @@ mod tests {
     }
 
     #[test]
-    fn short_and_overlapping_turns_are_left_out() {
-        let mut t = transcript(&[(1, 0.0, 0.5, "а"), (1, 1.0, 4.0, "б"), (2, 4.0, 9.0, "в")]);
+    fn short_overlapping_and_unsure_turns_are_left_out() {
+        let mut t = transcript(&[
+            (1, 0.0, 0.5, "а"),
+            (1, 1.0, 4.0, "б"),
+            (2, 4.0, 9.0, "в"),
+            (2, 9.0, 12.0, "г"),
+        ]);
         t.turns[1].flags.push(OVERLAP_FLAG.into());
+        t.turns[3]
+            .flags
+            .push(nixyon_core::SPEAKER_UNSURE_FLAG.into());
         let got = speaker_voice_pieces(&t, 30.0);
         assert_eq!(
             got,

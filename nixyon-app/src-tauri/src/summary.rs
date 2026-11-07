@@ -54,11 +54,11 @@ pub async fn summarize_meeting<R: Runtime>(
         .ok_or_else(|| CommandError::new(CommandError::BUSY))?;
     let store = crate::vault::storage(&app).await?.store;
     let store_for_load = store.clone();
-    let (id, user) = tauri::async_runtime::spawn_blocking(move || {
+    let (id, user, language) = tauri::async_runtime::spawn_blocking(move || {
         let (id, transcript) = crate::meetings::load(&store_for_load, &meeting)?;
         let user = prompt::meeting_text(&transcript)
             .map_err(|e| CommandError::logged(CommandError::ENGINE_FAILED, e))?;
-        Ok::<_, CommandError>((id, user))
+        Ok::<_, CommandError>((id, user, transcript.language))
     })
     .await
     .map_err(|e| CommandError::logged(CommandError::ENGINE_FAILED, e))??;
@@ -70,9 +70,10 @@ pub async fn summarize_meeting<R: Runtime>(
     let reply = app
         .speech()
         .summarize(SummaryRequest {
-            system: prompt::SYSTEM.to_owned(),
+            system: prompt::system(language).to_owned(),
             user,
             max_tokens: prompt::MAX_TOKENS,
+            language,
             on_progress: Channel::new(move |body| {
                 if let InvokeResponseBody::Json(text) = body
                     && let Ok(p) = serde_json::from_str::<SummaryProgress>(&text)

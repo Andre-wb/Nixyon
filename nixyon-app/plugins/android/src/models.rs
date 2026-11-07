@@ -1,3 +1,4 @@
+use nixyon_core::SpeechLanguage;
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 
@@ -46,8 +47,16 @@ pub struct AnalyzeRequest {
     pub step_sec: f64,
     pub spans_path: Option<String>,
     pub neural_block_sec: f64,
+    /// Куда записать перекрытия по модели сегментации; None: не искать их.
+    pub overlaps_path: Option<String>,
+    /// Вероятность перекрытия в кадре, выше которой кадр считается перекрытием.
+    pub overlap_threshold: f32,
+    /// Перекрытия короче этого, секунды, не записываются.
+    pub min_overlap_sec: f64,
     /// Горячие слова одной строкой через «/» (`nixyon_core::hotwords_line`); пусто: без них.
     pub hotwords: String,
+    /// Язык речи записи; None: плагин определяет его по записи.
+    pub language: Option<SpeechLanguage>,
     pub on_progress: Channel<serde_json::Value>,
 }
 
@@ -62,6 +71,8 @@ pub struct AnalyzeSummary {
     pub embedding_model: String,
     /// Порог слияния групп в одного человека, привязанный к модели голоса на устройстве.
     pub same_speaker_cosine: f64,
+    /// Язык, на котором распознана запись: заданный или определённый плагином.
+    pub language: SpeechLanguage,
 }
 
 /// Эмбеддинг образца голоса по WAV 16 кГц. Речи меньше `min_speech_sec` секунд:
@@ -303,6 +314,8 @@ pub struct SummaryRequest {
     pub system: String,
     pub user: String,
     pub max_tokens: u32,
+    /// Язык встречи: на нём Kotlin просит свести протоколы частей длинной встречи.
+    pub language: SpeechLanguage,
     pub on_progress: Channel<serde_json::Value>,
 }
 

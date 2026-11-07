@@ -50,7 +50,7 @@ fn dominant_voice(transcript: &Transcript, speaker: u32, truth: &Truth) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, Turn};
+    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, SpeechLanguage, Turn};
 
     fn hypothesis(turns: &[(u32, f64, f64)]) -> Transcript {
         Transcript {
@@ -66,6 +66,7 @@ mod tests {
                 asr: String::new(),
                 embedding: String::new(),
             },
+            language: SpeechLanguage::Ru,
             speakers: Vec::new(),
             turns: turns
                 .iter()

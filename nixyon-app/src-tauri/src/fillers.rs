@@ -142,6 +142,8 @@ pub async fn remove_filler_words<R: Runtime>(
                 system: SYSTEM.to_owned(),
                 user: batch_prompt(batch),
                 max_tokens: MAX_TOKENS,
+                // Инструкция русская, ответ ждём по-русски.
+                language: nixyon_core::SpeechLanguage::Ru,
                 on_progress: Channel::new(|_: InvokeResponseBody| Ok(())),
             })
             .await

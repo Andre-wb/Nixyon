@@ -9,6 +9,7 @@ import { unlockApp } from "./lock.js";
 import { initPlayer } from "./player.js";
 import { initProcessing } from "./processing.js";
 import { applyHotwords, applySetting, initSettings } from "./settings.js";
+import { applySpeechLanguage } from "./settings-speech.js";
 import { applyAudioCleanup, cleanOldAudio } from "./settings-storage.js";
 import { handleModalBack, show } from "./screens.js";
 import { initSearch } from "./search.js";
@@ -27,6 +28,7 @@ async function start() {
   applyTheme(settings.theme);
   applySetting(settings.language);
   applyHotwords(settings.hotwords);
+  applySpeechLanguage(settings.speech_language);
   applyAudioCleanup(settings.audio_cleanup_days);
   // Очистка идёт в фоне: запуск её не ждёт.
   cleanOldAudio();

@@ -131,7 +131,19 @@ Nixyon расшифровывает записи встреч на русско�
      [`neural_labels.rs`](nixyon-pipeline/src/neural_labels.rs),
      [`word_speakers.rs`](nixyon-pipeline/src/word_speakers.rs)); говорящий слова берётся
      по середине слова, наложение голосов помечается флагом `overlap`;
-   - куски с пустым текстом отбрасываются; если текста нет совсем, это ошибка;
+   - кусок без букв от 1 с, где нейросегментация слышит голос хотя бы на половине времени,
+     остаётся репликой без текста с флагом `unclear` (в интерфейсе и экспорте
+     «[неразборчиво]»); остальные куски с пустым текстом отбрасываются, а если нет ни текста,
+     ни такой речи, это ошибка
+     ([`unclear_speech.rs`](nixyon-pipeline/src/unclear_speech.rs)). Реплика, где на
+     секунду голоса меньше 3 букв и голоса не меньше 2 с, тоже получает `unclear`: текст
+     остаётся, после него «[неразборчиво]». Правка текста снимает флаг;
+   - реплика, голос которой похож на центр своего спикера меньше чем на косинус 0,45,
+     получает флаг `speaker_unsure`: спикер остаётся лучшим из найденных, в интерфейсе
+     пометка «Спикер под вопросом», в экспорте «(?)» после имени
+     ([`speaker_unsure.rs`](nixyon-pipeline/src/speaker_unsure.rs)). По замеру на 16
+     записях с эталоном и 4 синтезированных диалогах среди помеченных ошибочен каждый третий-четвёртый
+     ход, среди остальных 3 %, поэтому спикер не заменяется на «не определён»;
    - кусок VAD, покрытый отрезками нейросегментации меньше чем наполовину, кластеризуется
      своим эмбеддингом; в кластеризацию AHC идут куски от 1,5 с, короткие присоединяются к
      ближайшему центру;
@@ -191,6 +203,7 @@ Nixyon расшифровывает записи встреч на русско�
   "created_at": "2026-10-28T11:30:00Z",
   "audio": { "file": "meeting.wav", "duration_sec": 3725.4, "sample_rate": 16000 },
   "engine": { "vad": "silero_vad", "asr": "...", "embedding": "..." },
+  "language": "ru",
   "speakers": [
     { "id": 1, "name": null, "talk_time_sec": 14.0, "turns": 2, "words": 30 }
   ],
@@ -206,7 +219,9 @@ Nixyon расшифровывает записи встреч на русско�
 ```
 
 - `words` бывает `null`, если движок не дал время слов;
-- `flags` у реплики: `overlap` (наложение голосов) и `clipping`;
+- `flags` у реплики: `overlap` (наложение голосов), `unclear` (голос слышен, а текст
+  распознан не весь; у реплики без текста не распознано ничего), `speaker_unsure` (голос
+  мало похож на спикера реплики) и `clipping`;
 - `emotion` у реплики: `neutral`, `joy`, `sadness`, `anger` от модели GigaAM-Emo или
   выбранные вручную, вручную ещё `fear`, `surprise`, `disgust`; поля нет, если модели в наборе
   нет или она не уверена. При склейке реплик с разными эмоциями эмоция пропадает;
@@ -216,7 +231,10 @@ Nixyon расшифровывает записи встреч на русско�
 - `gender` у спикера: `female` или `male` по оценке пола той же модели, у детей тоже (у
   мальчиков модель часто ошибается); при слиянии ведёт себя так же, как `age`;
 - в `engine.embedding` приложение пишет имя файла модели голоса из манифеста, в `engine.asr`
-  версию набора моделей.
+  версию набора моделей;
+- `language`: язык речи записи, `ru` (распознаёт GigaAM) или `en` (Parakeet), заданный в
+  настройках или определённый по записи; в файлах, записанных до английского, поля нет, они
+  читаются как `ru`. На этом языке составляется протокол встречи.
 
 В JSON хранится номер спикера. Подпись «Спикер N» или «Speaker N» подставляют рендеры
 на языке интерфейса, если у спикера нет имени.
@@ -487,6 +505,8 @@ Nixyon расшифровывает записи встреч на русско�
 | `tagging_model`, `tagging_labels` | `tagging.int8.onnx`, `tagging-labels.csv` | `audio-tagging-models/sherpa-onnx-ced-tiny-audio-tagging-2024-04-19.tar.bz2` |
 | `redimnet2` | `redimnet2-b6.onnx` | жёсткая ссылка (или копия) на `models/ort/redimnet2-b6.onnx` |
 | `denoiser` | `denoiser.onnx` | `speech-enhancement-models/gtcrn_simple.onnx`: шумоподавление GTCRN для второго VAD, которым режутся куски VAD от 15 с |
+| `asr_en_encoder`, `asr_en_decoder`, `asr_en_joiner`, `asr_en_tokens` | `asr-en-encoder.int8.onnx`, `asr-en-decoder.int8.onnx`, `asr-en-joiner.int8.onnx`, `asr-en-tokens.txt` | Parakeet TDT 0.6B v3 int8 для английской речи: файлы по одному из [csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8), ревизия закреплена (архив в релизе перепакован и не совпадает со своей суммой в `checksum.txt`) |
+| `lid_encoder`, `lid_decoder` | `lid-encoder.int8.onnx`, `lid-decoder.int8.onnx` | `asr-models/sherpa-onnx-whisper-tiny.tar.bz2`: определение языка записи |
 
 - Словарь BPE строит [`scripts/spm-to-bpe-vocab.py`](scripts/spm-to-bpe-vocab.py) из
   `tokenizer.model` без пакета sentencepiece. Скрипт отказывается работать, если части словаря
@@ -498,12 +518,12 @@ Nixyon расшифровывает записи встреч на русско�
   SHA-256. Если версия и суммы совпадают, большой архив заново не распаковывается.
 - Роли на ноутбуке ([`nixyon-sherpa/src/manifest.rs`](nixyon-sherpa/src/manifest.rs)):
   обязательные `vad`, `asr_encoder`, `asr_decoder`, `asr_joiner`, `asr_tokens`,
-  `embedding`; необязательные `segmentation` и `asr_bpe_vocab`; потоковая модель задаётся
+  `embedding`, четыре роли `asr_en_*` и две `lid_*`; необязательные `segmentation` и `asr_bpe_vocab`; потоковая модель задаётся
   четырьмя ролями `live_*`, а фильтр музыки двумя ролями `tagging_*`, целиком или не
   задаётся вовсе. Роль `redimnet2` ноутбук не читает. Путь роли: простое имя файла без
   папок.
 - Роли на телефоне ([`ModelRole.kt`](nixyon-app/plugins/android/android/src/main/java/ModelRole.kt)):
-  обязательны те же шесть и ещё `redimnet2`, `segmentation` и `asr_bpe_vocab`;
+  обязательны те же двенадцать и ещё `redimnet2`, `segmentation` и `asr_bpe_vocab`;
   необязательны четыре роли `live_*` (все вместе), `denoiser`, `age_gender` и `emotion`. Роли
   `tagging_*` телефон не читает.
 
@@ -961,6 +981,7 @@ cd nixyon-app/src-tauri/gen/android
 | `real3` | три человека из тестовых записей sherpa-onnx (китайская речь) |
 | `ru2`, `ru4`, `ru6` | 2, 4 и 6 человек из VoxForge RU |
 | `ru4_fast`, `ru4_overlap` | клипы `ru4` со сменой голоса без паузы и с наложением речи |
+| `en2`, `en4`, `en6` | 2, 4 и 6 человек из английской VoxForge, три женщины и трое мужчин с родным английским; границы речи по громкости |
 | `prior6a`, `prior6b` | «прошлые встречи» тех же шести человек для замера библиотеки голосов |
 
 Рядом с каждым `<имя>.wav` лежит разметка `<имя>.truth.json`: `speakers` и `turns[]` с
@@ -1013,6 +1034,7 @@ cargo run --release -p nixyon-eval --bin eval -- models models/dialogs \
 | `--hotwords <файл>` | горячие слова, по одному слову или фразе в строке |
 | `--dump <папка>` | сохранить расшифровку каждой записи в `<папка>/<имя>.json`, с `--combo` в `<папка>/<сочетание>/<имя>.json` |
 | `--denoise <gtcrn.onnx>` | шумоподавление GTCRN до распознавания |
+| `--language auto\|ru\|en` | язык речи записей; `auto` (по умолчанию, как в приложении) определяет язык каждой записи по пяти кускам речи и печатает его |
 | `--no-vad-denoise` | без второго VAD по звуку после GTCRN (роль `denoiser` в наборе): куски VAD от 15 с не режутся; по умолчанию он работает, как в приложении |
 | `--voice-model <имя>` | модель голоса: `campplus` (по умолчанию), `redimnet2`, `redimnet2-b0`, `redimnet2-b1`, `redimnet2-b2`, `redimnet2-b3`, `redimnet2-b3-vb2`, `redimnet2-b6-dyn` |
 | `--segmenter <имя>` | нейросегментация: `pyannote` (по умолчанию), `sortformer-int8`, `sortformer-fp32` |
@@ -1276,10 +1298,13 @@ scripts/llm-meeting-eval.sh <llama-server> <папка результатов> <
 | ReDimNet2 B0-B6 (выгрузки весов PalabraAI) | не сверена, в репозитории не указана | [PalabraAI/redimnet2](https://github.com/PalabraAI/redimnet2) |
 | Sortformer 4spk-v2 (выгрузки DimQ1) | не сверена, в репозитории не указана | [DimQ1/sortformer-4spk-v2-onnx-int8-cpu](https://huggingface.co/DimQ1/sortformer-4spk-v2-onnx-int8-cpu) |
 | T-one (необязательная, для `stream_eval`) | Apache-2.0 (файл `LICENSE` в архиве) | [релизы sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases) |
+| Parakeet TDT 0.6B v3, входит в APK | CC BY 4.0 (README в архиве sherpa-onnx и карточка модели) | [nvidia/parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) |
+| Whisper tiny, входит в APK: определение языка | MIT | [openai/whisper](https://github.com/openai/whisper), [релизы sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases) |
 | GTCRN (`gtcrn_simple.onnx`), входит в APK: второй VAD для длинных кусков | MIT (файл `LICENSE` в репозитории авторов); что файл релиза sherpa-onnx выгружен из этой модели, по документации sherpa-onnx не сверено | [Xiaobin-Rong/gtcrn](https://github.com/Xiaobin-Rong/gtcrn), [релизы sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases) |
 | Qwen3.5-4B GGUF (unsloth) | Apache-2.0 | [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) |
 | llama.cpp | MIT (файл `LICENSE` в исходниках) | [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) |
 | VoxForge RU | GPLv3 | [voxforge.org](http://www.repository.voxforge1.org/downloads/Russian/Trunk/Audio/Main/16kHz_16bit) |
+| VoxForge EN | GPLv3 | [voxforge.org](http://www.repository.voxforge1.org/downloads/SpeechCorpus/Trunk/Audio/Main/16kHz_16bit) |
 | DEMAND | CC BY 4.0 | [Zenodo 1227121](https://zenodo.org/records/1227121) |
 | Common Voice | CC0 | клипы в `nixyon-eval/tests/data` |
 | open_stt, AxonData | CC BY-NC 4.0 | по `build-dataset-index.py` |

@@ -1,7 +1,10 @@
 use nixyon_cluster::SAME_SPEAKER_CENTROID_COSINE;
-use nixyon_core::{EngineOptions, SpeechEdges, WindowSpec};
+use nixyon_core::{EngineOptions, SpeechEdges, SpeechLanguage, WindowSpec};
 
-use crate::{LONG_SEGMENT_SEC, MAX_AUTO_SPEAKERS, MIN_SPEAKER_SEC, SAMPLE_THRESHOLD, VoiceMatch};
+use crate::{
+    LONG_SEGMENT_SEC, MAX_AUTO_SPEAKERS, MIN_SPEAKER_SEC, SAMPLE_THRESHOLD, SilentOverlaps,
+    VoiceMatch,
+};
 
 /// Настройки второй фазы. Значения по умолчанию: лучшая конфигурация по замеру,
 /// её берёт приложение; замер (`eval`) меняет их, чтобы сравнить варианты.
@@ -29,6 +32,12 @@ pub struct PipelineOptions {
     /// Говорящие по отрезкам нейросегментации, с пометкой перекрытий. Тогда окна
     /// не нужны: Витерби и разрез по словам не работают.
     pub neural_segmentation: bool,
+    /// При нейросегментации: откуда берутся ходы без текста говорящему, которого в
+    /// перекрытии слышно, но слова которого распознаватель не дал.
+    pub silent_overlaps: SilentOverlaps,
+    /// Средняя по окнам вероятность перекрытия в кадре модели сегментации, выше которой
+    /// кадр считается перекрытием.
+    pub model_overlap_threshold: f32,
     /// Наименьший косинус между центром голоса спикера и образцом, при котором спикер
     /// получает имя из образца.
     pub sample_threshold: f64,
@@ -44,7 +53,8 @@ pub struct PipelineOptions {
 
 impl PipelineOptions {
     /// Что нужно попросить у движка под эти настройки: окна только тому, кто их использует.
-    pub fn engine_options(&self) -> EngineOptions {
+    /// Язык речи у каждой записи свой, поэтому задаётся отдельно.
+    pub fn engine_options(&self, language: SpeechLanguage) -> EngineOptions {
         EngineOptions {
             windows: self
                 .window_penalty()
@@ -59,7 +69,17 @@ impl PipelineOptions {
             max_speech_sec: self.max_speech_sec,
             drop_music: self.drop_music,
             asr_groups: self.asr_groups,
+            language,
         }
+    }
+
+    /// Нужны ли конвейеру перекрытия по модели сегментации (`Segmentation::overlaps`).
+    pub fn needs_model_overlaps(&self) -> bool {
+        self.neural_segmentation
+            && matches!(
+                self.silent_overlaps,
+                SilentOverlaps::ModelNeighbour | SilentOverlaps::ModelLocalSpeakers
+            )
     }
 
     /// Штраф Витерби для разметки окон: заданный, а при одном разрезе по словам 0
@@ -87,6 +107,14 @@ impl Default for PipelineOptions {
             // Нейросегментация включена: по замеру DER и cpWER ниже, чем у разреза по словам,
             // особенно на смене голоса без паузы; окна при ней не считаются.
             neural_segmentation: true,
+            // Перекрытия по кадрам модели, второй говорящий по локальным говорящим окон:
+            // по замеру на 6 записях полнота перекрытий на ru4_overlap 17,0 % стала 26,7 %
+            // (с числом спикеров из разметки 19,0 % стала 23,9 %), точность около 76 %,
+            // ложных ходов нет, DER по сумме не хуже. Пересечение отрезков sherpa и
+            // соседний ход почти ничего не дали; порог 0,2 дал ложный ход на ru4_fast,
+            // 0,4 нашёл меньше. Без кадров модели ходы не добавляются.
+            silent_overlaps: SilentOverlaps::ModelLocalSpeakers,
+            model_overlap_threshold: 0.3,
             sample_threshold: SAMPLE_THRESHOLD,
             // По замеру с образцами и центрами двух встреч оба способа дают одно и то же;
             // наибольший косинус у человека с одним эмбеддингом совпадает с прежним сравнением.
@@ -104,24 +132,39 @@ mod tests {
 
     #[test]
     fn neural_segmentation_asks_the_engine_for_no_windows() {
-        assert_eq!(PipelineOptions::default().engine_options().windows, None);
+        assert_eq!(
+            PipelineOptions::default()
+                .engine_options(SpeechLanguage::Ru)
+                .windows,
+            None
+        );
         let vad_only = PipelineOptions {
             neural_segmentation: false,
             ..PipelineOptions::default()
         };
-        assert!(vad_only.engine_options().windows.is_some());
+        assert!(
+            vad_only
+                .engine_options(SpeechLanguage::Ru)
+                .windows
+                .is_some()
+        );
     }
 
     #[test]
     fn only_speaker_split_by_vad_asks_for_tight_speech_edges() {
         assert_eq!(
-            PipelineOptions::default().engine_options().edges,
+            PipelineOptions::default()
+                .engine_options(SpeechLanguage::Ru)
+                .edges,
             SpeechEdges::Padded
         );
         let vad_only = PipelineOptions {
             neural_segmentation: false,
             ..PipelineOptions::default()
         };
-        assert_eq!(vad_only.engine_options().edges, SpeechEdges::Tight);
+        assert_eq!(
+            vad_only.engine_options(SpeechLanguage::Ru).edges,
+            SpeechEdges::Tight
+        );
     }
 }

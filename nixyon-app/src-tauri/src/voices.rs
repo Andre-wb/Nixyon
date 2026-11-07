@@ -379,6 +379,7 @@ mod tests {
                 asr: "a".into(),
                 embedding: "e".into(),
             },
+            language: nixyon_core::SpeechLanguage::Ru,
             speakers: names
                 .iter()
                 .zip(1..)

@@ -1,15 +1,18 @@
 //! Прогон расшифровки на ноутбуке:
 //! `transcribe <папка моделей> <файл.wav> <расшифровка.json> [число спикеров]`.
-//! WAV любой поддерживаемой частоты сначала переводится в 16 кГц моно.
+//! WAV любой поддерживаемой частоты сначала переводится в 16 кГц моно. Язык речи (русский
+//! или английский) определяется по записи, как в приложении в режиме «Авто».
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nixyon_audio::{TARGET_SAMPLE_RATE, convert_to_wav16k};
-use nixyon_core::{AudioInfo, CancelFlag, EngineInfo, rfc3339_utc, to_json};
+use nixyon_core::{AudioInfo, CancelFlag, EngineInfo, SpeechLanguage, rfc3339_utc, to_json};
 use nixyon_pipeline::{PipelineOptions, SpeakerCount, TranscriptMeta, build_transcript};
-use nixyon_sherpa::{ModelManifest, ModelRole, SherpaEngine, SherpaModels, analyze_default};
+use nixyon_sherpa::{
+    ModelManifest, ModelRole, SherpaEngine, SherpaModels, analyze_default, detect_wav_language,
+};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
@@ -57,14 +60,23 @@ fn run(
         report.clipped_ratio * 100.0,
         report.issues()
     );
-    let analyzed = analyze_default(
-        &engine,
+    let options = PipelineOptions::default();
+    let cancel = CancelFlag::new();
+    // Куски речи от языка не зависят, язык в опциях здесь любой.
+    let analyzed = detect_wav_language(
+        engine.models(),
         &wav_16k,
-        &PipelineOptions::default(),
-        &CancelFlag::new(),
-    );
+        &options.engine_options(SpeechLanguage::Ru),
+        &cancel,
+    )
+    .map_err(|e| -> Box<dyn std::error::Error> { e.into() })
+    .and_then(|language| {
+        println!("язык речи: {}", language.code());
+        let analyzed = analyze_default(&engine, &wav_16k, &options, language, &cancel)?;
+        Ok((language, analyzed))
+    });
     std::fs::remove_file(&wav_16k)?;
-    let (segments, spans) = analyzed?;
+    let (language, (segments, spans)) = analyzed?;
 
     let meta = TranscriptMeta {
         created_at: utc_now_rfc3339(),
@@ -80,6 +92,7 @@ fn run(
             asr: manifest.version().to_string(),
             embedding: file_name(&manifest.path(ModelRole::Embedding)),
         },
+        language,
     };
     let transcript = build_transcript(
         segments,

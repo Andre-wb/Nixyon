@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::clock::clock;
 use crate::labels::Labels;
-use crate::names::speaker_name;
+use crate::names::turn_speaker_name;
 use crate::txt::one_line;
 
 use participant_rows::participant_rows;
@@ -72,10 +72,10 @@ pub fn protocol_blocks(
         });
     }
     blocks.extend(transcript.turns.iter().map(|turn| Block::Turn {
-        speaker: one_line(&speaker_name(transcript, turn.speaker, labels)),
+        speaker: one_line(&turn_speaker_name(transcript, turn, labels)),
         time: clock(turn.start),
         emotion: labels.emotion(turn.emotion).map(one_line),
-        text: one_line(&turn.text),
+        text: one_line(&labels.turn_text(turn)),
     }));
     blocks
 }
