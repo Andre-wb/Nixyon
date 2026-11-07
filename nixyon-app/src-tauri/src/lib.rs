@@ -2,6 +2,7 @@ mod editing;
 mod exporting;
 mod fillers;
 mod media;
+mod meetings;
 mod model_setup;
 mod playback;
 mod reprocessing;
@@ -24,7 +25,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             transcription::transcribe,
             transcription::cancel_transcription,
-            transcription::last_transcript,
+            meetings::latest_meeting,
             media::start_recording,
             media::stop_recording,
             media::pause_recording,
@@ -76,7 +77,7 @@ pub fn run() {
             summary::summary_available,
             summary::summarize_meeting,
             summary::cancel_summary,
-            summary::last_summary,
+            summary::meeting_summary,
             speaker_names::suggest_speaker_names
         ])
         .setup(|app| {

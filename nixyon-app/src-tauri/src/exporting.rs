@@ -1,4 +1,4 @@
-//! Экспорт последней расшифровки: файл нужного формата строится в `cache/exports`, а
+//! Экспорт расшифровки встречи: файл нужного формата строится в `cache/exports`, а
 //! сохранить его в выбранное место или отправить в другое приложение помогает Kotlin.
 //! PDF верстает Kotlin по блокам протокола, остальные форматы собирает Rust.
 
@@ -13,7 +13,7 @@ use nixyon_render::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
-use crate::transcription::{CommandError, last_transcript};
+use crate::transcription::CommandError;
 
 const EXPORT_FAILED: &str = "export_failed";
 const MAX_STEM_CHARS: usize = 120;
@@ -150,11 +150,12 @@ async fn dirs<R: Runtime>(app: &AppHandle<R>) -> Result<StoragePaths, CommandErr
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
 }
 
-/// Строит файл экспорта последней расшифровки на языке интерфейса. Дату записи
+/// Строит файл экспорта расшифровки встречи на языке интерфейса. Дату записи
 /// присылает интерфейс уже в поясе устройства.
 #[tauri::command]
 pub async fn export_transcript<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     format: Format,
     language: String,
     recorded_at: Option<String>,
@@ -164,8 +165,7 @@ pub async fn export_transcript<R: Runtime>(
     let lang = Lang::from_code(&language).unwrap_or(Lang::Ru);
     let dir = exports_dir(&storage.paths);
     let (name, path, pdf_blocks) = tauri::async_runtime::spawn_blocking(move || {
-        let transcript =
-            last_transcript::load(&store).ok_or_else(|| CommandError::new("no_transcript"))?;
+        let (_, transcript) = crate::meetings::load(&store, &meeting)?;
         let rendered = render(&transcript, format, lang, recorded_at.as_deref())?;
         let name = file_name(&transcript.audio.file, format);
         match rendered {

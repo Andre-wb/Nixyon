@@ -24,6 +24,7 @@ pub use data_key::DataKey;
 pub use files_store::FilesStore;
 #[cfg(test)]
 pub use files_store::test_store;
+pub use prepare::RECORDINGS_DIR;
 pub use sealed_file::open_read;
 
 /// Ключ данных после первой подготовки хранилища; до неё `None`.

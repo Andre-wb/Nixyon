@@ -107,6 +107,7 @@ async function run(ids) {
   try {
     resultFor = transcript;
     result = await invoke("remove_filler_words", {
+      meeting: transcript?.created_at ?? null,
       ids,
       onProgress: channel((p) => {
         progress = p;
@@ -126,7 +127,7 @@ async function apply() {
   if (!result?.changes.length) return;
   const changes = result.changes.map(({ id, before, after, delete: remove }) => ({ id, before, after, delete: remove }));
   try {
-    const applied = await invoke("apply_turn_texts", { changes });
+    const applied = await invoke("apply_turn_texts", { meeting: resultFor?.created_at ?? null, changes });
     setTranscript(applied.transcript);
     result = null;
     // Не вставшие правки не теряются молча: лист остаётся открытым и говорит, сколько их.

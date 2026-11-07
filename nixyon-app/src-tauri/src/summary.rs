@@ -1,18 +1,16 @@
 //! Протокол встречи языковой моделью на устройстве: краткое содержание, решения и задачи
-//! по последней расшифровке. Модель запускает Kotlin-плагин, запрос и хранение результата
+//! по расшифровке встречи. Модель запускает Kotlin-плагин, запрос и хранение результата
 //! на стороне ядра.
 
 pub(crate) mod answer;
-pub mod last_summary;
 mod prompt;
 
 use nixyon_android::{SpeechExt, SummaryProgress, SummaryRequest};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime, State};
 
-use crate::transcription::{CommandError, Running, last_transcript};
-
-pub(crate) const NO_TRANSCRIPT: &str = "no_transcript";
+use crate::meetings::summary_file;
+use crate::transcription::{CommandError, Running};
 
 /// Работа языковой модели: протокол или подсказка имён, одно за раз, отдельно от
 /// расшифровки. Модель на устройстве одна, отмена у обоих общая (`cancel_summary`).
@@ -40,11 +38,12 @@ pub async fn summary_available<R: Runtime>(app: AppHandle<R>) -> bool {
     }
 }
 
-/// Протокол последней расшифровки. Ход работы идёт в канал.
+/// Протокол встречи. Ход работы идёт в канал.
 #[tauri::command]
 pub async fn summarize_meeting<R: Runtime>(
     app: AppHandle<R>,
     running: State<'_, SummaryRunning>,
+    meeting: String,
     on_progress: Channel<SummaryProgress>,
 ) -> Result<String, CommandError> {
     let slot = running
@@ -53,12 +52,11 @@ pub async fn summarize_meeting<R: Runtime>(
         .ok_or_else(|| CommandError::new(CommandError::BUSY))?;
     let store = crate::vault::storage(&app).await?.store;
     let store_for_load = store.clone();
-    let (transcript, user) = tauri::async_runtime::spawn_blocking(move || {
-        let transcript = last_transcript::load(&store_for_load)
-            .ok_or_else(|| CommandError::new(NO_TRANSCRIPT))?;
+    let (id, user) = tauri::async_runtime::spawn_blocking(move || {
+        let (id, transcript) = crate::meetings::load(&store_for_load, &meeting)?;
         let user = prompt::meeting_text(&transcript)
             .map_err(|e| CommandError::logged(CommandError::ENGINE_FAILED, e))?;
-        Ok::<_, CommandError>((transcript, user))
+        Ok::<_, CommandError>((id, user))
     })
     .await
     .map_err(|e| CommandError::logged(CommandError::ENGINE_FAILED, e))??;
@@ -95,13 +93,11 @@ pub async fn summarize_meeting<R: Runtime>(
 
     let saved = text.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Расшифровку могли заменить, пока модель работала: протокол чужой расшифровке
-        // не сохраняется.
-        let current = last_transcript::load(&store);
-        if current.as_ref().map(|t| &t.created_at) != Some(&transcript.created_at) {
-            return Err(CommandError::new(NO_TRANSCRIPT));
+        // Встречи могло не стать, пока модель работала: её папку протокол не воскрешает.
+        if !crate::meetings::exists(&store, &id) {
+            return Err(CommandError::new(crate::meetings::NO_TRANSCRIPT));
         }
-        last_summary::save(&store, &transcript, &saved)
+        summary_file::save(&store, &id, &saved)
             .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
     })
     .await
@@ -125,13 +121,15 @@ pub async fn cancel_summary<R: Runtime>(
     Ok(())
 }
 
-/// Протокол последней расшифровки, если он уже составлен.
+/// Протокол встречи, если он уже составлен.
 #[tauri::command]
-pub async fn last_summary<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, CommandError> {
+pub async fn meeting_summary<R: Runtime>(
+    app: AppHandle<R>,
+    meeting: String,
+) -> Result<Option<String>, CommandError> {
+    let id = crate::meetings::meeting_id(&meeting)?;
     let store = crate::vault::storage(&app).await?.store;
-    tauri::async_runtime::spawn_blocking(move || {
-        last_transcript::load(&store).and_then(|t| last_summary::load(&store, &t))
-    })
-    .await
-    .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
+    tauri::async_runtime::spawn_blocking(move || summary_file::load(&store, &id))
+        .await
+        .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
 }

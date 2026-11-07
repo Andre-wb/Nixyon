@@ -15,8 +15,8 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime, State};
 
 use crate::reprocessing::unquote;
-use crate::summary::{NO_TRANSCRIPT, SummaryRunning, answer, llm_error};
-use crate::transcription::{CommandError, last_transcript};
+use crate::summary::{SummaryRunning, answer, llm_error};
+use crate::transcription::CommandError;
 
 const UNKNOWN_TURN: &str = "unknown_turn";
 
@@ -105,6 +105,7 @@ struct BatchReply {
 pub async fn remove_filler_words<R: Runtime>(
     app: AppHandle<R>,
     running: State<'_, SummaryRunning>,
+    meeting: String,
     ids: Option<Vec<u32>>,
     on_progress: Channel<FillerProgress>,
 ) -> Result<FillerResult, CommandError> {
@@ -114,8 +115,7 @@ pub async fn remove_filler_words<R: Runtime>(
         .ok_or_else(|| CommandError::new(CommandError::BUSY))?;
     let store = crate::vault::storage(&app).await?.store;
     let plan = tauri::async_runtime::spawn_blocking(move || {
-        let transcript =
-            last_transcript::load(&store).ok_or_else(|| CommandError::new(NO_TRANSCRIPT))?;
+        let (_, transcript) = crate::meetings::load(&store, &meeting)?;
         let turns = select(&transcript.turns, ids.as_deref())?;
         Ok::<_, CommandError>(plan(&turns))
     })

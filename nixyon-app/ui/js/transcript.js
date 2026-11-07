@@ -75,6 +75,11 @@ export function currentTranscript() {
   return current;
 }
 
+// id открытой встречи: команды ядра получают его параметром.
+export function currentMeeting() {
+  return current?.created_at ?? null;
+}
+
 export function setTranscript(transcript) {
   current = transcript;
   render();
@@ -171,7 +176,7 @@ function openTurnEdit(id) {
 async function deleteTurn() {
   $("turn-delete-confirm").close();
   try {
-    setTranscript(await invoke("delete_turn", { id: editingTurn }));
+    setTranscript(await invoke("delete_turn", { meeting: currentMeeting(), id: editingTurn }));
     $("turn-sheet").close();
   } catch (error) {
     $("turn-error").textContent = errorText(error);
@@ -228,6 +233,7 @@ async function startTurnCheck() {
   renderTurnCheck();
   try {
     checkResult = await invoke("reprocess_turn", {
+      meeting: currentMeeting(),
       id: checkTurn,
       onProgress: channel((p) => {
         checkProgress = p;
@@ -254,7 +260,7 @@ async function applyTurnCheck() {
   if (!checkResult || checkTurn === null) return;
   const text = checkCandidate().replace(/[\r\n\t]+/g, " ");
   try {
-    setTranscript(await invoke("edit_turn_text", { id: checkTurn, text }));
+    setTranscript(await invoke("edit_turn_text", { meeting: currentMeeting(), id: checkTurn, text }));
     checkResult = null;
     $("turn-check-sheet").close();
   } catch (error) {
@@ -266,7 +272,7 @@ async function applyTurnCheck() {
 async function saveTurnText() {
   const text = $("turn-text-input").value.replace(/[\r\n\t]+/g, " ");
   try {
-    setTranscript(await invoke("edit_turn_text", { id: editingTurn, text }));
+    setTranscript(await invoke("edit_turn_text", { meeting: currentMeeting(), id: editingTurn, text }));
     $("turn-sheet").close();
   } catch (error) {
     $("turn-error").textContent = errorText(error);
@@ -305,7 +311,7 @@ function openSpeaker(id) {
 
 async function saveName() {
   try {
-    setTranscript(await invoke("rename_speaker", { id: editing, name: $("speaker-name").value }));
+    setTranscript(await invoke("rename_speaker", { meeting: currentMeeting(), id: editing, name: $("speaker-name").value }));
     $("speaker-sheet").close();
   } catch (error) {
     $("speaker-error").textContent = errorText(error);
@@ -314,7 +320,7 @@ async function saveName() {
 
 async function rememberVoice() {
   try {
-    await invoke("remember_voice", { speaker: editing });
+    await invoke("remember_voice", { meeting: currentMeeting(), speaker: editing });
     $("speaker-remember-status").textContent = t(K.speaker_remembered);
     $("speaker-error").textContent = "";
     loadVoices();
@@ -337,7 +343,7 @@ async function merge() {
   $("merge-confirm").close();
   if (!pendingMerge) return;
   try {
-    setTranscript(await invoke("merge_speakers", pendingMerge));
+    setTranscript(await invoke("merge_speakers", { meeting: currentMeeting(), ...pendingMerge }));
     $("speaker-sheet").close();
   } catch (error) {
     $("speaker-error").textContent = errorText(error);

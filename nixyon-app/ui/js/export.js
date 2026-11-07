@@ -30,6 +30,7 @@ function status(text, isError = false) {
 
 async function prepare() {
   return invoke("export_transcript", {
+    meeting: transcript.created_at,
     format: chosenFormat(),
     language: language(),
     recordedAt: dateTime(transcript.created_at) || null,

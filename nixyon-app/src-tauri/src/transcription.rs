@@ -4,9 +4,6 @@
 
 pub(crate) mod allowed_path;
 mod command_error;
-pub mod last_audio;
-pub mod last_centers;
-pub mod last_transcript;
 mod progress;
 mod quality;
 mod running;
@@ -15,7 +12,7 @@ mod speaker_ages;
 pub(crate) mod temp_files;
 mod turn_emotions;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nixyon_android::{
@@ -31,6 +28,8 @@ use nixyon_pipeline::{
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime, State};
+
+use crate::meetings::{NewMeeting, save_meeting};
 
 pub use command_error::CommandError;
 pub use progress::{Phase, Progress};
@@ -68,15 +67,9 @@ pub async fn transcribe<R: Runtime>(
     let speech = app.speech();
     let storage = crate::vault::storage(&app).await?;
     let (store, dirs) = (storage.store, storage.paths);
-    let roots: Vec<PathBuf> = [
-        Some(&dirs.files),
-        Some(&dirs.cache),
-        dirs.external_files.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    .map(PathBuf::from)
-    .collect();
+    // Встреча забирает запись к себе в папку, поэтому принимаются только записи и импорт
+    // приложения из `recordings`.
+    let roots = [Path::new(&dirs.files).join(crate::vault::RECORDINGS_DIR)];
     let input = allowed_path::resolve_input(&path, &roots).ok_or_else(|| {
         log::warn!("путь вне папок приложения или не файл");
         CommandError::new(CommandError::BAD_PATH)
@@ -176,12 +169,11 @@ pub async fn transcribe<R: Runtime>(
         ..options
     };
     let summary_voice_model = summary.embedding_model.clone();
+    let created_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
     let meta = TranscriptMeta {
-        created_at: rfc3339_utc(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_or(0, |d| d.as_secs()),
-        ),
+        created_at: rfc3339_utc(created_secs),
         audio: AudioInfo {
             file: display_name(name.as_deref(), &input),
             duration_sec: report.duration_sec,
@@ -193,7 +185,6 @@ pub async fn transcribe<R: Runtime>(
             embedding: summary.embedding_model,
         },
     };
-    let files_dir = PathBuf::from(&dirs.files);
     let source = input.clone();
     let store_for_build = store.clone();
     let cancel_for_build = cancel.clone();
@@ -243,24 +234,16 @@ pub async fn transcribe<R: Runtime>(
         return Err(CommandError::new(CommandError::CANCELLED));
     }
     let transcript = tauri::async_runtime::spawn_blocking(move || {
-        // Путь к записи и центры голосов стираются до замены расшифровки и пишутся после:
-        // при сбое между ними у расшифровки их нет, но и чужие к ней не привяжутся.
-        // Протокол прошлой встречи стирается вместе с ними.
-        last_audio::clear(&files_dir)
-            .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
-        last_centers::clear(&store)
-            .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
-        crate::summary::last_summary::clear(&store)
-            .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
-        last_transcript::save(&store, &transcript)
-            .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
-        if let Err(e) = last_audio::save(&files_dir, &source) {
-            log::warn!("путь к записи не сохранён, проигрывать будет нечего: {e}");
-        }
-        if let Err(e) = last_centers::save(&store, &centers) {
-            log::warn!("центры голосов не сохранены, запомнить голос будет нельзя: {e}");
-        }
-        Ok::<_, CommandError>(transcript)
+        save_meeting(
+            &store,
+            NewMeeting {
+                transcript,
+                centers: &centers,
+                audio: &source,
+                created_secs,
+            },
+        )
+        .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
     })
     .await
     .map_err(|e| CommandError::logged(CommandError::ENGINE_FAILED, e))??;
@@ -306,17 +289,6 @@ pub async fn cancel_transcription<R: Runtime>(
             .map_err(|e| CommandError::logged(CommandError::ENGINE_FAILED, e))?;
     }
     Ok(())
-}
-
-/// Последняя расшифровка: истории записей нет, открывается последняя.
-#[tauri::command]
-pub async fn last_transcript<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<Option<Transcript>, CommandError> {
-    let store = crate::vault::storage(&app).await?.store;
-    tauri::async_runtime::spawn_blocking(move || last_transcript::load(&store))
-        .await
-        .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
 }
 
 #[cfg(test)]

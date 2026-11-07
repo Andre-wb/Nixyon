@@ -3,7 +3,7 @@ import { $, dot, el, speakerColor } from "./dom.js";
 import { clock } from "./format.js";
 import { K, locale, t } from "./i18n.js";
 import { onLanguageChange, openModal } from "./screens.js";
-import { speakerName } from "./transcript.js";
+import { currentMeeting, speakerName } from "./transcript.js";
 
 let transcript = null;
 let stats = null;
@@ -68,7 +68,7 @@ export async function openStats(current) {
   $("stats-error").textContent = "";
   openModal($("stats-sheet"));
   try {
-    stats = await invoke("meeting_stats");
+    stats = await invoke("meeting_stats", { meeting: currentMeeting() });
     render();
   } catch (error) {
     $("stats-error").textContent = errorText(error);

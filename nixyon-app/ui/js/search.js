@@ -3,7 +3,7 @@ import { $ } from "./dom.js";
 import { K, t } from "./i18n.js";
 import { reapplyPlaying } from "./player.js";
 import { onLanguageChange } from "./screens.js";
-import { turnWordRanges } from "./transcript.js";
+import { currentMeeting, turnWordRanges } from "./transcript.js";
 import { renderTurnText } from "./turn-text.js";
 
 // Пауза после последнего нажатия: поиск идёт в Rust и не должен запускаться на каждую букву.
@@ -74,7 +74,7 @@ async function run(text) {
     return;
   }
   try {
-    const found = await invoke("search_transcript", { query });
+    const found = await invoke("search_transcript", { meeting: currentMeeting(), query });
     // Ответ на устаревший запрос не затирает более свежий.
     if (mine !== generation) return;
     hits = found;

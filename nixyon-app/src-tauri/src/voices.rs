@@ -1,7 +1,7 @@
 //! Голоса участников: образец голоса записывается, по нему считается эмбеддинг, звук
 //! удаляется. По голосам расшифровка сама ставит имена спикеров. Имена и эмбеддинги
 //! в лог не пишутся: это личные данные. Голос можно запомнить и по встрече: центр голоса
-//! спикера последней расшифровки сохраняется под его именем.
+//! спикера встречи сохраняется под его именем.
 
 mod add_sample;
 mod meeting_center;
@@ -19,17 +19,16 @@ use nixyon_core::{MAX_SAMPLE_SEC, MIN_SAMPLE_SPEECH_SEC, VoiceSample, rfc3339_ut
 use serde::Serialize;
 use tauri::{AppHandle, Runtime};
 
+use crate::meetings::centers_file;
 use crate::transcription::CommandError;
 use crate::transcription::allowed_path::resolve_input;
 use crate::transcription::temp_files::TempFiles;
-use crate::transcription::{last_centers, last_transcript};
 use crate::vault::{FilesStore, Storage};
 use add_sample::add_sample;
 use meeting_center::MeetingCenter;
 use remember::remember;
 use voice_record::VoiceRecord;
 
-const NO_TRANSCRIPT: &str = "no_transcript";
 const UNKNOWN_SPEAKER: &str = "unknown_speaker";
 const SPEAKER_UNNAMED: &str = "speaker_unnamed";
 const NO_VOICE_CENTER: &str = "no_voice_center";
@@ -245,15 +244,15 @@ pub async fn delete_voice<R: Runtime>(
     .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
 
-/// Запоминает голос спикера последней расшифровки под его именем: центр голоса с этой
-/// встречи добавляется к голосу с таким именем или становится новым голосом без образца.
+/// Запоминает голос спикера встречи под его именем: центр голоса с этой встречи
+/// добавляется к голосу с таким именем или становится новым голосом без образца.
 pub fn remember_speaker(
     files: &FilesStore,
+    meeting: &str,
     speaker: u32,
     remembered_at: String,
 ) -> Result<VoicesView, CommandError> {
-    let transcript =
-        last_transcript::load(files).ok_or_else(|| CommandError::new(NO_TRANSCRIPT))?;
+    let (id, transcript) = crate::meetings::load(files, meeting)?;
     let named = transcript
         .speaker(speaker)
         .ok_or_else(|| CommandError::new(UNKNOWN_SPEAKER))?;
@@ -262,7 +261,7 @@ pub fn remember_speaker(
         .as_deref()
         .and_then(voice_name::clean_name)
         .ok_or_else(|| CommandError::new(SPEAKER_UNNAMED))?;
-    let embedding = last_centers::load(files)
+    let embedding = centers_file::load(files, &id)
         .and_then(|centers| centers.into_iter().find(|(id, _)| *id == speaker))
         .map(|(_, embedding)| embedding)
         .ok_or_else(|| CommandError::new(NO_VOICE_CENTER))?;
@@ -285,6 +284,7 @@ pub fn remember_speaker(
 #[tauri::command]
 pub async fn remember_voice<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     speaker: u32,
 ) -> Result<VoicesView, CommandError> {
     let files = storage(&app).await?.store;
@@ -293,7 +293,7 @@ pub async fn remember_voice<R: Runtime>(
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_secs()),
     );
-    tauri::async_runtime::spawn_blocking(move || remember_speaker(&files, speaker, now))
+    tauri::async_runtime::spawn_blocking(move || remember_speaker(&files, &meeting, speaker, now))
         .await
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
@@ -313,7 +313,10 @@ pub async fn discard_voice_recording<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::meetings::NO_TRANSCRIPT;
     use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, Speaker, Transcript};
+
+    const M: &str = "2026-10-30T09:00:00Z";
 
     fn dir(name: &str) -> crate::vault::FilesStore {
         crate::vault::test_store(&format!("remember-{name}"))
@@ -322,7 +325,7 @@ mod tests {
     fn transcript(names: &[Option<&str>]) -> Transcript {
         Transcript {
             schema_version: SCHEMA_VERSION,
-            created_at: "2026-10-30T09:00:00Z".into(),
+            created_at: M.into(),
             audio: AudioInfo {
                 file: "a.wav".into(),
                 duration_sec: 10.0,
@@ -353,16 +356,16 @@ mod tests {
     #[test]
     fn named_speaker_center_is_remembered_and_used_for_next_transcripts() {
         let d = dir("ok");
-        last_transcript::save(&d, &transcript(&[Some("Анна"), None])).unwrap();
-        last_centers::save(&d, &[(1, vec![0.6, 0.8]), (2, vec![1.0, 0.0])]).unwrap();
-        let view = remember_speaker(&d, 1, "2026-10-30T10:00:00Z".into()).unwrap();
+        let id = crate::meetings::test_meeting(&d, &transcript(&[Some("Анна"), None]));
+        centers_file::save(&d, &id, &[(1, vec![0.6, 0.8]), (2, vec![1.0, 0.0])]).unwrap();
+        let view = remember_speaker(&d, M, 1, "2026-10-30T10:00:00Z".into()).unwrap();
         assert_eq!(view.voices.len(), 1);
         assert_eq!(
             (view.voices[0].has_sample, view.voices[0].meetings),
             (false, 1)
         );
         // Повтор с той же встречи не добавляет второй центр.
-        remember_speaker(&d, 1, "2026-10-30T10:01:00Z".into()).unwrap();
+        remember_speaker(&d, M, 1, "2026-10-30T10:01:00Z".into()).unwrap();
         let used = samples(&d, "e");
         assert_eq!(used.len(), 1);
         assert_eq!(used[0].name, "Анна");
@@ -374,21 +377,21 @@ mod tests {
         let d = dir("errors");
         let now = || "2026-10-30T10:00:00Z".to_string();
         assert_eq!(
-            remember_speaker(&d, 1, now()).unwrap_err().code,
+            remember_speaker(&d, M, 1, now()).unwrap_err().code,
             NO_TRANSCRIPT
         );
-        last_transcript::save(&d, &transcript(&[Some("Анна"), None])).unwrap();
+        let id = crate::meetings::test_meeting(&d, &transcript(&[Some("Анна"), None]));
         assert_eq!(
-            remember_speaker(&d, 1, now()).unwrap_err().code,
+            remember_speaker(&d, M, 1, now()).unwrap_err().code,
             NO_VOICE_CENTER
         );
-        last_centers::save(&d, &[(1, vec![1.0]), (2, vec![1.0])]).unwrap();
+        centers_file::save(&d, &id, &[(1, vec![1.0]), (2, vec![1.0])]).unwrap();
         assert_eq!(
-            remember_speaker(&d, 2, now()).unwrap_err().code,
+            remember_speaker(&d, M, 2, now()).unwrap_err().code,
             SPEAKER_UNNAMED
         );
         assert_eq!(
-            remember_speaker(&d, 9, now()).unwrap_err().code,
+            remember_speaker(&d, M, 9, now()).unwrap_err().code,
             UNKNOWN_SPEAKER
         );
         assert!(samples(&d, "e").is_empty());
@@ -439,9 +442,9 @@ mod tests {
     #[test]
     fn remembered_center_is_marked_with_the_voice_model_of_its_transcript() {
         let d = dir("center-model");
-        last_transcript::save(&d, &transcript(&[Some("Анна")])).unwrap();
-        last_centers::save(&d, &[(1, vec![0.6, 0.8])]).unwrap();
-        remember_speaker(&d, 1, "2026-10-30T10:00:00Z".into()).unwrap();
+        let id = crate::meetings::test_meeting(&d, &transcript(&[Some("Анна")]));
+        centers_file::save(&d, &id, &[(1, vec![0.6, 0.8])]).unwrap();
+        remember_speaker(&d, M, 1, "2026-10-30T10:00:00Z".into()).unwrap();
         let voices = store::load(&d).unwrap();
         assert_eq!(voices[0].centers[0].voice_model.as_deref(), Some("e"));
         assert!(samples(&d, "другая.onnx").is_empty());

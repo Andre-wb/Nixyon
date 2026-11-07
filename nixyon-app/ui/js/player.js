@@ -199,6 +199,7 @@ export async function openPlayer(transcript) {
   renderControls();
   try {
     const result = await invoke("open_playback", {
+      meeting: transcript.created_at,
       onEvent: channel(onEvent),
       title: transcript.audio.file,
     });

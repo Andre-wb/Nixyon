@@ -1,4 +1,4 @@
-//! Статистика последней расшифровки: считается по ходам при каждом открытии, в файл
+//! Статистика расшифровки встречи: считается по ходам при каждом открытии, в файл
 //! расшифровки не пишется.
 
 mod stats_view;
@@ -6,22 +6,22 @@ mod stats_view;
 use nixyon_pipeline::meeting_stats as compute;
 use tauri::{AppHandle, Runtime};
 
-use crate::transcription::{CommandError, last_transcript};
+use crate::transcription::CommandError;
 use crate::vault::FilesStore;
 pub use stats_view::StatsView;
 
-const NO_TRANSCRIPT: &str = "no_transcript";
-
-pub fn load(store: &FilesStore) -> Result<StatsView, CommandError> {
-    let transcript =
-        last_transcript::load(store).ok_or_else(|| CommandError::new(NO_TRANSCRIPT))?;
+pub fn load(store: &FilesStore, meeting: &str) -> Result<StatsView, CommandError> {
+    let (_, transcript) = crate::meetings::load(store, meeting)?;
     Ok(StatsView::from(&compute(&transcript)))
 }
 
 #[tauri::command]
-pub async fn meeting_stats<R: Runtime>(app: AppHandle<R>) -> Result<StatsView, CommandError> {
+pub async fn meeting_stats<R: Runtime>(
+    app: AppHandle<R>,
+    meeting: String,
+) -> Result<StatsView, CommandError> {
     let store = crate::vault::storage(&app).await?.store;
-    tauri::async_runtime::spawn_blocking(move || load(&store))
+    tauri::async_runtime::spawn_blocking(move || load(&store, &meeting))
         .await
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
@@ -54,7 +54,7 @@ mod tests {
         };
         Transcript {
             schema_version: SCHEMA_VERSION,
-            created_at: "2026-10-29T10:00:00Z".into(),
+            created_at: M.into(),
             audio: AudioInfo {
                 file: "a.wav".into(),
                 duration_sec: 10.0,
@@ -70,16 +70,21 @@ mod tests {
         }
     }
 
+    const M: &str = "2026-10-29T10:00:00Z";
+
     fn dir(name: &str) -> crate::vault::FilesStore {
         crate::vault::test_store(&format!("stats-{name}"))
     }
 
     #[test]
-    fn stats_come_from_last_transcript_and_missing_one_is_an_error() {
+    fn stats_come_from_the_meeting_and_unknown_one_is_an_error() {
         let d = dir("load");
-        assert_eq!(load(&d).unwrap_err().code, NO_TRANSCRIPT);
-        last_transcript::save(&d, &sample()).unwrap();
-        let stats = load(&d).unwrap();
+        assert_eq!(
+            load(&d, M).unwrap_err().code,
+            crate::meetings::NO_TRANSCRIPT
+        );
+        crate::meetings::test_meeting(&d, &sample());
+        let stats = load(&d, M).unwrap();
         assert_eq!(stats.interruptions, 1);
         assert_eq!(stats.talk_time_sec, 9.0);
         assert_eq!(stats.monologue_sec, MONOLOGUE_SEC);
@@ -90,8 +95,8 @@ mod tests {
     #[test]
     fn view_is_serialized_in_camel_case() {
         let d = dir("json");
-        last_transcript::save(&d, &sample()).unwrap();
-        let json = serde_json::to_value(load(&d).unwrap()).unwrap();
+        crate::meetings::test_meeting(&d, &sample());
+        let json = serde_json::to_value(load(&d, M).unwrap()).unwrap();
         assert!(json["speakers"][0]["wordsPerMinute"].is_number());
         assert!(json["monologueSec"].is_number());
         assert!(json["talkTimeSec"].is_number());

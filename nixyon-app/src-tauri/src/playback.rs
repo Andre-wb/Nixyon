@@ -1,4 +1,4 @@
-//! Проигрывание исходной записи последней расшифровки. Звук играет Kotlin-плагин
+//! Проигрывание исходной записи встречи. Звук играет Kotlin-плагин
 //! (MediaPlayer), здесь выбор файла, проверка позиции и пересылка событий.
 
 use std::path::PathBuf;
@@ -12,8 +12,8 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime};
 
 use crate::media::plugin_error;
-use crate::transcription::allowed_path::resolve_input;
-use crate::transcription::{CommandError, last_audio};
+use crate::meetings::audio_file;
+use crate::transcription::CommandError;
 
 const NO_AUDIO: &str = "no_audio";
 const BAD_POSITION: &str = "bad_position";
@@ -48,32 +48,23 @@ fn checked_ranges(ranges: &[PlaybackRange]) -> Result<(), CommandError> {
     }
 }
 
-/// Открывает запись последней расшифровки. Если записи уже нет (её заменила новая
-/// запись или импорт), ошибка `no_audio`. `title`: название для экрана блокировки.
+/// Открывает запись встречи. Если у встречи записи нет, ошибка `no_audio`.
+/// `title`: название для экрана блокировки.
 #[tauri::command]
 pub async fn open_playback<R: Runtime>(
     app: AppHandle<R>,
+    meeting: String,
     on_event: Channel<PlayerEvent>,
     title: String,
 ) -> Result<PlaybackOpened, CommandError> {
+    let id = crate::meetings::meeting_id(&meeting)?;
     let speech = app.speech();
     let dirs = crate::vault::storage(&app).await?.paths;
-    let roots: Vec<PathBuf> = [
-        Some(&dirs.files),
-        Some(&dirs.cache),
-        dirs.external_files.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    .map(PathBuf::from)
-    .collect();
     let files = PathBuf::from(&dirs.files);
-    let path = tauri::async_runtime::spawn_blocking(move || {
-        last_audio::load(&files).and_then(|p| resolve_input(&p, &roots))
-    })
-    .await
-    .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
-    .ok_or_else(|| CommandError::new(NO_AUDIO))?;
+    let path = tauri::async_runtime::spawn_blocking(move || audio_file::path(&files, &id))
+        .await
+        .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
+        .ok_or_else(|| CommandError::new(NO_AUDIO))?;
     let opened = speech
         .player_open(PlayerOpenRequest {
             path: path.to_string_lossy().into_owned(),

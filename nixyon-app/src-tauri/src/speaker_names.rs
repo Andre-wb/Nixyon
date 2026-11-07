@@ -1,6 +1,6 @@
 //! Подсказка имён участников из самого разговора: кто представился или к кому обратились
 //! по имени. Модель и проверку её ответа держит Kotlin-плагин (SpeakerNames.kt); ядро
-//! отдаёт ему участников и реплики последней расшифровки. Имена только предлагаются,
+//! отдаёт ему участников и реплики расшифровки встречи. Имена только предлагаются,
 //! подписывает пользователь.
 
 use nixyon_android::{
@@ -10,15 +10,16 @@ use nixyon_core::Transcript;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime, State};
 
-use crate::summary::{NO_TRANSCRIPT, SummaryRunning, llm_error};
-use crate::transcription::{CommandError, last_transcript};
+use crate::summary::{SummaryRunning, llm_error};
+use crate::transcription::CommandError;
 
-/// Подсказки имён для последней расшифровки. Ход работы модели идёт в канал. Пока модель
+/// Подсказки имён для встречи. Ход работы модели идёт в канал. Пока модель
 /// составляет протокол, подсказка не начинается, и наоборот.
 #[tauri::command]
 pub async fn suggest_speaker_names<R: Runtime>(
     app: AppHandle<R>,
     running: State<'_, SummaryRunning>,
+    meeting: String,
     on_progress: Channel<SummaryProgress>,
 ) -> Result<Vec<NameSuggestion>, CommandError> {
     let slot = running
@@ -27,8 +28,8 @@ pub async fn suggest_speaker_names<R: Runtime>(
         .ok_or_else(|| CommandError::new(CommandError::BUSY))?;
     let store = crate::vault::storage(&app).await?.store;
     let store_for_load = store.clone();
-    let transcript = tauri::async_runtime::spawn_blocking(move || {
-        last_transcript::load(&store_for_load).ok_or_else(|| CommandError::new(NO_TRANSCRIPT))
+    let (id, transcript) = tauri::async_runtime::spawn_blocking(move || {
+        crate::meetings::load(&store_for_load, &meeting)
     })
     .await
     .map_err(|e| CommandError::logged(CommandError::ENGINE_FAILED, e))??;
@@ -58,13 +59,14 @@ pub async fn suggest_speaker_names<R: Runtime>(
     if slot.cancel.is_cancelled() {
         return Err(CommandError::new(CommandError::CANCELLED));
     }
-    // Подсказки ссылаются на номера спикеров и реплик этой расшифровки: если её заменили,
-    // пока модель работала, чужой расшифровке они не годятся.
-    let current = tauri::async_runtime::spawn_blocking(move || last_transcript::load(&store))
-        .await
-        .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
-    if current.as_ref().map(|t| &t.created_at) != Some(&transcript.created_at) {
-        return Err(CommandError::new(NO_TRANSCRIPT));
+    // Подсказки ссылаются на номера спикеров и реплик этой встречи: если её не стало, пока
+    // модель работала, отдавать их некому.
+    let still_there =
+        tauri::async_runtime::spawn_blocking(move || crate::meetings::exists(&store, &id))
+            .await
+            .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
+    if !still_there {
+        return Err(CommandError::new(crate::meetings::NO_TRANSCRIPT));
     }
     drop(slot);
     Ok(reply.suggestions)

@@ -45,7 +45,7 @@ async function start() {
     else if (location.hash !== "#transcript" && location.hash !== "#voices" && location.hash !== "#models") show("home");
   });
   await initModels(Boolean(settings.models_prompt_seen));
-  setLast(await invoke("last_transcript").catch(() => null));
+  setLast(await invoke("latest_meeting").catch(() => null));
 }
 
 start();
