@@ -15,6 +15,19 @@ pub const MAX_AUTO_SPEAKERS: usize = 8;
 /// поверх чужого.
 pub const MIN_SPEAKER_SEC: f64 = 4.0;
 
+/// Запись короткая, если в кусках от `long_segment_sec` меньше этого времени речи. Тогда
+/// голос того, кто отвечает коротко, почти весь в коротких кусках: без них его нет в
+/// кластеризации, и все его реплики достаются собеседнику.
+const SHORT_RECORDING_SPEECH_SEC: f64 = 20.0;
+/// В короткой записи в кластеризацию идут куски от этой длины. По замеру на 5 коротких
+/// синтезированных диалогах и 2 монологах 1 с находит второго спикера там же, где 0,8 с,
+/// но в диалоге трёх человек на 15 с ошибается чаще (DER 62 % против 36 %); монологи
+/// остаются одним спикером, на 30-секундных отрывках AMI оба порога ничего не меняют.
+const SHORT_RECORDING_SEGMENT_SEC: f64 = 0.8;
+/// Спикеру хватает этой доли речи кластеризуемых кусков, если она меньше
+/// `min_speaker_sec`: в записи на 20 с у собеседника может не набраться 4 с речи.
+const MIN_SPEAKER_SHARE: f64 = 0.25;
+
 /// Номера спикеров с 1 в порядке первого появления: у каждого куска и, если работала
 /// пересегментация, у окон внутри куска.
 #[derive(Debug, Clone, PartialEq)]
@@ -67,10 +80,11 @@ pub(crate) fn cluster_units(
     options: &PipelineOptions,
 ) -> (Vec<Option<usize>>, Vec<Option<Vec<f32>>>) {
     let with_voice: Vec<usize> = (0..units.len()).filter(|&i| units[i].is_some()).collect();
+    let long_sec = clustered_from(durations, &with_voice, options.long_segment_sec);
     let long: Vec<usize> = with_voice
         .iter()
         .copied()
-        .filter(|&i| durations[i] >= options.long_segment_sec)
+        .filter(|&i| durations[i] >= long_sec)
         .collect();
     let base = if long.is_empty() { with_voice } else { long };
     if base.is_empty() {
@@ -92,11 +106,14 @@ pub(crate) fn cluster_units(
         SpeakerCount::Known(_) => ahc(&base_units, k),
         SpeakerCount::Auto => {
             let base_durations: Vec<f64> = base.iter().map(|&i| durations[i]).collect();
+            let min_sec = options
+                .min_speaker_sec
+                .min(MIN_SPEAKER_SHARE * base_durations.iter().sum::<f64>());
             sized_ahc(
                 &base_units,
                 &base_durations,
                 k,
-                options.min_speaker_sec,
+                min_sec,
                 options.same_speaker_cosine,
             )
         }
@@ -116,6 +133,21 @@ pub(crate) fn cluster_units(
         }
     }
     (labels, centers)
+}
+
+// Длина, с которой кусок с голосом идёт в кластеризацию: `long_segment_sec`, а в
+// короткой записи не больше SHORT_RECORDING_SEGMENT_SEC.
+fn clustered_from(durations: &[f64], with_voice: &[usize], long_segment_sec: f64) -> f64 {
+    let long_speech: f64 = with_voice
+        .iter()
+        .map(|&i| durations[i])
+        .filter(|&d| d >= long_segment_sec)
+        .sum();
+    if long_speech < SHORT_RECORDING_SPEECH_SEC {
+        long_segment_sec.min(SHORT_RECORDING_SEGMENT_SEC)
+    } else {
+        long_segment_sec
+    }
 }
 
 // Кусок без голоса (слишком короткий для модели) берёт спикера соседа:
@@ -269,12 +301,13 @@ mod tests {
 
     #[test]
     fn long_segment_threshold_decides_who_enters_clustering() {
-        // Короткий кусок третьего голоса: по умолчанию он не участвует в кластеризации
-        // и уходит к ближайшему из двух центров; с низким порогом получает свою группу.
+        // Кусок третьего голоса короче порога даже короткой записи: по умолчанию он не
+        // участвует в кластеризации и уходит к ближайшему из двух центров; с низким порогом
+        // получает свою группу.
         let segs = vec![
             segment(0.0, 2.0, "а", voice(1, 0.0)),
             segment(2.0, 4.0, "б", voice(2, 0.0)),
-            segment(4.0, 5.0, "в", voice(3, 0.0)),
+            segment(4.0, 4.6, "в", voice(3, 0.0)),
             segment(5.0, 7.0, "г", voice(1, 0.1)),
             segment(7.0, 9.0, "д", voice(2, 0.1)),
         ];
@@ -285,6 +318,44 @@ mod tests {
             ..PipelineOptions::default()
         };
         assert_eq!(ids(&segs, SpeakerCount::Known(3), &low), [1, 2, 3, 1, 2]);
+    }
+
+    #[test]
+    fn in_a_short_recording_a_voice_needs_only_a_quarter_of_the_speech() {
+        // Как в коротком диалоге: у первого голоса 3,8 с речи в длинных кусках, меньше
+        // общих 4 с, но больше четверти речи записи.
+        let segs = vec![
+            segment(0.0, 1.52, "а", voice(1, 0.0)),
+            segment(2.0, 6.58, "б", voice(2, 0.0)),
+            segment(7.0, 9.26, "в", voice(1, 0.1)),
+        ];
+        let options = PipelineOptions::default();
+        assert_eq!(ids(&segs, SpeakerCount::Auto, &options), [1, 2, 1]);
+    }
+
+    // Первый голос говорит кусками по 2 с, второй отвечает только кусками по 1 с.
+    fn short_replies(long_pieces: usize) -> Vec<SegmentResult> {
+        let mut segs = Vec::new();
+        let mut t = 0.0;
+        for i in 0..long_pieces {
+            segs.push(segment(t, t + 2.0, "а", voice(1, 0.01 * i as f32)));
+            t += 2.5;
+            if i < 4 {
+                segs.push(segment(t, t + 1.0, "б", voice(2, 0.01 * i as f32)));
+                t += 1.5;
+            }
+        }
+        segs
+    }
+
+    #[test]
+    fn short_replies_get_their_own_speaker_in_a_short_recording() {
+        let options = PipelineOptions::default();
+        let short = ids(&short_replies(4), SpeakerCount::Auto, &options);
+        assert_eq!(short, [1, 2, 1, 2, 1, 2, 1, 2]);
+        // В длинной записи короткие куски по-прежнему уходят к ближайшему центру.
+        let long = ids(&short_replies(11), SpeakerCount::Auto, &options);
+        assert!(long.iter().all(|&id| id == 1), "{long:?}");
     }
 
     #[test]
