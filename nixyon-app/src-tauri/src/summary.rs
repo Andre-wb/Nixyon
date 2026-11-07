@@ -3,6 +3,7 @@
 //! на стороне ядра.
 
 pub(crate) mod answer;
+pub mod gpu;
 pub mod last_summary;
 mod prompt;
 

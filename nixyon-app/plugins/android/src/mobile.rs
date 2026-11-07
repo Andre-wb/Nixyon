@@ -252,6 +252,14 @@ impl<R: Runtime> Speech<R> {
             .map_err(Into::into)
     }
 
+    /// Видеокарта для языковой модели; действует со следующей загрузки модели.
+    pub async fn set_llm_gpu(&self, enabled: bool) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("setLlmGpu", LlmGpuRequest { enabled })
+            .await
+            .map_err(Into::into)
+    }
+
     /// Подсказки имён участников из разговора; модель та же, что у протокола, и работает
     /// с ним по очереди. Отмена: `cancel_summary`.
     pub async fn suggest_speaker_names(

@@ -167,6 +167,10 @@ impl<R: Runtime> Speech<R> {
         Err(crate::Error::Unsupported)
     }
 
+    pub async fn set_llm_gpu(&self, _enabled: bool) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
     pub async fn suggest_speaker_names(
         &self,
         _request: SpeakerNamesRequest,

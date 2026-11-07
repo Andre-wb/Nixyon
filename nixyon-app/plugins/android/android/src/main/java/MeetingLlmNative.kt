@@ -13,7 +13,19 @@ object MeetingLlmNative {
     // Дескриптор копируется, вызывающий закрывает свой сам. threads: потоки на выдачу ответа,
     // batchThreads: на чтение запроса. repack: переложить веса под инструкции процессора
     // (быстрее, но копия весов в памяти, LlmMemory); false: веса остаются в файле.
-    external fun nativeOpen(fd: Int, offset: Long, contextTokens: Int, threads: Int, batchThreads: Int, repack: Boolean): Long
+    // gpu: попробовать видеокарту (LlmGpu); не вышло, модель на процессоре.
+    external fun nativeOpen(
+        fd: Int,
+        offset: Long,
+        contextTokens: Int,
+        threads: Int,
+        batchThreads: Int,
+        repack: Boolean,
+        gpu: Boolean,
+    ): Long
+
+    // Где считает открытая модель, UTF-8: «CPU» или «Vulkan: <видеокарта>».
+    external fun nativeDevice(handle: Long): ByteArray
 
     // Ответ в UTF-8: из байтов строка собирается в Kotlin, JNI не умеет символы вне BMP.
     external fun nativeGenerate(handle: Long, system: String, user: String, maxTokens: Int, progress: LlmProgress): ByteArray

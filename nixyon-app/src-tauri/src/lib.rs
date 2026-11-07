@@ -74,6 +74,8 @@ pub fn run() {
             exporting::save_export,
             exporting::share_export,
             summary::summary_available,
+            summary::gpu::llm_gpu_status,
+            summary::gpu::set_llm_gpu,
             summary::summarize_meeting,
             summary::cancel_summary,
             summary::last_summary,

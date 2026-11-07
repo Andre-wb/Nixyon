@@ -3,6 +3,7 @@ import { $ } from "./dom.js";
 import { K, resolveLanguage, setLanguage, t } from "./i18n.js";
 import { languageChanged, show } from "./screens.js";
 import { initSettingsBiometric, renderSettingsBiometric } from "./settings-biometric.js";
+import { initSettingsLlmGpu, renderSettingsLlmGpu } from "./settings-llm-gpu.js";
 import { initSettingsModels, renderSettingsModels } from "./settings-models.js";
 import { applyTheme, themeSetting } from "./theme.js";
 
@@ -47,6 +48,7 @@ export function initSettings() {
     $("settings-models-status").textContent = "";
     renderSettingsModels();
     renderSettingsBiometric();
+    renderSettingsLlmGpu();
     // Экран попадает в историю, чтобы системная «Назад» вела на главный экран.
     if (location.hash !== "#settings") history.pushState(null, "", "#settings");
     show("settings");
@@ -54,6 +56,7 @@ export function initSettings() {
   $("settings-back").addEventListener("click", () => history.back());
   initSettingsModels();
   initSettingsBiometric();
+  initSettingsLlmGpu();
   $("hotwords-save").addEventListener("click", saveHotwords);
   for (const radio of document.querySelectorAll('input[name="theme"]')) {
     radio.addEventListener("change", async () => {

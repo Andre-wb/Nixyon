@@ -1493,15 +1493,17 @@ label.model-row {
   padding-bottom: var(--space-5);
 }
 
-/* Разделы моделей и входа по отпечатку в настройках. */
+/* Разделы моделей, входа по отпечатку и ускорения в настройках. */
 .settings-models,
-.settings-biometric {
+.settings-biometric,
+.settings-llm-gpu {
   display: grid;
   gap: var(--space-2);
 }
 
 .settings-models[hidden],
-.settings-biometric[hidden] {
+.settings-biometric[hidden],
+.settings-llm-gpu[hidden] {
   display: none;
 }
 
