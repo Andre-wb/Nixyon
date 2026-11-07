@@ -242,6 +242,10 @@
     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>
   </template>
 
+  <template id="recheck-icon">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+  </template>
+
   <dialog class="sheet" id="turn-sheet" aria-labelledby="turn-sheet-title">
     <form method="dialog" class="sheet-body">
       <div class="sheet-head">
@@ -256,6 +260,36 @@
       <p class="hint" data-i18n="turn_sheet.hint"></p>
       <button class="button button-primary wide" id="turn-save" type="button" data-i18n="turn_sheet.save"></button>
       <p class="error" id="turn-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <!-- Повторная обработка одной реплики: её звук слушается заново, затем текст
+       проверяет языковая модель. Итог только предлагается, замена — обычной правкой. -->
+  <dialog class="sheet" id="turn-check-sheet" aria-labelledby="turn-check-title">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="turn-check-title" data-i18n="turn_check.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="meta" id="turn-check-meta"></p>
+      <div class="sheet-group" id="turn-check-running" hidden>
+        <p class="meta" id="turn-check-phase" aria-live="polite" data-i18n="turn_check.listening"></p>
+        <div class="progress" id="turn-check-progress" role="progressbar" aria-labelledby="turn-check-phase" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span class="progress-fill" id="turn-check-progress-fill"></span>
+        </div>
+        <button class="button button-secondary wide" id="turn-check-cancel" type="button" data-i18n="common.cancel"></button>
+      </div>
+      <div class="card turn-check-result" id="turn-check-result" hidden>
+        <p class="meta" data-i18n="turn_check.before"></p>
+        <p class="turn-check-text" id="turn-check-before"></p>
+        <p class="meta" data-i18n="turn_check.after"></p>
+        <p class="turn-check-text" id="turn-check-after"></p>
+        <p class="hint" id="turn-check-note" data-i18n="turn_check.unchecked" hidden></p>
+      </div>
+      <p class="meta" id="turn-check-same" role="status" data-i18n="turn_check.same" hidden></p>
+      <button class="button button-primary wide" id="turn-check-apply" type="button" data-i18n="turn_check.apply" hidden></button>
+      <button class="button button-primary wide" id="turn-check-start" type="button" data-i18n="turn_check.start"></button>
+      <p class="error" id="turn-check-error" role="alert"></p>
     </form>
   </dialog>
 

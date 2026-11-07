@@ -489,9 +489,11 @@ scripts/publish-models.sh <папка зеркала>
 | `sortformer_fp32` | `sortformer-fp32.onnx` | [DimQ1/sortformer-4spk-v2-onnx-fp32-cpu](https://huggingface.co/DimQ1/sortformer-4spk-v2-onnx-fp32-cpu), 492 МБ, только при `NIXYON_SORTFORMER_FP32=1` |
 
 - Ревизии на Hugging Face и релиз GitHub закреплены в скрипте вместе с SHA-256 каждого файла.
-- В основной набор и в APK из `models/ort/` попадает только `redimnet2-b6.onnx`: это модель
-  голоса приложения на Android. Остальное нужно для замеров (`eval`, `quality_eval`) и
-  тестов с моделями.
+- В основной набор и в APK из `models/ort/` попадают `redimnet2-b6.onnx` (модель голоса
+  приложения на Android) и `age-gender.onnx`: последняя квантуется в int8 при раскладке
+  (363 → 129 МБ, функция `quantize_age_gender`, нужны `onnxruntime` и `onnx` у `python3`),
+  исходник fp32 остаётся в `models/ort/` с закреплённой суммой. Остальное нужно для замеров
+  (`eval`, `quality_eval`) и тестов с моделями.
 - Выгрузки PalabraAI делает вручную [`scripts/export-redimnet2.py`](scripts/export-redimnet2.py)
   во временной среде `uv` (torch, onnx); в проект и в CI Python-пакеты не входят. Скрипт
   сверяет веса по SHA-256 и сравнивает выход ONNX Runtime с PyTorch.
@@ -667,6 +669,14 @@ scripts/build-demo-apk.sh
 
 Готовый файл:
 `nixyon-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`.
+Установка: `adb install -r <файл>`.
+
+Размер готового APK около 2,8 ГБ: языковая модель Q3_K_M (2,3 ГБ), модели
+распознавания (~340 МБ), модель audEERING в int8 (129 МБ вместо 363 МБ, `fetch-models.sh`
+квантует её при раскладке) и нативные библиотеки (~65 МБ). Модели для распознавания
+`fetch-models.sh` скачивает один раз и переиспользует; при первом запуске этой команды
+`fetch-llm.sh` докачивает Q3_K_M (2,3 ГБ). Старый квант Q4_K_M (2,7 ГБ) больше не нужен:
+удалите `models/_download/llm/Qwen3.5-4B-Q4_K_M.gguf`, если он остался на диске.
 Установка: `adb install -r <файл>`. Модели телефон скачает при первом запуске.
 
 Если менялась языковая модель или её квант, прогоните `scripts/llm-meeting-eval.sh`:

@@ -33,7 +33,7 @@ use tauri::{AppHandle, Runtime, State};
 
 pub use command_error::CommandError;
 pub use progress::{Phase, Progress};
-pub use running::Running;
+pub use running::{Running, Slot};
 
 use crate::settings::merge_hotwords;
 use temp_files::TempFiles;
