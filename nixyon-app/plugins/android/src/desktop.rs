@@ -96,6 +96,18 @@ impl<R: Runtime> Speech<R> {
         Err(crate::Error::Unsupported)
     }
 
+    pub async fn player_set_speed(&self, _request: PlaybackSpeedRequest) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn player_set_ranges(&self, _request: PlaybackRangesRequest) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn player_skip(&self, _request: SkipRequest) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
     pub async fn player_close(&self) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }

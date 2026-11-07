@@ -985,8 +985,8 @@ p {
   left: 0;
   z-index: 2;
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: var(--space-2);
   padding: var(--space-2) max(var(--space-4), env(safe-area-inset-right)) max(var(--space-2), env(safe-area-inset-bottom))
     max(var(--space-4), env(safe-area-inset-left));
   border-top: 1px solid var(--separator);
@@ -1017,9 +1017,50 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
-/* Место под панелью плеера, чтобы последняя реплика не уходила под неё. */
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.player-options {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Перемотка на 10 секунд: текстом, а не значком, чтобы было видно, на сколько. */
+.player-skip {
+  min-width: 52px;
+  font: 600 var(--text-callout) / 1 var(--font);
+}
+
+.player-speeds {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.player-speeds .chip {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.player-speaker {
+  flex: 1 1 140px;
+  min-height: 36px;
+  max-width: 100%;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--label);
+  font: 500 var(--text-callout) / 1 var(--font);
+}
+
+/* Место под панелью плеера, чтобы последняя реплика не уходила под неё. Высоту панели
+   задаёт initPlayer по её размеру, поэтому отступ верен и при переносе строк. */
 body.has-player main {
-  padding-bottom: calc(max(var(--space-6), env(safe-area-inset-bottom)) + 64px);
+  padding-bottom: calc(max(var(--space-6), env(safe-area-inset-bottom)) + var(--player-height, 124px));
 }
 
 /* Пометка хода текстом, а не только цветом: «говорят одновременно». */

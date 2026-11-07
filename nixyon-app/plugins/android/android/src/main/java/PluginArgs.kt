@@ -99,6 +99,7 @@ class ImportArgs {
 @InvokeArg
 class PlayerOpenArgs {
     lateinit var path: String
+    var title: String = ""
     var onEvent: Channel? = null
 }
 
@@ -136,6 +137,29 @@ class SpeakerNamesArgs {
 class PlayArgs {
     // Позиция в секундах; null: с текущего места.
     var fromSec: Double? = null
+}
+
+@InvokeArg
+class PlaybackSpeedArgs {
+    var speed: Double = 1.0
+}
+
+@InvokeArg
+class PlaybackRangeArgs {
+    var startSec: Double = 0.0
+    var endSec: Double = 0.0
+}
+
+@InvokeArg
+class PlaybackRangesArgs {
+    // false: играется вся запись, ranges не читаются.
+    var limited: Boolean = false
+    var ranges: Array<PlaybackRangeArgs> = arrayOf()
+}
+
+@InvokeArg
+class SkipArgs {
+    var deltaSec: Double = 0.0
 }
 
 @InvokeArg

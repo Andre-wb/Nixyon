@@ -3,7 +3,10 @@
 
 use std::path::PathBuf;
 
-use nixyon_android::{PlayRequest, PlayerEvent, PlayerOpenRequest, SpeechExt};
+use nixyon_android::{
+    PlayRequest, PlaybackRange, PlaybackRangesRequest, PlaybackSpeedRequest, PlayerEvent,
+    PlayerOpenRequest, SkipRequest, SpeechExt,
+};
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime};
@@ -14,6 +17,9 @@ use crate::transcription::{CommandError, last_audio};
 
 const NO_AUDIO: &str = "no_audio";
 const BAD_POSITION: &str = "bad_position";
+const BAD_SPEED: &str = "bad_speed";
+/// Крайние скорости, которые плеер принимает; интерфейс предлагает 0,75–2.
+const SPEED_RANGE: std::ops::RangeInclusive<f64> = 0.25..=4.0;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -29,12 +35,26 @@ fn checked_position(from_sec: Option<f64>) -> Result<Option<f64>, CommandError> 
     }
 }
 
+/// Отрезки для проигрывания: все должны быть конечными, начинаться не ниже нуля и
+/// кончаться позже начала.
+fn checked_ranges(ranges: &[PlaybackRange]) -> Result<(), CommandError> {
+    let valid = |r: &PlaybackRange| {
+        r.start_sec.is_finite() && r.end_sec.is_finite() && r.start_sec >= 0.0 && r.start_sec < r.end_sec
+    };
+    if ranges.iter().all(valid) {
+        Ok(())
+    } else {
+        Err(CommandError::new(BAD_POSITION))
+    }
+}
+
 /// Открывает запись последней расшифровки. Если записи уже нет (её заменила новая
-/// запись или импорт), ошибка `no_audio`.
+/// запись или импорт), ошибка `no_audio`. `title`: название для экрана блокировки.
 #[tauri::command]
 pub async fn open_playback<R: Runtime>(
     app: AppHandle<R>,
     on_event: Channel<PlayerEvent>,
+    title: String,
 ) -> Result<PlaybackOpened, CommandError> {
     let speech = app.speech();
     let dirs = crate::vault::storage(&app).await?.paths;
@@ -57,6 +77,7 @@ pub async fn open_playback<R: Runtime>(
     let opened = speech
         .player_open(PlayerOpenRequest {
             path: path.to_string_lossy().into_owned(),
+            title,
             on_event: Channel::new(move |body| {
                 if let InvokeResponseBody::Json(text) = body
                     && let Ok(event) = serde_json::from_str::<PlayerEvent>(&text)
@@ -90,6 +111,48 @@ pub async fn pause_audio<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandErr
     app.speech().player_pause().await.map_err(plugin_error)
 }
 
+/// Скорость проигрывания: 1 — обычная, 0,75 — медленнее, 2 — вдвое быстрее.
+#[tauri::command]
+pub async fn set_playback_speed<R: Runtime>(
+    app: AppHandle<R>,
+    speed: f64,
+) -> Result<(), CommandError> {
+    if !SPEED_RANGE.contains(&speed) {
+        return Err(CommandError::new(BAD_SPEED));
+    }
+    app.speech()
+        .player_set_speed(PlaybackSpeedRequest { speed })
+        .await
+        .map_err(plugin_error)
+}
+
+/// Играть только эти отрезки подряд; `None` — вся запись. Между отрезками звук пропускается.
+#[tauri::command]
+pub async fn set_playback_ranges<R: Runtime>(
+    app: AppHandle<R>,
+    ranges: Option<Vec<PlaybackRange>>,
+) -> Result<(), CommandError> {
+    let limited = ranges.is_some();
+    let ranges = ranges.unwrap_or_default();
+    checked_ranges(&ranges)?;
+    app.speech()
+        .player_set_ranges(PlaybackRangesRequest { limited, ranges })
+        .await
+        .map_err(plugin_error)
+}
+
+/// Перемотка от текущего места на `delta_sec` секунд; отрицательное значение — назад.
+#[tauri::command]
+pub async fn skip_audio<R: Runtime>(app: AppHandle<R>, delta_sec: f64) -> Result<(), CommandError> {
+    if !delta_sec.is_finite() {
+        return Err(CommandError::new(BAD_POSITION));
+    }
+    app.speech()
+        .player_skip(SkipRequest { delta_sec })
+        .await
+        .map_err(plugin_error)
+}
+
 #[tauri::command]
 pub async fn close_playback<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
     app.speech().player_close().await.map_err(plugin_error)
@@ -107,5 +170,23 @@ mod tests {
         for bad in [-0.1, f64::NAN, f64::INFINITY] {
             assert_eq!(checked_position(Some(bad)).unwrap_err().code, BAD_POSITION);
         }
+    }
+
+    #[test]
+    fn ranges_must_be_finite_and_run_forward() {
+        let range = |start_sec, end_sec| PlaybackRange { start_sec, end_sec };
+        assert!(checked_ranges(&[]).is_ok());
+        assert!(checked_ranges(&[range(0.0, 1.0), range(2.0, 2.5)]).is_ok());
+        for bad in [range(-1.0, 1.0), range(3.0, 3.0), range(4.0, 1.0), range(f64::NAN, 1.0)] {
+            assert_eq!(checked_ranges(&[bad]).unwrap_err().code, BAD_POSITION);
+        }
+    }
+
+    #[test]
+    fn speed_is_limited_to_the_player_range() {
+        assert!(SPEED_RANGE.contains(&0.75));
+        assert!(SPEED_RANGE.contains(&2.0));
+        assert!(!SPEED_RANGE.contains(&0.0));
+        assert!(!SPEED_RANGE.contains(&f64::NAN));
     }
 }

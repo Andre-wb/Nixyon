@@ -11,12 +11,18 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Загрузка моделей продолжается, когда приложение свёрнуто. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Проигрывание расшифровки продолжается, когда приложение свёрнуто; управление с экрана блокировки. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application>
         <service
             android:name="dev.demo.nixyon.speech.RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+        <service
+            android:name="dev.demo.nixyon.speech.PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
         <service
             android:name="dev.demo.nixyon.speech.ModelDownloadService"
             android:exported="false"
