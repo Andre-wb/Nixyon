@@ -1,5 +1,5 @@
 //! Модели, которые sherpa-onnx не загружает, на крейте ort: модель голоса ReDimNet2,
-//! нейросегментация Sortformer, пол с возрастом по голосу (audEERING), классификатор
+//! нейросегментация Sortformer, выход нейросегментации pyannote по кадрам, пол с возрастом по голосу (audEERING), классификатор
 //! «ребёнок или взрослый» поверх признаков голоса и эмоция реплики (GigaAM-Emo). ONNX
 //! Runtime общий с sherpa-onnx, второй копии нет.
 
@@ -16,6 +16,7 @@ mod manifest;
 mod mean_unit;
 mod median;
 mod mel_filterbank;
+mod pyannote_powerset;
 mod redimnet;
 mod redimnet_input;
 mod repeat_pad;
@@ -37,6 +38,7 @@ pub use emotion_model::EmotionModel;
 pub use emotion_probs::EmotionProbs;
 pub use error::OrtError;
 pub use manifest::{OrtManifest, OrtRole};
+pub use pyannote_powerset::PyannotePowerset;
 pub use redimnet::Redimnet2;
 pub use sortformer::Sortformer;
 pub use speaker_child_verdict::speaker_child_verdict;

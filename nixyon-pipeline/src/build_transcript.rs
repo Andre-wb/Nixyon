@@ -1,5 +1,6 @@
 use nixyon_core::{
-    CancelFlag, SCHEMA_VERSION, SegmentResult, Speaker, Transcript, Turn, VoiceSample, VoiceSpan,
+    CancelFlag, PowersetWindow, SCHEMA_VERSION, SegmentResult, Speaker, Transcript, Turn,
+    VoiceSample, VoiceSpan,
 };
 
 use crate::neural_turns::neural_turns;
@@ -37,8 +38,43 @@ pub fn build_transcript(
 /// То же, что `build_transcript`, и вдобавок центры голосов спикеров расшифровки (по
 /// возрастанию номера): по ним голос запоминают в библиотеку.
 pub fn build_transcript_with_centers(
-    mut segments: Vec<SegmentResult>,
+    segments: Vec<SegmentResult>,
     spans: &[VoiceSpan],
+    samples: &[VoiceSample],
+    count: SpeakerCount,
+    options: &PipelineOptions,
+    meta: TranscriptMeta,
+    cancel: &CancelFlag,
+) -> Result<(Transcript, Vec<SpeakerCenter>), PipelineError> {
+    let segmentation = Segmentation {
+        spans,
+        windows: &[],
+    };
+    build_transcript_from(
+        segments,
+        segmentation,
+        samples,
+        count,
+        options,
+        meta,
+        cancel,
+    )
+}
+
+/// Что дала нейросегментация записи.
+#[derive(Debug, Clone, Copy)]
+pub struct Segmentation<'a> {
+    /// Отрезки говорящих, нужны при `options.neural_segmentation`.
+    pub spans: &'a [VoiceSpan],
+    /// Кадры модели сегментации по окнам, нужны способам ходов без текста, которые берут
+    /// перекрытия из модели (`options.silent_overlaps`).
+    pub windows: &'a [PowersetWindow],
+}
+
+/// То же, что `build_transcript_with_centers`, с кадрами модели сегментации.
+pub fn build_transcript_from(
+    mut segments: Vec<SegmentResult>,
+    segmentation: Segmentation<'_>,
     samples: &[VoiceSample],
     count: SpeakerCount,
     options: &PipelineOptions,
@@ -47,7 +83,8 @@ pub fn build_transcript_with_centers(
 ) -> Result<(Transcript, Vec<SpeakerCenter>), PipelineError> {
     check(cancel)?;
     segments.retain(|s| {
-        !s.text.trim().is_empty() || (options.neural_segmentation && unclear_segment(s, spans))
+        !s.text.trim().is_empty()
+            || (options.neural_segmentation && unclear_segment(s, segmentation.spans))
     });
     if segments.is_empty() {
         return Err(PipelineError::NoSpeech);
@@ -55,7 +92,13 @@ pub fn build_transcript_with_centers(
     segments.sort_by(|a, b| a.start.total_cmp(&b.start));
 
     let (turns, centers) = if options.neural_segmentation {
-        neural_turns(&segments, spans, count, options)
+        neural_turns(
+            &segments,
+            segmentation.spans,
+            segmentation.windows,
+            count,
+            options,
+        )
     } else {
         vad_turns(segments, count, options)
     };

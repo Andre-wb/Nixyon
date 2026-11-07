@@ -11,6 +11,7 @@ mod hotwords_line;
 mod json;
 mod par_map;
 mod pool;
+mod powerset_window;
 mod sample_speech;
 mod segment_result;
 mod speaker;
@@ -40,6 +41,10 @@ pub use hotwords_line::hotwords_line;
 pub use json::{from_json, to_json};
 pub use par_map::par_map;
 pub use pool::{Pool, PoolPoisoned};
+pub use powerset_window::{
+    FIRST_OVERLAP_CLASS, POWERSET_CLASSES, POWERSET_PAIRS, PowersetWindow, overlap_probability,
+    speaker_probability,
+};
 pub use sample_speech::{MAX_SAMPLE_SEC, MIN_SAMPLE_SPEECH_SEC};
 pub use segment_result::SegmentResult;
 pub use speaker::Speaker;

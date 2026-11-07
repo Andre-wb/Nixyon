@@ -172,8 +172,10 @@ function render() {
       head.append(el("span", "turn-flag", t(K.transcript_speaker_unsure)));
     }
     if (turn.flags?.includes(OVERLAP_FLAG)) head.append(el("span", "turn-flag", t(K.transcript_overlap)));
+    // Ход без текста: неразборчивая речь или второй говорящий в перекрытии. Человека
+    // слышно, слова не распознаны.
+    const silent = !turn.text.trim();
     const unclear = turn.flags?.includes(UNCLEAR_FLAG);
-    const silent = unclear && !turn.text.trim();
     if (unclear && !silent) head.append(el("span", "turn-flag", t(K.transcript_unclear_part)));
     const text = el("p", "turn-text", turn.text);
     text.dataset.turnId = String(turn.id);

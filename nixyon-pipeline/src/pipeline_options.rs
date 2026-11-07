@@ -1,7 +1,10 @@
 use nixyon_cluster::SAME_SPEAKER_CENTROID_COSINE;
 use nixyon_core::{EngineOptions, SpeechEdges, WindowSpec};
 
-use crate::{LONG_SEGMENT_SEC, MAX_AUTO_SPEAKERS, MIN_SPEAKER_SEC, SAMPLE_THRESHOLD, VoiceMatch};
+use crate::{
+    LONG_SEGMENT_SEC, MAX_AUTO_SPEAKERS, MIN_SPEAKER_SEC, SAMPLE_THRESHOLD, SilentOverlaps,
+    VoiceMatch,
+};
 
 /// Настройки второй фазы. Значения по умолчанию: лучшая конфигурация по замеру,
 /// её берёт приложение; замер (`eval`) меняет их, чтобы сравнить варианты.
@@ -29,6 +32,12 @@ pub struct PipelineOptions {
     /// Говорящие по отрезкам нейросегментации, с пометкой перекрытий. Тогда окна
     /// не нужны: Витерби и разрез по словам не работают.
     pub neural_segmentation: bool,
+    /// При нейросегментации: откуда берутся ходы без текста говорящему, которого в
+    /// перекрытии слышно, но слова которого распознаватель не дал.
+    pub silent_overlaps: SilentOverlaps,
+    /// Средняя по окнам вероятность перекрытия в кадре модели сегментации, выше которой
+    /// кадр считается перекрытием.
+    pub model_overlap_threshold: f32,
     /// Наименьший косинус между центром голоса спикера и образцом, при котором спикер
     /// получает имя из образца.
     pub sample_threshold: f64,
@@ -87,6 +96,14 @@ impl Default for PipelineOptions {
             // Нейросегментация включена: по замеру DER и cpWER ниже, чем у разреза по словам,
             // особенно на смене голоса без паузы; окна при ней не считаются.
             neural_segmentation: true,
+            // Перекрытия по кадрам модели, второй говорящий по локальным говорящим окон:
+            // по замеру на 6 записях полнота перекрытий на ru4_overlap 17,0 % стала 26,7 %
+            // (с числом спикеров из разметки 19,0 % стала 23,9 %), точность около 76 %,
+            // ложных ходов нет, DER по сумме не хуже. Пересечение отрезков sherpa и
+            // соседний ход почти ничего не дали; порог 0,2 дал ложный ход на ru4_fast,
+            // 0,4 нашёл меньше. Без кадров модели ходы не добавляются.
+            silent_overlaps: SilentOverlaps::ModelLocalSpeakers,
+            model_overlap_threshold: 0.3,
             sample_threshold: SAMPLE_THRESHOLD,
             // По замеру с образцами и центрами двух встреч оба способа дают одно и то же;
             // наибольший косинус у человека с одним эмбеддингом совпадает с прежним сравнением.

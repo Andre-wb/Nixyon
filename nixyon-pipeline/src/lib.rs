@@ -5,8 +5,12 @@ mod edit;
 mod error;
 mod meeting_stats;
 mod merge_centers;
+mod model_overlaps;
 mod neural_labels;
 mod neural_turns;
+mod overlap_local_speakers;
+mod overlap_neighbour;
+mod overlap_spans;
 mod pipeline_error;
 mod pipeline_options;
 mod resegment;
@@ -14,6 +18,7 @@ mod sample_names;
 mod sample_threshold;
 mod search;
 mod sentence_fix;
+mod silent_overlaps;
 mod speaker_count;
 mod speaker_labels;
 mod speaker_names;
@@ -32,7 +37,9 @@ mod words;
 #[cfg(test)]
 mod test_support;
 
-pub use build_transcript::{build_transcript, build_transcript_with_centers};
+pub use build_transcript::{
+    Segmentation, build_transcript, build_transcript_from, build_transcript_with_centers,
+};
 pub use edit::{
     MAX_TURN_TEXT_CHARS, delete_turn, edit_turn_text, merge_speakers, rename_speaker,
     set_turn_emotion,
@@ -45,6 +52,7 @@ pub use pipeline_options::PipelineOptions;
 pub use sample_names::SpeakerCenter;
 pub use sample_threshold::SAMPLE_THRESHOLD;
 pub use search::{MatchKind, SearchHit, search};
+pub use silent_overlaps::SilentOverlaps;
 pub use speaker_count::SpeakerCount;
 pub use speaker_labels::{
     LONG_SEGMENT_SEC, MAX_AUTO_SPEAKERS, MIN_SPEAKER_SEC, SpeakerLabels, label_segments,

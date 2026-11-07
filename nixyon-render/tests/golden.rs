@@ -180,6 +180,35 @@ fn json_export_holds_only_the_transcript_lines() {
     }
 }
 
+// Реплика перекрытия без текста: человека слышно, слова не распознаны.
+fn with_unclear_turn() -> Transcript {
+    let mut t = sample();
+    let mut silent = t.turns[0].clone();
+    silent.id = 99;
+    silent.text = String::new();
+    silent.words = Some(Vec::new());
+    silent.flags = vec![nixyon_core::OVERLAP_FLAG.into()];
+    t.turns.insert(1, silent);
+    t
+}
+
+#[test]
+fn turn_without_text_reads_as_unclear_in_text_exports() {
+    let t = with_unclear_turn();
+    assert!(render_txt(&t, &ru(), None).contains("\n[неразборчиво]\n"));
+    assert!(render_markdown(&t, &en(), None).contains("\\[inaudible\\]"));
+    let blocks = format!("{:?}", protocol_blocks(&t, &ru(), None));
+    assert!(blocks.contains("[неразборчиво]"), "{blocks}");
+}
+
+#[test]
+fn turn_without_text_stays_empty_in_json_and_gives_no_subtitle() {
+    let t = with_unclear_turn();
+    let value: serde_json::Value = serde_json::from_str(&render_json(&t).unwrap()).unwrap();
+    assert_eq!(value["transcript"][1]["text"].as_str(), Some(""));
+    assert_eq!(render_srt(&t, &ru()), render_srt(&sample(), &ru()));
+}
+
 struct Cue {
     start: f64,
     end: f64,

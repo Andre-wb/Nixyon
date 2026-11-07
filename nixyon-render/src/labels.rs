@@ -32,13 +32,14 @@ impl Labels {
         self.speaker_unsure.replace("{name}", name)
     }
 
-    /// Текст хода для вывода: у неразборчивой речи без текста пометка вместо текста,
-    /// у хода, где распознана только часть, пометка после текста.
+    /// Текст хода для вывода. Ход без текста (неразборчивая речь или второй говорящий в
+    /// перекрытии) получает пометку вместо текста, ход, где распознана только часть,
+    /// пометку после текста.
     pub fn turn_text(&self, turn: &Turn) -> String {
         let text = turn.text.trim();
         match (turn.is_unclear(), text.is_empty()) {
-            (false, _) => turn.text.clone(),
-            (true, true) => self.unclear.clone(),
+            (_, true) => self.unclear.clone(),
+            (false, false) => turn.text.clone(),
             (true, false) => format!("{text} {}", self.unclear),
         }
     }

@@ -1,7 +1,10 @@
-use nixyon_core::{OVERLAP_FLAG, SegmentResult, Turn, UNCLEAR_FLAG, VoiceSpan, Word};
+use nixyon_core::{
+    OVERLAP_FLAG, PowersetWindow, SegmentResult, Turn, UNCLEAR_FLAG, VoiceSpan, Word,
+};
 
 use crate::neural_labels::neural_labels;
 use crate::sample_names::SpeakerCenter;
+use crate::silent_overlaps::add_silent_overlaps;
 use crate::speaker_labels::centers_by_speaker;
 use crate::speaker_unsure::mark_speaker_unsure;
 use crate::unclear_speech::{mark_unclear, unclear_segment};
@@ -17,10 +20,12 @@ use crate::{PipelineOptions, SpeakerCount};
 /// неразборчивой речи; ход, где букв мало для времени голоса, тоже помечается.
 /// Ход, голос которого мало похож на его спикера, помечается неуверенным.
 /// Номера спикеров с 1 в порядке первого появления. Куски идут по времени.
-/// Вместе с ходами отдаёт центры голосов спикеров.
+/// Вместе с ходами отдаёт центры голосов спикеров. `windows`: кадры модели сегментации,
+/// нужны только способам ходов без текста, которые берут перекрытия из модели.
 pub(crate) fn neural_turns(
     segments: &[SegmentResult],
     spans: &[VoiceSpan],
+    windows: &[PowersetWindow],
     count: SpeakerCount,
     options: &PipelineOptions,
 ) -> (Vec<Turn>, Vec<SpeakerCenter>) {
@@ -63,6 +68,13 @@ pub(crate) fn neural_turns(
         );
     }
     mark_unclear(&mut turns, spans);
+    add_silent_overlaps(
+        &mut turns,
+        &labeled,
+        windows,
+        options.silent_overlaps,
+        options.model_overlap_threshold,
+    );
     let order = renumber(&mut turns);
     let centers = centers_by_speaker(&order, &labels.centers);
     (turns, centers)
@@ -149,6 +161,7 @@ fn renumber(turns: &mut [Turn]) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SilentOverlaps;
     use crate::test_support::{segment, voice};
 
     fn span(start: f64, end: f64, embedding: Vec<f32>) -> VoiceSpan {
@@ -198,6 +211,7 @@ mod tests {
         let (t, _) = neural_turns(
             &[seg],
             &spans,
+            &[],
             SpeakerCount::Known(2),
             &PipelineOptions::default(),
         );
@@ -216,6 +230,70 @@ mod tests {
         }
     }
 
+    fn with_silent_overlaps() -> PipelineOptions {
+        PipelineOptions {
+            silent_overlaps: SilentOverlaps::Spans,
+            ..PipelineOptions::default()
+        }
+    }
+
+    // Голос 2 звучит 2..3 поверх голоса 1, но все слова распознаны у голоса 1.
+    fn voice_under_another() -> (SegmentResult, Vec<VoiceSpan>) {
+        let seg = spoken(0.0, 5.0, &[("а", 0.5), ("б", 3.6)], voice(1, 0.0));
+        let spans = vec![
+            span(0.0, 5.0, voice(1, 0.0)),
+            span(2.0, 3.0, voice(2, 0.0)),
+            span(7.0, 9.0, voice(2, 0.1)),
+        ];
+        (seg, spans)
+    }
+
+    #[test]
+    fn voice_heard_only_under_another_gets_a_silent_overlap_turn() {
+        let (seg, spans) = voice_under_another();
+        let (t, _) = neural_turns(
+            &[seg],
+            &spans,
+            &[],
+            SpeakerCount::Known(2),
+            &with_silent_overlaps(),
+        );
+        assert_eq!(shape(&t), [(1, "а б", false), (2, "", true)]);
+        assert_eq!((t[1].start, t[1].end), (2.0, 3.0));
+        assert_eq!(t[1].words, Some(Vec::new()));
+    }
+
+    #[test]
+    fn short_crossing_of_voices_adds_no_turn() {
+        let seg = spoken(0.0, 5.0, &[("а", 0.5), ("б", 3.6)], voice(1, 0.0));
+        let spans = vec![
+            span(0.0, 5.0, voice(1, 0.0)),
+            span(4.9, 6.0, voice(2, 0.0)),
+            span(7.0, 9.0, voice(2, 0.1)),
+        ];
+        let (t, _) = neural_turns(
+            &[seg],
+            &spans,
+            &[],
+            SpeakerCount::Known(2),
+            &with_silent_overlaps(),
+        );
+        assert_eq!(shape(&t), [(1, "а б", false)]);
+    }
+
+    #[test]
+    fn default_options_add_no_turn_without_model_frames() {
+        let (seg, spans) = voice_under_another();
+        let (t, _) = neural_turns(
+            &[seg],
+            &spans,
+            &[],
+            SpeakerCount::Known(2),
+            &PipelineOptions::default(),
+        );
+        assert_eq!(shape(&t), [(1, "а б", false)]);
+    }
+
     #[test]
     fn one_voice_keeps_the_segment_whole_with_its_original_text() {
         let mut seg = spoken(0.0, 3.0, &[("Добрый", 0.2), ("день!", 1.0)], voice(1, 0.0));
@@ -224,6 +302,7 @@ mod tests {
         let (t, _) = neural_turns(
             &[seg],
             &spans,
+            &[],
             SpeakerCount::Auto,
             &PipelineOptions::default(),
         );
@@ -241,6 +320,7 @@ mod tests {
         let (t, _) = neural_turns(
             &segs,
             &spans,
+            &[],
             SpeakerCount::Known(2),
             &PipelineOptions::default(),
         );
@@ -261,6 +341,7 @@ mod tests {
         let (t, _) = neural_turns(
             &segs,
             &spans,
+            &[],
             SpeakerCount::Known(2),
             &PipelineOptions::default(),
         );
