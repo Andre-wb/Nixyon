@@ -1,6 +1,7 @@
 import { invoke } from "./api.js";
 import { initExport } from "./export.js";
 import { failed, initHome } from "./home.js";
+import { initLabels } from "./labels.js";
 import { initMeetingTitle } from "./meeting-title.js";
 import { initMeetings } from "./meetings.js";
 import { initModels } from "./models.js";
@@ -28,6 +29,7 @@ async function start() {
   initHome();
   initMeetings();
   initMeetingTitle();
+  initLabels();
   initProcessing(failed);
   initTranscript();
   initSettings();

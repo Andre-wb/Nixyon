@@ -1,8 +1,11 @@
 import { errorText, invoke } from "./api.js";
 import { $, el } from "./dom.js";
 import { K, t } from "./i18n.js";
+import { initLabelFilter, loadLabelFilter, matchesFilter } from "./label-filter.js";
+import { hasMeetingQuery, initMeetingSearch, rerunMeetingSearch } from "./meeting-search.js";
 import { meetingMeta, meetingTitle } from "./meeting-title.js";
 import { onLanguageChange, onScreenChange } from "./screens.js";
+import { searchFor } from "./search.js";
 import { open } from "./transcript.js";
 
 // Сколько участников видно в строке встречи; остальные показаны числом.
@@ -22,10 +25,13 @@ function participantsText(participants) {
   return rest > 0 ? `${names} ${t(K.home_meetings_more, { n: rest })}` : names;
 }
 
+// Пока в поле поиска есть запрос, вместо списка видны найденные места.
 function render() {
   const list = $("meetings-list");
   list.replaceChildren();
-  for (const meeting of meetings) {
+  const searching = hasMeetingQuery();
+  const shown = meetings.filter(matchesFilter);
+  for (const meeting of shown) {
     const row = el("button", "meeting-row");
     row.type = "button";
     row.append(
@@ -39,14 +45,15 @@ function render() {
     item.append(row);
     list.append(item);
   }
-  list.hidden = meetings.length === 0;
-  $("meetings-empty").hidden = meetings.length > 0;
+  list.hidden = searching || shown.length === 0;
+  $("meetings-empty").hidden = searching || meetings.length > 0;
+  $("meetings-filter-empty").hidden = searching || meetings.length === 0 || shown.length > 0;
 }
 
 async function load() {
   const mine = ++loading;
   try {
-    const found = await invoke("list_meetings");
+    const [found] = await Promise.all([invoke("list_meetings"), loadLabelFilter()]);
     if (mine !== loading) return;
     meetings = found;
     $("meetings-error").textContent = "";
@@ -56,13 +63,17 @@ async function load() {
     $("meetings-error").textContent = errorText(error);
   }
   render();
+  rerunMeetingSearch();
 }
 
-async function openMeeting(id) {
+// target: совпадение из поиска по встречам ({ query, turnId, start }); встреча
+// открывается с тем же запросом на этой реплике.
+async function openMeeting(id, target = null) {
   try {
     const opened = await invoke("open_meeting", { meeting: id });
     $("meetings-error").textContent = "";
     open(opened.transcript, [], opened.title ?? null);
+    if (target) searchFor(target.query, target);
   } catch (error) {
     $("meetings-error").textContent = errorText(error);
   }
@@ -71,6 +82,11 @@ async function openMeeting(id) {
 // Список обновляется при каждом показе главного экрана: так в нём видны и новая встреча,
 // и правки имён, и переименование.
 export function initMeetings() {
+  initMeetingSearch(openMeeting, render);
+  initLabelFilter(() => {
+    render();
+    rerunMeetingSearch();
+  });
   onScreenChange((name) => {
     if (name === "home") load();
   });

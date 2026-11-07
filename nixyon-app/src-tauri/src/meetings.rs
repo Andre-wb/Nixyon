@@ -5,11 +5,18 @@
 pub mod audio_file;
 pub mod backfill;
 pub mod centers_file;
+pub mod create_label;
+pub mod delete_label;
 pub mod delete_meeting;
 pub mod edit_lock;
 mod index;
 mod index_entry;
+mod index_file;
+mod label;
+mod label_errors;
+mod label_name;
 mod legacy;
+pub mod list_labels;
 pub mod list_meetings;
 mod meeting_dir;
 mod meeting_id;
@@ -17,9 +24,11 @@ mod meeting_title;
 pub mod open_meeting;
 mod opened_meeting;
 mod participant;
+pub mod rename_label;
 pub mod rename_meeting;
 mod save_meeting;
 mod save_transcript;
+pub mod set_meeting_labels;
 pub mod startup;
 pub mod summary_file;
 pub mod transcript_file;
@@ -106,6 +115,7 @@ pub fn test_meeting(store: &FilesStore, transcript: &Transcript) -> MeetingId {
             file: transcript.audio.file.clone(),
             title: None,
             participants: Some(participant::participants(transcript)),
+            labels: Vec::new(),
         });
         Ok(())
     })

@@ -94,8 +94,15 @@
 
       <div class="group">
         <h2 class="group-title" id="meetings-title" data-i18n="home.meetings"></h2>
+        <div class="search meetings-search" role="search">
+          <input class="search-input" id="meetings-search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-i18n-label="home.search_label">
+        </div>
+        <div class="label-filter" id="label-filter" role="group" data-i18n-label="home.label_filter" hidden></div>
         <ul class="card speakers" id="meetings-list" aria-labelledby="meetings-title" hidden></ul>
         <p class="meta meetings-empty" id="meetings-empty" data-i18n="home.meetings_empty" hidden></p>
+        <p class="meta meetings-empty" id="meetings-filter-empty" data-i18n="home.meetings_filter_empty" hidden></p>
+        <ul class="card speakers" id="meeting-hits" aria-labelledby="meetings-title" hidden></ul>
+        <p class="meta meetings-empty" id="meeting-hits-note" aria-live="polite"></p>
         <p class="error" id="meetings-error" role="alert"></p>
       </div>
 
@@ -125,6 +132,7 @@
         </button>
         <div class="bar-actions">
           <button class="button button-plain" id="open-rename" type="button" data-i18n="transcript.rename"></button>
+          <button class="button button-plain" id="open-labels" type="button" data-i18n="transcript.labels"></button>
           <button class="button button-plain" id="open-export" type="button" data-i18n="export_sheet.button"></button>
         </div>
       </header>
@@ -312,6 +320,23 @@
     </form>
   </dialog>
 
+  <dialog class="sheet" id="labels-sheet" aria-labelledby="labels-sheet-title">
+    <form method="dialog" class="sheet-body" id="labels-form">
+      <div class="sheet-head">
+        <h2 id="labels-sheet-title" data-i18n="labels.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="meta" id="labels-empty" data-i18n="labels.empty" hidden></p>
+      <ul class="card speakers" id="labels-list" aria-labelledby="labels-sheet-title" hidden></ul>
+      <label class="field">
+        <span data-i18n="labels.new"></span>
+        <input id="label-new" type="text" maxlength="40" autocomplete="off" enterkeyhint="done">
+      </label>
+      <button class="button button-secondary wide" id="label-add" type="button" data-i18n="labels.add"></button>
+      <p class="error" id="labels-error" role="alert"></p>
+    </form>
+  </dialog>
+
   <dialog class="sheet" id="voice-sheet" aria-labelledby="voice-sheet-title">
     <form method="dialog" class="sheet-body" id="voice-form">
       <div class="sheet-head">
@@ -351,6 +376,14 @@
     <div class="alert-actions">
       <button class="button button-secondary" id="meeting-delete-no" type="button" data-i18n="common.cancel"></button>
       <button class="button button-danger" id="meeting-delete-yes" type="button" data-i18n="meeting_delete.do"></button>
+    </div>
+  </dialog>
+
+  <dialog class="alert" id="label-delete-confirm" aria-labelledby="label-delete-text">
+    <p id="label-delete-text"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="label-delete-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="label-delete-yes" type="button" data-i18n="labels.delete_do"></button>
     </div>
   </dialog>
 

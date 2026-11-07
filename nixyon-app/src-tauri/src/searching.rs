@@ -1,7 +1,15 @@
-//! Поиск по текстам реплик расшифровки встречи. Запрос в лог не пишется: в нём могут
-//! быть слова из разговора.
+//! Поиск по текстам реплик расшифровки встречи и по всем встречам архива. Запрос в лог не
+//! пишется: в нём могут быть слова из разговора.
 
 mod hit_view;
+mod in_order_parallel;
+#[cfg(test)]
+mod many_meetings_timing;
+mod meeting_hit;
+mod meeting_results;
+pub mod search_meetings;
+#[cfg(test)]
+mod test_archive;
 
 use nixyon_pipeline::search;
 use tauri::{AppHandle, Runtime};

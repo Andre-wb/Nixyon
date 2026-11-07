@@ -64,7 +64,8 @@ function step(delta) {
   scrollToCurrent();
 }
 
-async function run(text) {
+// target: совпадение, которое сделать текущим ({ turnId, start }); без него первое.
+async function run(text, target = null) {
   const mine = ++generation;
   query = text.trim();
   if (!query) {
@@ -78,7 +79,7 @@ async function run(text) {
     // Ответ на устаревший запрос не затирает более свежий.
     if (mine !== generation) return;
     hits = found;
-    index = 0;
+    index = target ? Math.max(0, found.findIndex((h) => h.turnId === target.turnId && h.start === target.start)) : 0;
     applySearch();
     scrollToCurrent();
   } catch (error) {
@@ -87,6 +88,14 @@ async function run(text) {
     applySearch();
     $("search-count").textContent = errorText(error);
   }
+}
+
+// Поиск внутри открытой встречи по запросу с главного экрана: то же совпадение
+// становится текущим, экран прокручивается к его реплике.
+export function searchFor(text, target) {
+  clearTimeout(timer);
+  $("search").value = text;
+  return run(text, target);
 }
 
 // Новая расшифровка: прежний запрос сбрасывается.

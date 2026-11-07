@@ -5,6 +5,7 @@ import { emotionChip, initEmotion, openEmotion } from "./emotion.js";
 import { K, t } from "./i18n.js";
 import { openExport } from "./export.js";
 import { fillersAvailable, openFillers } from "./fillers.js";
+import { openLabels } from "./labels.js";
 import { meetingMeta, meetingTitle, openRename } from "./meeting-title.js";
 import { closePlayer, openPlayer, playFrom, refreshPlayerIndex } from "./player.js";
 import { applySearch, resetSearch } from "./search.js";
@@ -401,6 +402,7 @@ export function initTranscript() {
       renderTitle();
     });
   });
+  $("open-labels").addEventListener("click", () => current && openLabels(currentMeeting()));
   $("open-stats").addEventListener("click", () => current && openStats(current));
   $("speaker-save").addEventListener("click", saveName);
   $("speaker-remember").addEventListener("click", rememberVoice);

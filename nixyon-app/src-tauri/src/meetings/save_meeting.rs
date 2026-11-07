@@ -50,6 +50,7 @@ pub fn save_meeting(store: &FilesStore, meeting: NewMeeting<'_>) -> std::io::Res
             file: transcript.audio.file.clone(),
             title: None,
             participants: Some(participants(&transcript)),
+            labels: Vec::new(),
         });
         Ok(id)
     });

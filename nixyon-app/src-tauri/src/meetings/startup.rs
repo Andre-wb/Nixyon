@@ -89,6 +89,7 @@ mod tests {
                 file: "a.wav".into(),
                 title: None,
                 participants: None,
+                labels: Vec::new(),
             });
             Ok(())
         })

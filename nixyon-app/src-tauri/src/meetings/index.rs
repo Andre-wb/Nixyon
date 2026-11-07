@@ -3,55 +3,59 @@
 
 use std::sync::{Mutex, PoisonError};
 
-use serde::{Deserialize, Serialize};
-
 use super::index_entry::IndexEntry;
+use super::index_file::IndexFile;
 use super::meeting_id::MeetingId;
 use crate::vault::FilesStore;
 
 pub const FILE: &str = "meetings.json";
 
-/// Индекс меняют сохранение встречи, переименование и правки участников, в том числе
+/// Индекс меняют сохранение встречи, переименование, правки участников и меток, в том числе
 /// одновременно из разных команд. Без общей блокировки на весь цикл «прочитать, изменить,
 /// записать» одна из двух записей потерялась бы.
 static WRITE_LOCK: Mutex<()> = Mutex::new(());
 
-#[derive(Serialize, Deserialize)]
-struct IndexFile {
-    meetings: Vec<IndexEntry>,
-}
-
 /// Нет файла: архив пуст. Битый файл: ошибка с видом `InvalidData`, чтобы следующее
 /// сохранение не затёрло встречи.
-pub fn load(store: &FilesStore) -> std::io::Result<Vec<IndexEntry>> {
+pub fn load_file(store: &FilesStore) -> std::io::Result<IndexFile> {
     match store.read(FILE)? {
         Some(bytes) => serde_json::from_slice::<IndexFile>(&bytes)
-            .map(|f| f.meetings)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
-        None => Ok(Vec::new()),
+        None => Ok(IndexFile::default()),
     }
 }
 
+pub fn load(store: &FilesStore) -> std::io::Result<Vec<IndexEntry>> {
+    load_file(store).map(|f| f.meetings)
+}
+
 /// Оборванная запись не портит прежний индекс.
-fn save(store: &FilesStore, meetings: &[IndexEntry]) -> std::io::Result<()> {
-    let json = serde_json::to_vec(&IndexFile {
-        meetings: meetings.to_vec(),
-    })
-    .map_err(std::io::Error::other)?;
+fn save(store: &FilesStore, file: &IndexFile) -> std::io::Result<()> {
+    let json = serde_json::to_vec(file).map_err(std::io::Error::other)?;
     store.write(FILE, &json)
 }
 
-/// Читает индекс, даёт его изменить и записывает. Ошибка изменения оставляет индекс как
-/// был.
+/// Читает весь индекс, даёт его изменить и записывает, под общей блокировкой. Ошибка
+/// изменения оставляет индекс как был. `io` превращает ошибку чтения и записи в ошибку
+/// вызывающего.
+pub fn update_file<T, E>(
+    store: &FilesStore,
+    change: impl FnOnce(&mut IndexFile) -> Result<T, E>,
+    io: impl Fn(std::io::Error) -> E,
+) -> Result<T, E> {
+    let _guard = WRITE_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut file = load_file(store).map_err(&io)?;
+    let result = change(&mut file)?;
+    save(store, &file).map_err(io)?;
+    Ok(result)
+}
+
+/// Как `update_file`, но меняются только встречи; метки остаются как были.
 pub fn update<T>(
     store: &FilesStore,
     change: impl FnOnce(&mut Vec<IndexEntry>) -> std::io::Result<T>,
 ) -> std::io::Result<T> {
-    let _guard = WRITE_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
-    let mut meetings = load(store)?;
-    let result = change(&mut meetings)?;
-    save(store, &meetings)?;
-    Ok(result)
+    update_file(store, |f| change(&mut f.meetings), |e| e)
 }
 
 /// Строка встречи, если она есть в индексе.
@@ -75,6 +79,7 @@ mod tests {
             file: "встреча.m4a".into(),
             title: None,
             participants: Some(Vec::new()),
+            labels: Vec::new(),
         }
     }
 
@@ -112,6 +117,42 @@ mod tests {
         assert_eq!(meetings.len(), 1);
         assert_eq!(meetings[0].title, None);
         assert_eq!(meetings[0].participants, None);
+    }
+
+    #[test]
+    fn index_of_the_previous_version_without_labels_is_read() {
+        let store = crate::vault::test_store("meetings-index-no-labels");
+        let json = r#"{"meetings":[{"id":"2026-11-07T10:00:00Z","duration_sec":1.5,"file":"a.wav","title":"Планёрка","participants":[]}]}"#;
+        store.write(FILE, json.as_bytes()).unwrap();
+        let file = load_file(&store).unwrap();
+        assert_eq!(file.labels, Vec::new());
+        assert_eq!(file.meetings[0].labels, Vec::<u32>::new());
+        assert_eq!(file.meetings[0].title.as_deref(), Some("Планёрка"));
+    }
+
+    #[test]
+    fn change_of_meetings_keeps_the_labels() {
+        let store = crate::vault::test_store("meetings-index-keeps-labels");
+        update_file(
+            &store,
+            |f| {
+                f.labels.push(super::super::label::Label {
+                    id: 1,
+                    name: "Отдел".into(),
+                });
+                Ok::<_, std::io::Error>(())
+            },
+            |e| e,
+        )
+        .unwrap();
+        update(&store, |m| {
+            m.push(entry(1));
+            Ok(())
+        })
+        .unwrap();
+        let file = load_file(&store).unwrap();
+        assert_eq!(file.labels.len(), 1);
+        assert_eq!(file.meetings, vec![entry(1)]);
     }
 
     #[test]

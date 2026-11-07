@@ -646,6 +646,63 @@ p {
   padding: 0 var(--space-4);
 }
 
+.meetings-search {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Названия меток вводит человек и они бывают длинными: метка переносится, а не уводит
+   ряд вбок. */
+.label-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.label-filter .chip {
+  max-width: 100%;
+  padding-block: var(--space-2);
+  line-height: 1.2;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.hit-text {
+  overflow-wrap: anywhere;
+}
+
+.label-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 52px;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+}
+
+.label-row.label-edit {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+}
+
+.label-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.label-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Удаление метки снимает её со всех встреч, поэтому значок цвета опасного действия. */
+.danger-icon {
+  color: var(--danger);
+}
+
 .voice-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
