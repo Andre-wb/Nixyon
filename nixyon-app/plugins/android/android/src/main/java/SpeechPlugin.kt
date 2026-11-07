@@ -56,6 +56,9 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
     private var webView: WebView? = null
     @Volatile
     private var importCancelled = AtomicBoolean(false)
+    private val installing = AtomicBoolean(false)
+    @Volatile
+    private var installCancelled = AtomicBoolean(false)
 
     @Command
     fun engineStatus(invoke: Invoke) {
@@ -632,6 +635,99 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         player.close()
     }
 
+    // Какие модели есть в каталоге, какие уже скачаны и не идёт ли загрузка, начатая
+    // до перезапуска приложения.
+    @Command
+    fun modelsStatus(invoke: Invoke) {
+        scope.launch {
+            try {
+                val catalog = ModelCatalog.read(activity.assets)
+                val folders = ModelFolders.of(activity)
+                val installed = InstalledModels.read(folders).ready(folders)
+                val pending = journal().read()
+                val packs = JSONArray()
+                for (pack in catalog.packs) {
+                    packs.put(
+                        jsObject(
+                            "key" to pack.key,
+                            "required" to pack.required,
+                            "size" to catalog.size(pack),
+                            "installed" to (pack in installed),
+                        ),
+                    )
+                }
+                invoke.resolve(
+                    jsObject(
+                        "packs" to packs,
+                        "downloading" to (pending != null),
+                        "pending" to JSONArray(pending?.packs?.map { it.key }.orEmpty()),
+                        "pendingAllowMetered" to (pending?.allowMetered ?: false),
+                        "metered" to NetworkState.isMetered(activity),
+                    ),
+                )
+            } catch (e: ModelsException) {
+                Log.e(TAG, "состояние моделей: ${e.code}: ${e.message}", e)
+                invoke.reject(e.message, e.code)
+            } catch (e: Throwable) {
+                Log.e(TAG, "состояние моделей не прочиталось", e)
+                invoke.reject("internal error", ModelsException.DOWNLOAD_FAILED)
+            }
+        }
+    }
+
+    // Загрузка выбранных моделей с зеркала. Ход загрузки идёт в канал; после загрузки
+    // движок отпускает старые модели, следующая запись загрузит новый набор.
+    @Command
+    fun downloadModels(invoke: Invoke) {
+        val args = invoke.parseArgs(DownloadModelsArgs::class.java)
+        val packs = args.packs.map { key -> ModelPack.fromKey(key) }
+        if (packs.any { it == null }) {
+            invoke.reject("unknown model pack", ModelsException.BAD_MANIFEST)
+            return
+        }
+        if (!installing.compareAndSet(false, true)) {
+            invoke.reject("download already running", ModelsException.BUSY)
+            return
+        }
+        val flag = AtomicBoolean(false)
+        installCancelled = flag
+        scope.launch {
+            try {
+                val folders = ModelFolders.of(activity)
+                val installer = ModelInstaller(
+                    ModelCatalog.read(activity.assets),
+                    folders,
+                    SystemDownloadQueue(activity.applicationContext),
+                    journal(),
+                    ModelInstaller.freeBytesOf(folders.base),
+                )
+                val started = System.nanoTime()
+                installer.install(packs.filterNotNull().toSet(), args.allowMetered, args.notificationTitle, flag) { p ->
+                    args.onProgress?.send(jsObject("phase" to p.phase, "done" to p.done, "total" to p.total))
+                }
+                engine.unload()
+                Log.i(TAG, "модели скачаны: ${(System.nanoTime() - started) / 1_000_000} мс")
+                invoke.resolve()
+            } catch (e: ModelsException) {
+                if (e.code == ModelsException.CANCELLED) Log.i(TAG, "загрузка моделей отменена") else Log.e(TAG, "загрузка моделей: ${e.code}: ${e.message}", e)
+                invoke.reject(e.message, e.code)
+            } catch (e: Throwable) {
+                Log.e(TAG, "загрузка моделей не удалась", e)
+                invoke.reject("internal error", ModelsException.DOWNLOAD_FAILED)
+            } finally {
+                installing.set(false)
+            }
+        }
+    }
+
+    @Command
+    fun cancelModelDownload(invoke: Invoke) {
+        installCancelled.set(true)
+        invoke.resolve()
+    }
+
+    private fun journal() = DownloadJournal(File(activity.noBackupFilesDir, DOWNLOAD_JOURNAL))
+
     @Command
     fun cancelImport(invoke: Invoke) {
         importCancelled.set(true)
@@ -647,6 +743,8 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         // На процесс, а не на экземпляр плагина: ядро спрашивает ключ один раз за процесс.
         private val recoveryDone = AtomicBoolean(false)
         private val recovered = AtomicReference<RecordingResult?>(null)
+        // Журнал начатой загрузки моделей; в резервную копию Android не попадает.
+        private const val DOWNLOAD_JOURNAL = "model-downloads.json"
         const val MICROPHONE = "microphone"
         const val NOTIFICATIONS = "notifications"
     }

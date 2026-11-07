@@ -19,7 +19,12 @@
         </button>
       </header>
 
-      <div class="group">
+      <div class="notice info" id="models-missing" hidden>
+        <p data-i18n="models.missing"></p>
+        <button class="button button-primary" id="models-open" type="button" data-i18n="models.missing_download"></button>
+      </div>
+
+      <div class="group" id="count-group">
         <h2 class="group-title" id="count-title" data-i18n="home.count_label"></h2>
         <div class="count" role="group" aria-labelledby="count-title">
           <button class="chip" id="count-unknown" type="button" aria-pressed="true" data-i18n="home.count_unknown"></button>
@@ -35,7 +40,7 @@
         </div>
       </div>
 
-      <div class="recorder">
+      <div class="recorder" id="recorder">
         <div class="record-wrap">
           <span class="level-ring" id="level-ring" aria-hidden="true"></span>
           <button class="record" id="record" type="button" aria-describedby="record-label">
@@ -143,7 +148,34 @@
       <button class="button button-primary wide" id="voice-add" type="button" data-i18n="voices.add"></button>
       <p class="error" id="voices-error" role="alert"></p>
     </section>
+
+    <section class="screen" id="screen-models" aria-labelledby="models-title" hidden>
+      <h1 class="title" id="models-title" data-i18n="models.title"></h1>
+      <p class="meta" data-i18n="models.hint"></p>
+      <ul class="card models" id="models-list"></ul>
+      <p class="meta models-total" id="models-total" aria-live="polite"></p>
+      <div class="models-progress" id="models-progress" hidden>
+        <p class="meta" id="models-phase" aria-live="polite"></p>
+        <div class="progress" id="models-bar" role="progressbar" aria-labelledby="models-phase" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span class="progress-fill" id="models-fill"></span>
+        </div>
+      </div>
+      <p class="error" id="models-error" role="alert"></p>
+      <div class="models-actions">
+        <button class="button button-primary wide" id="models-download" type="button" data-i18n="models.download"></button>
+        <button class="button button-secondary wide" id="models-cancel" type="button" data-i18n="models.cancel" hidden></button>
+        <button class="button button-plain wide" id="models-later" type="button" data-i18n="models.later"></button>
+      </div>
+    </section>
   </main>
+
+  <dialog class="alert" id="models-metered" aria-labelledby="models-metered-text">
+    <p id="models-metered-text"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="models-metered-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-primary" id="models-metered-yes" type="button" data-i18n="models.download"></button>
+    </div>
+  </dialog>
 
   <dialog class="sheet" id="speaker-sheet" aria-labelledby="speaker-sheet-title">
     <form method="dialog" class="sheet-body" id="speaker-form">

@@ -137,4 +137,16 @@ impl<R: Runtime> Speech<R> {
     pub async fn cancel_summary(&self) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }
+
+    pub async fn models_status(&self) -> crate::Result<ModelsStatus> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn download_models(&self, _request: DownloadModelsRequest) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn cancel_model_download(&self) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
 }

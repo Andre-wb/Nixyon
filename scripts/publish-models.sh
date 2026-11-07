@@ -2,7 +2,10 @@
 # Кладёт скачанные модели в папку зеркала, которую раздаёт Nixyon Hub: каждый файл под
 # своей SHA-256. Берутся файлы, которые скрипты загрузки уже сверили по сумме: архивы и
 # модели в models/_download, языковая модель в models/_download/llm, набор ort в
-# models/ort. Файлы, которых среди скачанных больше нет, из зеркала удаляются.
+# models/ort. Ещё кладутся готовые файлы из models/models.json и models/llm/llm.json:
+# их по каталогу качает телефон, архивы он не распаковывает. Сумма такого файла должна
+# совпасть с манифестом, иначе скрипт падает. Файлы, которых среди скачанных больше нет,
+# из зеркала удаляются.
 #
 #   scripts/publish-models.sh <папка зеркала>
 #
@@ -48,6 +51,9 @@ sum_of() {
   sha256_of "${file}"
 }
 
+# Сумма последнего выложенного файла: по ней готовые файлы сверяются с манифестом.
+published_sha=""
+
 publish() {
   local file="$1" size mtime sha
   size="$(size_of "${file}")"
@@ -55,6 +61,7 @@ publish() {
   sha="$(sum_of "${file}" "${size}" "${mtime}")"
   new_sums+="${sha} ${size} ${mtime} ${file}"$'\n'
   keep+="${sha} "
+  published_sha="${sha}"
   if [[ -f "${mirror}/${sha}" && "$(size_of "${mirror}/${sha}")" == "${size}" ]]; then
     return
   fi
@@ -72,6 +79,37 @@ for file in "${MODELS}"/_download/* "${MODELS}"/_download/llm/* "${MODELS}"/ort/
   esac
   publish "${file}"
 done
+
+# Готовые файлы для телефона: путь, размер и сумма из манифеста.
+ready_files() {
+  python3 -I -c '
+import json, sys
+from pathlib import Path
+models = Path(sys.argv[1])
+speech = models / "models.json"
+if speech.is_file():
+    for f in json.loads(speech.read_text())["files"].values():
+        print(models / f["path"], f["sha256"])
+llm = models / "llm" / "llm.json"
+if llm.is_file():
+    f = json.loads(llm.read_text())["model"]
+    print(models / "llm" / f["path"], f["sha256"])
+' "${MODELS}"
+}
+
+ready="$(ready_files)"
+while read -r file expected; do
+  [[ -n "${file}" ]] || continue
+  if [[ ! -f "${file}" ]]; then
+    echo "нет ${file#"${MODELS}"/} из манифеста" >&2
+    exit 1
+  fi
+  publish "${file}"
+  if [[ "${published_sha}" != "${expected}" ]]; then
+    echo "сумма ${file#"${MODELS}"/} не совпала с манифестом" >&2
+    exit 1
+  fi
+done <<<"${ready}"
 
 for file in "${mirror}"/* "${mirror}"/.*.tmp; do
   [[ -f "${file}" ]] || continue

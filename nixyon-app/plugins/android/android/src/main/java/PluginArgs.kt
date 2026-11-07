@@ -118,3 +118,14 @@ class PlayArgs {
     // Позиция в секундах; null: с текущего места.
     var fromSec: Double? = null
 }
+
+@InvokeArg
+class DownloadModelsArgs {
+    // Ключи ModelPack; обязательный набор речи входит всегда.
+    var packs: Array<String> = arrayOf()
+    // Разрешена ли платная сеть (мобильная, точка доступа).
+    var allowMetered: Boolean = false
+    // Заголовок уведомления о загрузке на языке интерфейса.
+    var notificationTitle: String = ""
+    var onProgress: Channel? = null
+}

@@ -1,6 +1,7 @@
 import { channel, errorCode, errorText, invoke } from "./api.js";
 import { $ } from "./dom.js";
 import { K, t } from "./i18n.js";
+import { onModelsChange } from "./models.js";
 import { onLanguageChange, openModal } from "./screens.js";
 
 // Протокол встречи языковой моделью на телефоне. Модель работает минуты, поэтому лист
@@ -49,11 +50,17 @@ async function openSummary() {
   openModal($("summary-sheet"));
 }
 
-// Кнопка видна, только если на телефоне есть языковая модель.
+async function checkAvailable() {
+  $("open-summary").hidden = !(await invoke("summary_available").catch(() => false));
+}
+
+// Кнопка видна, только если на телефоне есть языковая модель; после загрузки моделей
+// это проверяется заново.
 export async function initSummary() {
   $("open-summary").addEventListener("click", openSummary);
   $("summary-start").addEventListener("click", start);
   $("summary-cancel").addEventListener("click", () => invoke("cancel_summary").catch(() => null));
   onLanguageChange(render);
-  $("open-summary").hidden = !(await invoke("summary_available").catch(() => false));
+  onModelsChange(checkAvailable);
+  await checkAvailable();
 }

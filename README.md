@@ -319,7 +319,8 @@ Nixyon расшифровывает записи встреч на русско�
 Приложение на устройстве:
 
 - разрешения плагина: `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
-  `POST_NOTIFICATIONS`; в манифесте приложения есть ещё `INTERNET`;
+  `POST_NOTIFICATIONS`, `ACCESS_NETWORK_STATE` (платная ли сеть перед загрузкой моделей);
+  в манифесте приложения есть ещё `INTERNET`;
 - файлы экспорта отдаются наружу через `FileProvider` из манифеста приложения, открыта
   только папка `cache/exports`;
 - приложение не участвует в резервном копировании (`allowBackup="false"`).
@@ -333,9 +334,9 @@ Nixyon расшифровывает записи встреч на русско�
 - Перед запуском проверяется память: нужен запас 768 МБ сверх размера модели, и система не
   должна быть в состоянии нехватки памяти (`lowMemory`). Иначе модель не запускается.
 - Где лежит модель:
-  - в `llm/` внешней папки приложения, вместе с `llm.json`. Размер проверяется при каждом
-    запуске, SHA-256 только когда меняются версия, путь, сумма, размер или время изменения
-    файла;
+  - в `llm/` внешней папки приложения, вместе с `llm.json`: туда её кладёт загрузка
+    моделей. Размер проверяется при каждом запуске, SHA-256 только когда меняются версия,
+    путь, сумма, размер или время изменения файла;
   - или несжатой внутри APK; тогда проверяется только размер.
 - Подсказка модели написана по-русски при любом языке интерфейса: только то, что есть в
   расшифровке, в виде «Краткое содержание», «Решения», «Задачи».
@@ -416,8 +417,8 @@ Nixyon расшифровывает записи встреч на русско�
   папок.
 - Роли на телефоне ([`ModelRole.kt`](nixyon-app/plugins/android/android/src/main/java/ModelRole.kt)):
   обязательны те же шесть и ещё `redimnet2`, `segmentation` и `asr_bpe_vocab`;
-  необязательны только четыре роли `live_*`, все вместе. Роли `tagging_*` телефон не
-  читает.
+  необязательны четыре роли `live_*` (все вместе), `denoiser` и `age_gender`. Роли
+  `tagging_*` телефон не читает.
 
 Как приложение находит модели
 ([`ModelLocator.kt`](nixyon-app/plugins/android/android/src/main/java/ModelLocator.kt)):
@@ -426,7 +427,53 @@ Nixyon расшифровывает записи встреч на русско�
   файлов сверяются при каждом запуске, SHA-256 только когда меняются версия набора, суммы,
   размеры или время изменения файлов. Тихо переключиться на модели из APK приложение не
   может;
-- иначе модели берутся из APK, по манифесту внутри APK, без сверки файлов.
+- иначе модели берутся из APK, по манифесту внутри APK, без сверки файлов. Сборки этого
+  репозитория моделей в APK не кладут.
+
+### Загрузка моделей на телефоне
+
+В APK нет моделей, только код и каталог моделей
+[`assets/catalog/`](nixyon-app/plugins/android/android/src/main/assets/catalog): `models.json`
+и `llm.json` в том же формате, что пишут `fetch-models.sh` и `fetch-llm.sh`. Телефон качает
+модели с зеркала `https://nixyon.onyxar.org/models`, где каждый файл лежит под своей
+SHA-256, и сверяет скачанное с каталогом.
+
+- При первом запуске открывается экран «Скачайте модели». Обязательный набор
+  распознавания (около 320 МБ) отмечен всегда, необязательные модели можно снять:
+  языковая модель для протокола встречи (2,3 ГБ), модель возраста и пола (363 МБ), живой
+  текст (29 МБ), шумодав (0,5 МБ). Сразу отмечены все.
+- «Не сейчас» закрывает экран, и сам он больше не открывается. Пока набор распознавания не
+  скачан, на главном экране вместо записи и выбора файла плашка «Скачать модели».
+- Если телефон не в Wi-Fi, перед загрузкой приложение спрашивает про мобильную сеть.
+- Файлы качает системный `DownloadManager`: загрузка идёт в свёрнутом приложении и сама
+  докачивает после обрыва связи. Номера загрузок лежат в `model-downloads.json` в
+  `noBackupFilesDir`: если процесс убит, при следующем запуске загрузка продолжается.
+- Файл качается под именем с `.part`. После загрузки сверяются размер и SHA-256 из
+  каталога, затем файл получает своё имя, и последним пишется `models.json` или `llm.json`
+  во внешней папке приложения. Недокачанный набор никогда не выглядит готовым.
+- Нужно свободное место: размер моделей и ещё 200 МБ запаса.
+
+Каталог собирает [`scripts/build-model-catalog.py`](scripts/build-model-catalog.py) из
+`models/models.json` (без ролей `tagging_*`) и `models/llm/llm.json`. После смены моделей
+каталог нужно пересобрать, иначе упадёт тест скриптов в CI:
+
+```sh
+scripts/fetch-models.sh && scripts/fetch-llm.sh
+scripts/build-model-catalog.py
+```
+
+На зеркало файлы кладёт `scripts/publish-models.sh <папка зеркала>` на сервере хаба. Он
+кладёт и исходные архивы, и готовые файлы из `models.json` и `llm.json`: телефон архивы не
+распаковывает. Порядок на сервере:
+
+```sh
+scripts/fetch-models.sh
+scripts/fetch-llm.sh            # полностью, не --manifest-only: нужен сам файл модели
+scripts/publish-models.sh <папка зеркала>
+```
+
+Если `llm.json` есть, а файла модели нет (так оставляет `fetch-llm.sh --manifest-only`),
+`publish-models.sh` падает с ошибкой `нет llm/... из манифеста`.
 
 ### Набор `models/ort/`
 
@@ -455,6 +502,8 @@ Nixyon расшифровывает записи встреч на русско�
 [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) с закреплённой
 ревизией. Он кладёт модель в `models/llm/qwen3.5-4b-q3_k_m.gguf` (жёсткой ссылкой, если можно)
 и пишет манифест `models/llm/llm.json`. В `models.json` эта модель не входит.
+`scripts/fetch-llm.sh --manifest-only` пишет только `llm.json`, без модели: так делает CI,
+чтобы сверить каталог моделей.
 
 ### Библиотеки
 
@@ -584,8 +633,9 @@ cargo tauri android build --debug --apk --target aarch64 --ci
 ```
 
 Плагин под Android линкуется с `third_party/sherpa-onnx/ort-lib-android`, поэтому до сборки
-нужен `scripts/fetch-sherpa.sh`. В такой APK модели не входят, их кладут на телефон
-отдельно:
+нужен `scripts/fetch-sherpa.sh`. В APK моделей нет: телефон качает их с зеркала при первом
+запуске (см. [Загрузка моделей на телефоне](#загрузка-моделей-на-телефоне)). При разработке
+их можно положить и через adb:
 
 ```sh
 scripts/push-models.sh   # модели распознавания в /sdcard/Android/data/dev.demo.nixyon/files/models
@@ -597,37 +647,27 @@ scripts/push-llm.sh      # языковая модель в /sdcard/Android/data
 не возьмёт недокачанный набор. Переустанавливать приложение нужно через `adb install -r`, потому что
 удаление стирает эту папку вместе с моделями.
 
-### APK с моделями внутри
+### Демо-APK
 
 ```sh
-scripts/fetch-sherpa.sh && scripts/fetch-models.sh
+scripts/fetch-sherpa.sh
 scripts/build-demo-apk.sh
 ```
 
-[`scripts/build-demo-apk.sh`](scripts/build-demo-apk.sh) собирает release-APK для `aarch64`:
+[`scripts/build-demo-apk.sh`](scripts/build-demo-apk.sh) собирает release-APK для `aarch64`
+без моделей:
 
-1. Докачивает llama.cpp и языковую модель (`fetch-llama-cpp.sh`, `fetch-llm.sh`).
+1. Докачивает исходники llama.cpp (`fetch-llama-cpp.sh`).
 2. Проверяет отладочный ключ `~/.android/debug.keystore`. Если ключа нет, создаёт его так
    же, как Android Studio.
-3. Копирует модели строго по `models.json` и `llm.json`, сверяя размер и SHA-256 каждого
-   файла. Роли `tagging_*`, которые телефон не читает, в APK не кладутся: они
-   исключаются и из манифеста внутри APK.
-4. Собирает APK командой `cargo tauri android build --apk --target aarch64 --ci` со свойством
-   Gradle `nixyonModelsAssets`, подпись отладочным ключом. После сборки удаляет
-   промежуточные копии ресурсов Gradle: с языковой моделью они занимают гигабайты.
-5. Заново выравнивает APK через `zipalign -P 16 64` и подписывает `apksigner`: llama.cpp
-   отображает модель прямо из APK, и её веса должны лежать на смещении, кратном 32 байтам.
-6. Проверяет выравнивание и подпись.
+3. Собирает APK командой `cargo tauri android build --apk --target aarch64 --ci` со свойством
+   Gradle `nixyonDebugSigned=true`: release подписывается отладочным ключом и ставится
+   поверх отладочных сборок.
+4. Проверяет подпись `apksigner verify`.
 
 Готовый файл:
 `nixyon-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`.
-Установка: `adb install -r <файл>`.
-
-Размер готового APK около 3,1 ГБ: языковая модель Q3_K_M (2,3 ГБ), модели
-распознавания (~340 МБ), модель audEERING (363 МБ) и нативные библиотеки (~65 МБ). Модели для распознавания
-`fetch-models.sh` скачивает один раз и переиспользует; при первом запуске этой команды
-`fetch-llm.sh` докачивает Q3_K_M (2,3 ГБ). Старый квант Q4_K_M (2,7 ГБ) больше не нужен:
-удалите `models/_download/llm/Qwen3.5-4B-Q4_K_M.gguf`, если он остался на диске.
+Установка: `adb install -r <файл>`. Модели телефон скачает при первом запуске.
 
 Если менялась языковая модель или её квант, прогоните `scripts/llm-meeting-eval.sh`:
 промпт и пороги качества подбирались под Q4_K_M.
@@ -645,7 +685,7 @@ docker compose run --rm check          # fmt, clippy и тесты ядра
 docker compose run --rm test-models    # тесты с моделями (нужны models/ и models/dialogs/)
 docker compose run --rm transcribe models models/example.wav out.json [число спикеров]
 docker compose run --rm app-check      # fmt и clippy приложения, в том числе под Android, и его тесты
-docker compose run --rm apk            # APK с моделями внутри (arm64), нужны models/ из fetch
+docker compose run --rm apk            # демо-APK без моделей (arm64)
 ```
 
 - **Образы.**
@@ -756,6 +796,7 @@ cd nixyon-app/src-tauri/gen/android
 Шаги по порядку:
 
 1. Библиотеки и модели: `fetch-sherpa.sh`, `fetch-llama-cpp.sh`, `fetch-models.sh`,
+   `fetch-llm.sh --manifest-only` (только `llm.json` для сверки каталога моделей),
    `fetch-test-audio.sh`.
 2. Форматирование ядра и приложения.
 3. Тесты скриптов.
@@ -1170,7 +1211,8 @@ scripts/llm-meeting-eval.sh <llama-server> <папка результатов> <
 │   ├── fetch-noise.sh         шум DEMAND и зашумлённые диалоги
 │   ├── spm-to-bpe-vocab.py    словарь BPE для горячих слов
 │   ├── export-redimnet2.py    выгрузка ReDimNet2 из весов PalabraAI в ONNX
-│   ├── build-demo-apk.sh      APK с моделями внутри
+│   ├── build-demo-apk.sh      демо-APK без моделей
+│   ├── build-model-catalog.py каталог моделей для APK
 │   ├── push-models.sh         модели на телефон через adb
 │   ├── push-llm.sh            языковая модель на телефон через adb
 │   ├── quality.sh             отчёт о качестве на наборах
@@ -1198,8 +1240,11 @@ scripts/llm-meeting-eval.sh <llama-server> <папка результатов> <
 удалил его, повторите запуск; если ошибка повторяется, файл на сервере изменился.
 
 **`нет моделей в .../models: сначала scripts/fetch-models.sh`** или
-**`нет .../models/models.json`.** Запустите `scripts/fetch-models.sh`. Для APK с моделями
-внутри и для `push-llm.sh` нужен ещё `scripts/fetch-llm.sh`.
+**`нет .../models/models.json`.** Запустите `scripts/fetch-models.sh`. Для `push-llm.sh` и
+`build-model-catalog.py` нужен ещё `scripts/fetch-llm.sh`.
+
+**`каталог моделей устарел`** в тестах скриптов. Модели сменились, а каталог в APK нет:
+запустите `scripts/build-model-catalog.py` и закоммитьте `assets/catalog/`.
 
 **`задайте MODELS_DIR: папку с models.json`.** Тесты с моделями запущены без переменной:
 `MODELS_DIR=models cargo test --workspace --release -- --ignored`. Им же нужны
@@ -1220,21 +1265,25 @@ scripts/llm-meeting-eval.sh <llama-server> <папка результатов> <
 тогда берёт существующую группу. Передавайте `NIXYON_UID` и `NIXYON_GID` при
 `docker compose build`, чтобы созданные файлы принадлежали вам.
 
-**`ошибка: не задан ANDROID_HOME`** или **`APK не выровнен`.** Нужен Android SDK с
-build-tools: `zipalign` и `apksigner` берутся из самой новой версии build-tools.
+**`ошибка: не задан ANDROID_HOME`.** Нужен Android SDK с build-tools: `apksigner` берётся
+из самой новой версии build-tools.
 
 **Kotlin-тесты не находят модуль `:nixyon-android`.** Модуль подключает
 `tauri.settings.gradle`, его создаёт `cargo tauri android build`. Сначала соберите APK.
 
 **Приложение не видит модели после переустановки.** Удаление приложения стирает его
-внешнюю папку вместе с моделями. Ставьте поверх через `adb install -r` или закиньте модели
-заново (`scripts/push-models.sh`, `scripts/push-llm.sh`).
+внешнюю папку вместе с моделями. Ставьте поверх через `adb install -r` или скачайте модели
+заново кнопкой «Скачать модели» на главном экране.
 
 **Сборка под Android падает на коде для ноутбука.** Модуль под `#[cfg(desktop)]` нельзя
 вызывать из общего кода. Проверяйте clippy и под `--target aarch64-linux-android`.
 
-**Протокол встречи не запускается.** На телефоне нет языковой модели (`push-llm.sh` или APK с
-моделями внутри) либо мало свободной памяти: нужен запас 768 МБ сверх размера модели.
+**Протокол встречи не запускается.** На телефоне нет языковой модели (её не отметили при
+загрузке моделей) либо мало свободной памяти: нужен запас 768 МБ сверх размера модели.
+
+**Модели не качаются.** Зеркало `nixyon.onyxar.org` недоступно или на нём нет готовых
+файлов: на сервере хаба запустите `scripts/publish-models.sh` с папкой зеркала. Если
+мобильная сеть не разрешена, загрузка ждёт Wi-Fi.
 
 ## Nixyon Hub
 
