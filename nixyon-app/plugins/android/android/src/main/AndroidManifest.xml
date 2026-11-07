@@ -9,11 +9,17 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Перед загрузкой моделей: платная ли сеть, чтобы спросить про мобильный трафик. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Загрузка моделей продолжается, когда приложение свёрнуто. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application>
         <service
             android:name="dev.demo.nixyon.speech.RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+        <service
+            android:name="dev.demo.nixyon.speech.ModelDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

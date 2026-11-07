@@ -15,9 +15,11 @@ val tauriProperties = Properties().apply {
 }
 
 // Демо-сборка подписывается отладочным ключом: свойство nixyonDebugSigned ставит
-// scripts/build-demo-apk.sh. Моделей в APK нет ни в одной сборке, телефон качает их с
-// зеркала.
+// scripts/build-demo-apk.sh. Полная демо-сборка несёт модели внутри APK: папку с
+// подпапками models/ и llm/ задаёт свойство nixyonModelsAssets. Лёгкая сборка и сборки для
+// разработки моделей не содержат, телефон качает их с зеркала.
 val debugSigned: Boolean = providers.gradleProperty("nixyonDebugSigned").orNull == "true"
+val modelsAssets: String? = providers.gradleProperty("nixyonModelsAssets").orNull
 
 android {
     compileSdk = 37
@@ -67,6 +69,13 @@ android {
     }
     buildFeatures {
         buildConfig = true
+    }
+    sourceSets {
+        getByName("main") {
+            if (modelsAssets != null) {
+                assets.srcDir(modelsAssets)
+            }
+        }
     }
     // sherpa-onnx читает модели прямо из APK через AssetManager: сжатые файлы пришлось бы
     // распаковывать в память целиком. Языковую модель (gguf) llama.cpp читает из файла APK

@@ -7,6 +7,7 @@ enum class ModelPack(val key: String, val required: Boolean = false) {
     LIVE("live"),
     DENOISER("denoiser"),
     AGE("age"),
+    EMOTION("emotion"),
     LLM("llm"),
     ;
 
@@ -20,6 +21,7 @@ enum class ModelPack(val key: String, val required: Boolean = false) {
                 in ModelRole.LIVE -> LIVE
                 ModelRole.DENOISER -> DENOISER
                 ModelRole.AGE_GENDER -> AGE
+                ModelRole.EMOTION -> EMOTION
                 else -> SPEECH
             }
     }

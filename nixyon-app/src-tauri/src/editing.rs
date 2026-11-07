@@ -1,13 +1,13 @@
 //! Правки последней расшифровки: переименование и слияние спикеров, исправление текста
-//! реплики. После правки
+//! и эмоции реплики, удаление реплики. После правки
 //! расшифровка сохраняется и возвращается интерфейсу целиком.
 
-use nixyon_core::Transcript;
+use nixyon_core::{Transcript, TurnEmotion};
 use nixyon_pipeline::{
     EditError, delete_turn as remove_turn, edit_turn_text as edit_text, merge_centers,
-    merge_speakers as merge, rename_speaker as rename,
+    merge_speakers as merge, rename_speaker as rename, set_turn_emotion as set_emotion,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
 use crate::transcription::{CommandError, last_centers, last_transcript};
@@ -138,29 +138,88 @@ pub struct TurnTextChange {
     pub after: String,
 }
 
+/// Расшифровка после замены и сколько правок не встало: их реплики поправили вручную
+/// или удалили, пока шла проверка.
+#[derive(Serialize)]
+pub struct AppliedTexts {
+    pub transcript: Transcript,
+    pub skipped: u32,
+}
+
 #[tauri::command]
 pub async fn apply_turn_texts<R: Runtime>(
     app: AppHandle<R>,
     changes: Vec<TurnTextChange>,
-) -> Result<Transcript, CommandError> {
-    run(app, move |t| {
-        for change in changes {
-            let current = t
-                .turns
-                .iter()
-                .any(|x| x.id == change.id && x.text == change.before);
-            if current {
-                edit_text(t, change.id, &change.after)?;
-            }
-        }
-        Ok(())
+) -> Result<AppliedTexts, CommandError> {
+    let store = files_store(&app).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut skipped = 0;
+        let transcript = apply(&store, |t| {
+            skipped = apply_changes(t, &changes)?;
+            Ok(())
+        })?;
+        Ok(AppliedTexts {
+            transcript,
+            skipped,
+        })
     })
     .await
+    .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
+}
+
+/// Заменяет текст реплик, текст которых не менялся с проверки. Возвращает число пропущенных.
+fn apply_changes(t: &mut Transcript, changes: &[TurnTextChange]) -> Result<u32, EditError> {
+    let mut skipped = 0;
+    for change in changes {
+        let current = t
+            .turns
+            .iter()
+            .any(|x| x.id == change.id && x.text == change.before);
+        if current {
+            edit_text(t, change.id, &change.after)?;
+        } else {
+            skipped += 1;
+        }
+    }
+    Ok(skipped)
+}
+
+/// Эмоция реплики из списка выбора; None убирает её. Неизвестный ключ эмоции отвергает
+/// сам разбор аргументов.
+#[tauri::command]
+pub async fn set_turn_emotion<R: Runtime>(
+    app: AppHandle<R>,
+    id: u32,
+    emotion: Option<TurnEmotion>,
+) -> Result<Transcript, CommandError> {
+    run(app, move |t| set_emotion(t, id, emotion)).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn change(id: u32, before: &str, after: &str) -> TurnTextChange {
+        TurnTextChange {
+            id,
+            before: before.into(),
+            after: after.into(),
+        }
+    }
+
+    #[test]
+    fn turn_texts_changed_by_hand_are_skipped_and_counted() {
+        let mut t = sample();
+        let first = t.turns[0].clone();
+        let second = t.turns[1].clone();
+        let changes = [
+            change(first.id, &first.text, "новый текст"),
+            change(second.id, "уже другой текст", "не встанет"),
+        ];
+        assert_eq!(apply_changes(&mut t, &changes), Ok(1));
+        assert_eq!(t.turns[0].text, "новый текст");
+        assert_eq!(t.turns[1].text, second.text);
+    }
 
     #[test]
     fn merging_speakers_merges_their_voice_centers_by_talk_time() {
@@ -210,6 +269,7 @@ mod tests {
             text: "да".into(),
             words: None,
             flags: Vec::new(),
+            emotion: None,
         };
         Transcript {
             schema_version: SCHEMA_VERSION,

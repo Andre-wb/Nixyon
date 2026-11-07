@@ -35,12 +35,17 @@ pub fn document_xml(blocks: &[Block]) -> String {
             Block::Turn {
                 speaker,
                 time,
+                emotion,
                 text,
             } => {
+                let after = match emotion {
+                    Some(emotion) => format!(", {time}, {emotion}"),
+                    None => format!(", {time}"),
+                };
                 body.push_str(&format!(
                     r#"<w:p><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="60"/></w:pPr>{}{}</w:p>"#,
                     run(speaker, "<w:b/>"),
-                    run(&format!(", {time}"), "")
+                    run(&after, "")
                 ));
                 body.push_str(&format!("<w:p>{}</w:p>", run(text, "")));
             }

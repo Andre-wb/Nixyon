@@ -1,6 +1,6 @@
 import { $ } from "./dom.js";
 
-const SCREENS = ["home", "processing", "transcript", "voices", "models"];
+const SCREENS = ["home", "processing", "transcript", "voices", "models", "settings"];
 const languageListeners = [];
 const screenListeners = [];
 

@@ -32,6 +32,8 @@ class ModelManifestTest {
         assertFalse(parsed.hasDenoiser)
         assertFalse(parsed.hasAgeGender)
         assertTrue(ModelManifest.parse(manifest(required + ModelRole.AGE_GENDER)).hasAgeGender)
+        assertFalse(parsed.hasEmotion)
+        assertTrue(ModelManifest.parse(manifest(required + ModelRole.EMOTION)).hasEmotion)
         assertTrue(ModelManifest.parse(manifest(required + ModelRole.DENOISER)).hasDenoiser)
         assertTrue(ModelManifest.parse(manifest(required + ModelRole.LIVE)).hasLiveModel)
     }

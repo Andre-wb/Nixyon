@@ -1,5 +1,5 @@
 {
-  "version": "giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple",
+  "version": "giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8",
   "files": {
     "vad": {
       "path": "vad.onnx",
@@ -73,8 +73,13 @@
     },
     "age_gender": {
       "path": "age-gender.onnx",
-      "size": 363421332,
-      "sha256": "75c5cc3debc2013215cee5f331a66b59bd7205da170fb61abab46fc4507df7be"
+      "size": 129460421,
+      "sha256": "6f57fec62e46e370e02422169a74d5e7a096979b7a78192c11eba6032d1569f8"
+    },
+    "emotion": {
+      "path": "emotion.int8.onnx",
+      "size": 257093387,
+      "sha256": "fe1c1b182624180dc66c4275d9f79de506a4af9a169c6e8fed497427d45c6316"
     }
   }
 }

@@ -41,6 +41,7 @@ mod tests {
             text: text.into(),
             words,
             flags: Vec::new(),
+            emotion: None,
         }
     }
 

@@ -1,6 +1,6 @@
 //! Повторная обработка одной реплики: её звук вырезается из записи и распознаётся
 //! заново, затем языковая модель проверяет только этот текст. Расшифровка при этом не
-//! меняется — итог возвращает интерфейс и заменяет текст обычной правкой реплики,
+//! меняется: итог возвращает интерфейс и заменяет текст обычной правкой реплики,
 //! поэтому лимит модели тратится на фразу, а не на всю встречу.
 
 use std::path::PathBuf;
@@ -25,7 +25,7 @@ use crate::transcription::{
 const NO_AUDIO: &str = "no_audio";
 const UNKNOWN_TURN: &str = "unknown_turn";
 
-/// Фраза длинее этого в проверку не идёт: запрос и ответ модели должны оставаться
+/// Фраза длиннее этого в проверку не идёт: запрос и ответ модели должны оставаться
 /// маленькими, иначе проверка одной фразы стоила бы как протокол встречи.
 const MAX_CHECK_CHARS: usize = 800;
 /// Предел длины ответа модели: хватает на фразу в `MAX_CHECK_CHARS` символов.
@@ -35,10 +35,10 @@ const CHECK_MAX_TOKENS: u32 = 512;
 /// один итоговый текст фразы. Инструкция русская при любом языке интерфейса, как и
 /// инструкция протокола встречи.
 const SYSTEM: &str = "Ты сверяешь текст одной фразы с её повторным распознаванием по звуку. \
-Даны два варианта: «Расшифровка» — как фраза записана сейчас, «Распознано» — как её \
+Даны два варианта: «Расшифровка», как фраза записана сейчас, и «Распознано», как её \
 услышал распознаватель заново. Брать исправления из «Распознано» можно только там, где \
 видно ошибку распознавания или опечатку; сомнительные различия оставляй как в расшифровке. \
-Сохраняй язык, смысл и знаки препинания. Ответь одной строкой — итоговым текстом фразы, \
+Сохраняй язык, смысл и знаки препинания. Ответь одной строкой: итоговым текстом фразы, \
 без пояснений, кавычек и номеров. Если ошибок нет, повтори текст расшифровки.";
 
 /// Стадия повторной обработки.
@@ -52,7 +52,7 @@ pub enum Stage {
 }
 
 /// Ход повторной обработки: стадия и сколько сделано из скольких. На стадии `listen`
-/// это секунды фрагмента, на стадии `check` — токены.
+/// это секунды фрагмента, на стадии `check` токены.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ReprocessProgress {
@@ -61,8 +61,9 @@ pub struct ReprocessProgress {
     pub total: f64,
 }
 
-/// Итог повторной обработки. Ничего не сохраняется: применять или нет — решает
-/// интерфейс, замена идёт обычной правкой реплики.
+/// Итог повторной обработки. Ничего не сохраняется: применять или нет, решает
+/// интерфейс, замена идёт обычной правкой реплики. Отличается ли итог от текущего
+/// текста, интерфейс сверяет сам: реплику могли поправить, пока шла обработка.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ReprocessResult {
@@ -70,15 +71,12 @@ pub struct ReprocessResult {
     pub recognized: String,
     /// Исправление языковой модели; None: модель фразу не проверяла.
     pub correction: Option<String>,
-    /// true, если фразу проверяла языковая модель.
-    pub checked: bool,
-    /// true, если итоговый текст отличается от текущего: есть что заменять.
-    pub changed: bool,
 }
 
-/// Повторная обработка реплики `id`. Ход обеих стадий идёт в канал; отмена — общей
-/// отменой распознавания и языковой модели. Оба слота заняются сразу: пока фраза
-/// обрабатывается, не начнётся ни новая расшифровка, ни протокол с подсказкой имён.
+/// Повторная обработка реплики `id`. Ход обеих стадий идёт в канал. Отмена любой из
+/// двух команд, распознавания или языковой модели, останавливает всю обработку. Оба
+/// слота занимаются сразу: пока фраза обрабатывается, не начнётся ни новая расшифровка,
+/// ни протокол с подсказкой имён.
 #[tauri::command]
 pub async fn reprocess_turn<R: Runtime>(
     app: AppHandle<R>,
@@ -219,7 +217,7 @@ pub async fn reprocess_turn<R: Runtime>(
     // без неё или при слишком длинной фразе остаётся результат повторного
     // распознавания, и лимит модели не тратится вовсе.
     let correction = if let Some(user) = check_prompt(&app, &turn.text, &recognized).await {
-        if check_slot.cancel.is_cancelled() {
+        if cancelled(&listen_slot, &check_slot) {
             return Err(CommandError::new(CommandError::CANCELLED));
         }
         let forward = on_progress.clone();
@@ -245,13 +243,13 @@ pub async fn reprocess_turn<R: Runtime>(
             .await
         {
             Ok(reply) => {
-                if check_slot.cancel.is_cancelled() {
+                if cancelled(&listen_slot, &check_slot) {
                     return Err(CommandError::new(CommandError::CANCELLED));
                 }
                 correction_from(&reply.text)
             }
             // Проверка не состоялась, но фраза уже прослушана: итог возвращается без
-            // исправления модели, повторять распознавание не зачем.
+            // исправления модели, повторять распознавание незачем.
             Err(e) if e.rejected_code() == Some("llm_cancelled") => {
                 return Err(CommandError::new(CommandError::CANCELLED));
             }
@@ -266,10 +264,7 @@ pub async fn reprocess_turn<R: Runtime>(
     drop(listen_slot);
     drop(check_slot);
 
-    let candidate = correction.as_deref().unwrap_or(&recognized);
     Ok(ReprocessResult {
-        checked: correction.is_some(),
-        changed: candidate != turn.text,
         recognized,
         correction,
     })
@@ -281,7 +276,7 @@ fn cancelled(listen: &Slot<'_>, check: &Slot<'_>) -> bool {
 }
 
 /// Текст фрагмента из кусков распознавания: те же правила, что у текста хода в
-/// конвейере — куски по времени, пустые пропускаются, между ними пробел.
+/// конвейере: куски по времени, пустые пропускаются, между ними пробел.
 fn joined_text(mut segments: Vec<SegmentResult>) -> String {
     segments.retain(|s| !s.text.trim().is_empty());
     segments.sort_by(|a, b| a.start.total_cmp(&b.start));
@@ -292,7 +287,7 @@ fn joined_text(mut segments: Vec<SegmentResult>) -> String {
         .join(" ")
 }
 
-/// Текст запроса к модели: оба варианта фразы целиком. None, если проверять нечего —
+/// Текст запроса к модели: оба варианта фразы целиком. None, если проверять нечего:
 /// языковой модели нет на устройстве или фраза длиннее бюджета, тогда проверка
 /// стоила бы дороже самой фразы и лимит тратится не на то.
 async fn check_prompt<R: Runtime>(
@@ -323,9 +318,9 @@ fn prompt(current: &str, recognized: &str) -> String {
     format!("Расшифровка: {current}\nРаспознано: {recognized}")
 }
 
-/// Ответ модели — один текст фразы. Модель может обернуть его в кавычки или написать
+/// Ответ модели: один текст фразы. Модель может обернуть его в кавычки или написать
 /// несколько строк: всё сводится к одной строке. Пустой или подозрительно длинный
-/// ответ (обрезанный или не про эту фразу) не берётся — заменять тогда нечем.
+/// ответ (обрезанный или не про эту фразу) не берётся: заменять тогда нечем.
 fn correction_from(raw: &str) -> Option<String> {
     let text = answer::clean_answer(raw)?;
     let joined: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -337,7 +332,7 @@ fn correction_from(raw: &str) -> Option<String> {
     Some(text.to_owned())
 }
 
-/// Кавычки вокруг всего ответа — обёртка модели, а не часть фразы. Снимаются, только
+/// Кавычки вокруг всего ответа: обёртка модели, а не часть фразы. Снимаются, только
 /// если внутри нет такой же пары: иначе в кавычки завёрнута не вся фраза.
 pub(crate) fn unquote(text: &str) -> &str {
     let mut out = text;
@@ -410,15 +405,19 @@ mod tests {
         assert_eq!(correction_from("«»"), None);
         let long = "слово ".repeat(MAX_CHECK_CHARS);
         assert_eq!(correction_from(&long), None);
-        // Длинная, но в пределах бюджета — берётся.
-        let fits: String = std::iter::repeat('а')
-            .take(MAX_CHECK_CHARS)
-            .collect();
-        assert_eq!(correction_from(&fits).map(|s| s.chars().count()), Some(MAX_CHECK_CHARS));
+        // Длинная, но в пределах бюджета, берётся.
+        let fits = "а".repeat(MAX_CHECK_CHARS);
+        assert_eq!(
+            correction_from(&fits).map(|s| s.chars().count()),
+            Some(MAX_CHECK_CHARS)
+        );
     }
 
     #[test]
     fn prompt_shows_both_variants_of_the_phrase() {
-        assert_eq!(prompt("текст", "тест"), "Расшифровка: текст\nРаспознано: тест");
+        assert_eq!(
+            prompt("текст", "тест"),
+            "Расшифровка: текст\nРаспознано: тест"
+        );
     }
 }

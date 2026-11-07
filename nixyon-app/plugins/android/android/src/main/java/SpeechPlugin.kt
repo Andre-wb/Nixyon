@@ -182,6 +182,38 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    // Эмоция каждой реплики по голосу. Звук и ответы в лог не пишутся, только число реплик.
+    @Command
+    fun turnEmotions(invoke: Invoke) {
+        val args = invoke.parseArgs(TurnEmotionsArgs::class.java)
+        scope.launch {
+            try {
+                val turns = args.turns.map { EmotionTurn(it.id, it.startSec, it.endSec) }
+                val started = System.nanoTime()
+                val verdicts = engine.turnEmotions(File(args.wavPath), turns)
+                if (verdicts == null) {
+                    invoke.resolve(jsObject("available" to false, "turns" to JSONArray()))
+                    return@launch
+                }
+                Log.i(TAG, "эмоции: реплик ${verdicts.size}, ${(System.nanoTime() - started) / 1_000_000} мс")
+                val out = JSONArray()
+                for (v in verdicts) {
+                    out.put(jsObject("id" to v.id, "emotion" to (v.emotion ?: JSONObject.NULL)))
+                }
+                invoke.resolve(jsObject("available" to true, "turns" to out))
+            } catch (e: AnalysisException) {
+                if (e.code == AnalysisException.CANCELLED) Log.i(TAG, "эмоции отменены") else Log.e(TAG, "эмоции: ${e.code}: ${e.message}", e)
+                invoke.reject(e.message, e.code)
+            } catch (e: ModelsException) {
+                Log.e(TAG, "модель эмоций не загружена: ${e.code}: ${e.message}", e)
+                invoke.reject(e.message, e.code)
+            } catch (e: Throwable) {
+                Log.e(TAG, "эмоции не определены", e)
+                invoke.reject("internal error", AnalysisException.ENGINE_FAILED)
+            }
+        }
+    }
+
     // Значки строки состояния и навигации под тему интерфейса: светлые на тёмной теме,
     // тёмные на светлой. Без этого при ручной теме они следуют системной.
     @Command
@@ -643,7 +675,8 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
             try {
                 val catalog = ModelCatalog.read(activity.assets)
                 val folders = ModelFolders.of(activity)
-                val installed = InstalledModels.read(folders).ready(folders)
+                val local = InstalledModels.read(folders)
+                val installed = AvailableModels.packs(local, local.ready(folders), BundledModels.read(activity.assets))
                 val pending = journal().read()
                 val packs = JSONArray()
                 for (pack in catalog.packs) {
@@ -662,6 +695,7 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
                         "downloading" to (pending != null),
                         "pending" to JSONArray(pending?.packs?.map { it.key }.orEmpty()),
                         "pendingAllowMetered" to (pending?.allowMetered ?: false),
+                        "disabled" to JSONArray(DisabledModels.of(activity).read().map { it.key }),
                         "metered" to NetworkState.isMetered(activity),
                     ),
                 )
@@ -693,17 +727,25 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         installCancelled = flag
         scope.launch {
             try {
+                val context = activity.applicationContext
                 val folders = ModelFolders.of(activity)
                 val installer = ModelInstaller(
                     ModelCatalog.read(activity.assets),
                     folders,
-                    SystemDownloadQueue(activity.applicationContext),
+                    ParallelFetcher(HttpRangeSource(), ModelInstaller.CONNECTIONS),
                     journal(),
                     ModelInstaller.freeBytesOf(folders.base),
                 )
                 val started = System.nanoTime()
-                installer.install(packs.filterNotNull().toSet(), args.allowMetered, args.notificationTitle, flag) { p ->
-                    args.onProgress?.send(jsObject("phase" to p.phase, "done" to p.done, "total" to p.total))
+                ModelDownloadService.start(context, args.notificationTitle)
+                val canUseNetwork = { args.allowMetered || !NetworkState.isMetered(context) }
+                try {
+                    installer.install(packs.filterNotNull().toSet(), args.allowMetered, canUseNetwork, flag) { p ->
+                        args.onProgress?.send(jsObject("phase" to p.phase, "done" to p.done, "total" to p.total))
+                        ModelDownloadService.update(context, p.done, p.total)
+                    }
+                } finally {
+                    ModelDownloadService.stop(context)
                 }
                 engine.unload()
                 Log.i(TAG, "модели скачаны: ${(System.nanoTime() - started) / 1_000_000} мс")
@@ -716,6 +758,28 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
                 invoke.reject("internal error", ModelsException.DOWNLOAD_FAILED)
             } finally {
                 installing.set(false)
+            }
+        }
+    }
+
+    // Выключает необязательные модели или включает их обратно. Движок отпускает модели речи,
+    // следующая запись загрузит набор уже без выключенных.
+    @Command
+    fun setModelsDisabled(invoke: Invoke) {
+        val args = invoke.parseArgs(ModelsDisabledArgs::class.java)
+        val packs = args.packs.map { ModelPack.fromKey(it) }
+        if (packs.any { it == null || it.required }) {
+            invoke.reject("bad model pack", ModelsException.BAD_MANIFEST)
+            return
+        }
+        scope.launch {
+            try {
+                DisabledModels.of(activity).write(packs.filterNotNull().toSet())
+                if (!engine.unload()) Log.i(TAG, "движок занят, выключенные модели уйдут со следующей загрузки")
+                invoke.resolve()
+            } catch (e: Exception) {
+                Log.e(TAG, "выключенные модели не сохранились", e)
+                invoke.reject("internal error", ModelsException.DOWNLOAD_FAILED)
             }
         }
     }

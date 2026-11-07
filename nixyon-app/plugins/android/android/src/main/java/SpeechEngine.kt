@@ -99,6 +99,25 @@ class SpeechEngine(private val context: Context) {
         SpeakerAges(located).run(wav, speakers, flag)
     }
 
+    // Эмоция каждой реплики. null, если модели эмоций нет в наборе или на неё не хватает
+    // памяти даже без моделей речи: как у меток возраста, без эмоций расшифровка
+    // сохраняется как есть. Занимает движок и слушает отмену разбора так же.
+    suspend fun turnEmotions(wav: File, turns: List<EmotionTurn>): List<EmotionVerdict>? = exclusive {
+        val flag = cancelled
+        val located = ensureLoaded().located
+        if (!located.manifest.hasEmotion) return@exclusive null
+        val modelBytes = located.manifest.file(ModelRole.EMOTION).size
+        val inApk = located.source is ModelSource.Apk
+        val enough = { memory: MemorySnapshot -> EmotionModel.isEnoughMemory(memory, modelBytes, inApk) }
+        val (memory, freed) = DeviceMemory.check({ DeviceMemory.read(context) }, enough, ::unloadIdle)
+        if (freed) Log.i(TAG, "для модели эмоций отпущены модели речи: свободно ${memory.availableBytes shr 20} МБ")
+        if (!enough(memory)) {
+            Log.w(TAG, "на модель эмоций не хватает памяти (свободно ${memory.availableBytes shr 20} МБ): без эмоций")
+            return@exclusive null
+        }
+        TurnEmotions(located).run(wav, turns, flag)
+    }
+
     // Живой текст на одну запись, если модели уже загружены. Не ждёт загрузки: запись
     // начинается сразу, а без готовых моделей просто идёт без живого текста. Пока поток
     // живого текста не закончился, модели речи не отпускаются.

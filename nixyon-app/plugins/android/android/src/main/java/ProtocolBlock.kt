@@ -9,7 +9,8 @@ sealed class ProtocolBlock {
     data class Title(val text: String) : ProtocolBlock()
     data class Fact(val label: String, val value: String) : ProtocolBlock()
     data class Table(val header: List<String>, val rows: List<List<String>>) : ProtocolBlock()
-    data class Turn(val speaker: String, val time: String, val text: String) : ProtocolBlock()
+    // emotion: подпись эмоции реплики; у нейтральной и без эмоции её нет.
+    data class Turn(val speaker: String, val time: String, val emotion: String?, val text: String) : ProtocolBlock()
 
     companion object {
         fun parseAll(json: String): List<ProtocolBlock> {
@@ -21,7 +22,7 @@ sealed class ProtocolBlock {
             "title" -> Title(o.getString("text"))
             "fact" -> Fact(o.getString("label"), o.getString("value"))
             "table" -> Table(strings(o.getJSONArray("header")), rows(o.getJSONArray("rows")))
-            "turn" -> Turn(o.getString("speaker"), o.getString("time"), o.getString("text"))
+            "turn" -> Turn(o.getString("speaker"), o.getString("time"), if (o.isNull("emotion")) null else o.getString("emotion"), o.getString("text"))
             else -> throw IllegalArgumentException("неизвестный блок протокола: $kind")
         }
 

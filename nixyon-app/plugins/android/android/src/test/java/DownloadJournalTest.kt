@@ -14,11 +14,11 @@ class DownloadJournalTest {
     @Test
     fun aWrittenJournalIsReadBackAndClearedJournalIsEmpty() {
         val journal = DownloadJournal(File(dir.root, "j.json"))
-        journal.write(DownloadJournal.Entry(setOf(ModelPack.SPEECH, ModelPack.LLM), true, mapOf("models/vad.onnx.part" to 7L)))
+        journal.write(DownloadJournal.Entry(setOf(ModelPack.SPEECH, ModelPack.LLM), true, mapOf("models/vad.onnx.part" to setOf(0, 2))))
         val read = journal.read()!!
         assertEquals(setOf(ModelPack.SPEECH, ModelPack.LLM), read.packs)
         assertEquals(true, read.allowMetered)
-        assertEquals(mapOf("models/vad.onnx.part" to 7L), read.ids)
+        assertEquals(mapOf("models/vad.onnx.part" to setOf(0, 2)), read.chunks)
         journal.clear()
         assertNull(journal.read())
     }

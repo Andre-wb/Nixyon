@@ -1,6 +1,7 @@
 import { channel, errorCode, errorText, invoke } from "./api.js";
 import { $, dot, el, speakerColor } from "./dom.js";
 import { clock, dateTime } from "./format.js";
+import { emotionChip, initEmotion, openEmotion } from "./emotion.js";
 import { K, t } from "./i18n.js";
 import { openExport } from "./export.js";
 import { fillersAvailable, openFillers } from "./fillers.js";
@@ -136,7 +137,9 @@ function render() {
     editButton.append($("edit-icon").content.cloneNode(true));
     editButton.addEventListener("click", () => openTurnEdit(turn.id));
     actions.append(checkButton, editButton);
-    head.append(el("span", "turn-name", speakerName(current, turn.speaker)), time, actions);
+    const meta = `${speakerName(current, turn.speaker)}, ${clock(turn.start)}`;
+    const emotion = emotionChip(turn, () => openEmotion(turn, meta, setTranscript));
+    head.append(el("span", "turn-name", speakerName(current, turn.speaker)), time, emotion, actions);
     if (turn.flags?.includes(OVERLAP_FLAG)) head.append(el("span", "turn-flag", t(K.transcript_overlap)));
     const text = el("p", "turn-text", turn.text);
     text.dataset.turnId = String(turn.id);
@@ -176,7 +179,7 @@ async function deleteTurn() {
 }
 
 // Повторная обработка: фраза слушается заново и проверяется моделью, итог только
-// показывается. Замена текста — обычная правка реплики, поэтому её можно отменить закрытием.
+// показывается. Замена текста: обычная правка реплики, поэтому её можно отменить закрытием.
 function openTurnCheck(id) {
   if (!checkRunning) {
     checkTurn = id;
@@ -198,14 +201,22 @@ function renderTurnCheck() {
   $("turn-check-progress-fill").style.transform = `scaleX(${share})`;
   $("turn-check-progress").setAttribute("aria-valuenow", String(Math.round(share * 100)));
   const done = !checkRunning && checkResult !== null;
+  const candidate = done ? checkCandidate() : "";
+  // Сверка с текстом реплики сейчас: её могли поправить, пока шла обработка.
+  const changed = done && candidate !== (turn?.text ?? "");
   $("turn-check-result").hidden = !done;
   $("turn-check-before").textContent = turn?.text ?? "";
   // Ответ модели недоверенный: только как текст, никогда как разметка.
-  $("turn-check-after").textContent = done ? (checkResult.correction ?? checkResult.recognized) : "";
-  $("turn-check-note").hidden = !(done && !checkResult.checked);
-  $("turn-check-same").hidden = !(done && !checkResult.changed);
-  $("turn-check-apply").hidden = !(done && checkResult.changed);
+  $("turn-check-after").textContent = candidate;
+  $("turn-check-note").hidden = !(done && checkResult.correction == null);
+  $("turn-check-same").hidden = !(done && !changed);
+  $("turn-check-apply").hidden = !changed;
   $("turn-check-start").hidden = checkRunning;
+}
+
+// Итог обработки: исправление модели, а без него повторное распознавание.
+function checkCandidate() {
+  return checkResult.correction ?? checkResult.recognized;
 }
 
 async function startTurnCheck() {
@@ -232,15 +243,16 @@ async function startTurnCheck() {
   }
 }
 
-// Отмена той стадии, которая идёт: распознавание или языковая модель.
+// Отмена обеих стадий сразу: по ходу работы не видно, началась ли уже проверка моделью,
+// пока модель не прислала первый отчёт. Команда для стадии, которая не идёт, ничего не делает.
 function cancelTurnCheck() {
-  const command = checkProgress?.stage === "check" ? "cancel_summary" : "cancel_transcription";
-  invoke(command).catch(() => null);
+  invoke("cancel_transcription").catch(() => null);
+  invoke("cancel_summary").catch(() => null);
 }
 
 async function applyTurnCheck() {
   if (!checkResult || checkTurn === null) return;
-  const text = (checkResult.correction ?? checkResult.recognized).replace(/[\r\n\t]+/g, " ");
+  const text = checkCandidate().replace(/[\r\n\t]+/g, " ");
   try {
     setTranscript(await invoke("edit_turn_text", { id: checkTurn, text }));
     checkResult = null;
@@ -367,6 +379,7 @@ export function initTranscript() {
     pendingMerge = null;
     $("merge-confirm").close();
   });
+  initEmotion();
   onLanguageChange(render);
   onLanguageChange(renderTurnCheck);
 }

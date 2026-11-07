@@ -3,7 +3,9 @@
 
 mod pack_list;
 
-use nixyon_android::{DownloadModelsRequest, ModelDownloadProgress, ModelsStatus, SpeechExt};
+use nixyon_android::{
+    DownloadModelsRequest, ModelDownloadProgress, ModelsDisabledRequest, ModelsStatus, SpeechExt,
+};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime};
 
@@ -58,6 +60,20 @@ pub async fn download_models<R: Runtime>(
     let handle = app.clone();
     tauri::async_runtime::spawn(async move { warm_up(&handle).await });
     Ok(())
+}
+
+/// Выключает необязательные модели из списка, остальные включает. Файлы остаются на месте.
+#[tauri::command]
+pub async fn set_models_disabled<R: Runtime>(
+    app: AppHandle<R>,
+    packs: Vec<String>,
+) -> Result<(), CommandError> {
+    let packs =
+        pack_list::parse_optional_packs(&packs).map_err(|_| CommandError::new(BAD_MODEL_PACK))?;
+    app.speech()
+        .set_models_disabled(ModelsDisabledRequest { packs })
+        .await
+        .map_err(plugin_error)
 }
 
 #[tauri::command]

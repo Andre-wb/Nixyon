@@ -1,13 +1,15 @@
 //! Модели, которые sherpa-onnx не загружает, на крейте ort: модель голоса ReDimNet2,
-//! нейросегментация Sortformer, пол с возрастом по голосу (audEERING) и
-//! классификатор «ребёнок или взрослый» поверх признаков голоса. ONNX Runtime
-//! общий с sherpa-onnx, второй копии нет.
+//! нейросегментация Sortformer, пол с возрастом по голосу (audEERING), классификатор
+//! «ребёнок или взрослый» поверх признаков голоса и эмоция реплики (GigaAM-Emo). ONNX
+//! Runtime общий с sherpa-onnx, второй копии нет.
 
 mod age_gender;
 mod binarize;
 mod bundled_child_adult;
 mod child_adult;
 mod child_adult_features;
+mod emotion_model;
+mod emotion_probs;
 mod error;
 mod log_mel;
 mod manifest;
@@ -31,6 +33,8 @@ pub use binarize::Binarize;
 pub use bundled_child_adult::bundled_child_adult;
 pub use child_adult::ChildAdult;
 pub use child_adult_features::ChildAdultFeatures;
+pub use emotion_model::EmotionModel;
+pub use emotion_probs::EmotionProbs;
 pub use error::OrtError;
 pub use manifest::{OrtManifest, OrtRole};
 pub use redimnet::Redimnet2;

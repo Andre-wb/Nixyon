@@ -21,13 +21,15 @@
         { "text": "давайте", "start": 6.1, "end": 6.6 },
         { "text": "начнём.", "start": 6.6, "end": 7.0 }
       ],
-      "flags": []
+      "flags": [],
+      "emotion": "neutral"
     },
     {
       "id": 2, "speaker": 2, "start": 12.0, "end": 18.0,
       "text": "# план: 1. итоги",
       "words": null,
-      "flags": []
+      "flags": [],
+      "emotion": "anger"
     },
     {
       "id": 3, "speaker": 1, "start": 3700.0, "end": 3712.2,

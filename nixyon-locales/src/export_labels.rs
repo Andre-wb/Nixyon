@@ -1,4 +1,4 @@
-use nixyon_render::Labels;
+use nixyon_render::{EmotionLabels, Labels};
 
 use crate::dictionary::Dictionary;
 use crate::lang::Lang;
@@ -18,6 +18,14 @@ pub fn export_labels(lang: Lang) -> Result<Labels, LocaleError> {
         share: text("export.share")?,
         percent: text("export.percent")?,
         speaker_default: text("export.speaker_default")?,
+        emotions: EmotionLabels {
+            joy: text("export.emotion_joy")?,
+            sadness: text("export.emotion_sadness")?,
+            anger: text("export.emotion_anger")?,
+            fear: text("export.emotion_fear")?,
+            surprise: text("export.emotion_surprise")?,
+            disgust: text("export.emotion_disgust")?,
+        },
     })
 }
 
@@ -34,6 +42,15 @@ mod tests {
         let en = export_labels(Lang::En).unwrap();
         assert_eq!(en.speaker(3), "Speaker 3");
         assert_eq!(en.percent(41), "41%");
+    }
+
+    #[test]
+    fn emotion_labels_come_in_the_interface_language() {
+        let ru = export_labels(Lang::Ru).unwrap();
+        assert_eq!(ru.emotions.anger, "гнев");
+        assert_eq!(ru.emotions.joy, "радость");
+        let en = export_labels(Lang::En).unwrap();
+        assert_eq!(en.emotions.surprise, "surprise");
     }
 
     #[test]

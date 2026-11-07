@@ -15,7 +15,7 @@ class ModelFolders(val base: File) {
 
     fun part(target: ModelTarget, file: ModelFile): File = File(dir(target), file.path + PART)
 
-    // Путь для DownloadManager относительно getExternalFilesDir(null).
+    // Путь временного файла относительно getExternalFilesDir(null): ключ в журнале загрузки.
     fun partSubPath(target: ModelTarget, file: ModelFile): String = "${target.dirName}/${file.path}$PART"
 
     companion object {

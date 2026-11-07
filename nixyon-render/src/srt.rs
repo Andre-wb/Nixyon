@@ -77,7 +77,11 @@ pub fn render_srt(transcript: &Transcript, labels: &Labels) -> String {
             continue;
         };
         let name = one_line(&speaker_name(transcript, turn.speaker, labels));
-        let mut cue = Cue::open(first.start, format!("{name}: "));
+        let prefix = match labels.emotion(turn.emotion) {
+            Some(emotion) => format!("{name} ({}): ", one_line(emotion)),
+            None => format!("{name}: "),
+        };
+        let mut cue = Cue::open(first.start, prefix);
         for word in &words {
             let too_long = word.end - cue.start > MAX_CUE_SEC;
             if cue.words > 0 && (too_long || !cue.fits(&one_line(&word.text))) {

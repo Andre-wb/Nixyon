@@ -123,6 +123,7 @@ mod tests {
             text: text.into(),
             words: None,
             flags: Vec::new(),
+            emotion: None,
         }
     }
 

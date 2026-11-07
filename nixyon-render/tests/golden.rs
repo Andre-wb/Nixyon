@@ -7,8 +7,8 @@ use nixyon_core::{Transcript, from_json};
 use std::io::Read;
 
 use nixyon_render::{
-    Labels, MAX_CUE_SEC, MAX_LINE_CHARS, MAX_LINES, document_xml, protocol_blocks, render_docx,
-    render_json, render_markdown, render_srt, render_txt,
+    EmotionLabels, Labels, MAX_CUE_SEC, MAX_LINE_CHARS, MAX_LINES, document_xml, protocol_blocks,
+    render_docx, render_json, render_markdown, render_srt, render_txt,
 };
 
 fn golden(name: &str) -> PathBuf {
@@ -32,6 +32,14 @@ fn ru() -> Labels {
         share: "Доля".into(),
         percent: "{value}\u{a0}%".into(),
         speaker_default: "Спикер {n}".into(),
+        emotions: EmotionLabels {
+            joy: "радость".into(),
+            sadness: "грусть".into(),
+            anger: "гнев".into(),
+            fear: "страх".into(),
+            surprise: "удивление".into(),
+            disgust: "отвращение".into(),
+        },
     }
 }
 
@@ -46,6 +54,14 @@ fn en() -> Labels {
         share: "Share".into(),
         percent: "{value}%".into(),
         speaker_default: "Speaker {n}".into(),
+        emotions: EmotionLabels {
+            joy: "joy".into(),
+            sadness: "sadness".into(),
+            anger: "anger".into(),
+            fear: "fear".into(),
+            surprise: "surprise".into(),
+            disgust: "disgust".into(),
+        },
     }
 }
 
@@ -221,7 +237,8 @@ fn every_srt_cue_keeps_the_limits_and_no_word_is_lost() {
         .iter()
         .flat_map(|turn| turn.text.split_whitespace().map(str::to_string))
         .collect();
-    let names = ["Спикер", "1:", "Анна", "|", "*главная*:"];
+    // Начало титра: имя спикера и, если есть, эмоция в скобках.
+    let names = ["Спикер", "1:", "Анна", "|", "*главная*", "(гнев):"];
     let shown: Vec<String> = shown
         .into_iter()
         .filter(|w| !names.contains(&w.as_str()))
