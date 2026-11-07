@@ -25,7 +25,7 @@ pub(crate) fn fix_split_sentences(mut turns: Vec<Turn>) -> Vec<Turn> {
         let (before, after) = turns.split_at_mut(i);
         move_tail(&mut before[i - 1], &mut after[0]);
     }
-    turns.retain(|t| !t.text.trim().is_empty());
+    turns.retain(|t| !t.text.trim().is_empty() || t.is_unclear());
     absorb_stray_punctuation(turns)
 }
 

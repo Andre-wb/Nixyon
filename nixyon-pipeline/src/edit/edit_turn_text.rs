@@ -1,4 +1,4 @@
-use nixyon_core::Transcript;
+use nixyon_core::{Transcript, UNCLEAR_FLAG};
 
 use crate::{EditError, recompute_speaker_stats};
 
@@ -7,8 +7,8 @@ use crate::{EditError, recompute_speaker_stats};
 pub const MAX_TURN_TEXT_CHARS: usize = 20_000;
 
 /// Заменяет текст реплики исправленным. Время слов у этой реплики убирается: оно было
-/// посчитано для старого текста. Тот же текст ничего не меняет. При ошибке расшифровка
-/// не меняется.
+/// посчитано для старого текста. Пометка неразборчивой речи снимается: текст теперь
+/// написал человек. Тот же текст ничего не меняет. При ошибке расшифровка не меняется.
 pub fn edit_turn_text(transcript: &mut Transcript, id: u32, text: &str) -> Result<(), EditError> {
     let text = text.trim();
     if text.is_empty() {
@@ -32,6 +32,7 @@ pub fn edit_turn_text(transcript: &mut Transcript, id: u32, text: &str) -> Resul
     }
     turn.text = text.to_string();
     turn.words = None;
+    turn.flags.retain(|f| f != UNCLEAR_FLAG);
     recompute_speaker_stats(transcript);
     Ok(())
 }
@@ -46,6 +47,15 @@ mod tests {
         t.turns[0].words = Some(vec![word("привет", 0.0, 1.0), word("мир", 1.0, 2.0)]);
         recompute_speaker_stats(&mut t);
         t
+    }
+
+    #[test]
+    fn written_text_takes_off_the_unclear_mark_and_keeps_other_marks() {
+        let mut t = transcript(&[(1, 0.0, 2.0, "")]);
+        t.turns[0].flags = vec![UNCLEAR_FLAG.into(), "overlap".into()];
+        edit_turn_text(&mut t, 1, "Угу, понятно").unwrap();
+        assert_eq!(t.turns[0].text, "Угу, понятно");
+        assert_eq!(t.turns[0].flags, ["overlap"]);
     }
 
     #[test]

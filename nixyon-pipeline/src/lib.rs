@@ -17,10 +17,12 @@ mod sentence_fix;
 mod speaker_count;
 mod speaker_labels;
 mod speaker_names;
+mod speaker_unsure;
 mod speaker_voice_pieces;
 mod stats;
 mod transcript_meta;
 mod turns;
+mod unclear_speech;
 mod voice_match;
 mod window_label;
 mod word_cut;
@@ -48,12 +50,14 @@ pub use speaker_labels::{
     LONG_SEGMENT_SEC, MAX_AUTO_SPEAKERS, MIN_SPEAKER_SEC, SpeakerLabels, label_segments,
 };
 pub use speaker_names::{apply_names, clean_name, intro_names, name_is_grounded};
+pub use speaker_unsure::SPEAKER_UNSURE_COSINE;
 pub use speaker_voice_pieces::{
     SpeakerPieces, VOICE_PIECE_MIN_SEC, VOICE_PIECES_MAX_SEC, speaker_voice_pieces,
 };
 pub use stats::recompute_speaker_stats;
 pub use transcript_meta::TranscriptMeta;
 pub use turns::{MAX_PAUSE_TO_GLUE_SEC, glue_turns};
+pub use unclear_speech::{MIN_LETTERS_PER_VOICE_SEC, SPARSE_MIN_VOICE_SEC, UNCLEAR_MIN_SEC};
 pub use voice_match::VoiceMatch;
 pub use window_label::WindowLabel;
 pub use words::tokens_to_words;

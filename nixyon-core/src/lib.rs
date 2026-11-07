@@ -48,7 +48,7 @@ pub use speaker_gender::SpeakerGender;
 pub use speech_edges::SpeechEdges;
 pub use speech_engine::{EngineError, SpeechEngine};
 pub use transcript::{SCHEMA_VERSION, Transcript};
-pub use turn::{OVERLAP_FLAG, Turn};
+pub use turn::{OVERLAP_FLAG, SPEAKER_UNSURE_FLAG, Turn, UNCLEAR_FLAG};
 pub use turn_emotion::TurnEmotion;
 pub use utc_time::rfc3339_utc;
 pub use voice_embedder::VoiceEmbedder;

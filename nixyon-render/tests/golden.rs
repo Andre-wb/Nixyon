@@ -32,6 +32,8 @@ fn ru() -> Labels {
         share: "Доля".into(),
         percent: "{value}\u{a0}%".into(),
         speaker_default: "Спикер {n}".into(),
+        speaker_unsure: "{name} (?)".into(),
+        unclear: "[неразборчиво]".into(),
         emotions: EmotionLabels {
             joy: "радость".into(),
             sadness: "грусть".into(),
@@ -54,6 +56,8 @@ fn en() -> Labels {
         share: "Share".into(),
         percent: "{value}%".into(),
         speaker_default: "Speaker {n}".into(),
+        speaker_unsure: "{name} (?)".into(),
+        unclear: "[inaudible]".into(),
         emotions: EmotionLabels {
             joy: "joy".into(),
             sadness: "sadness".into(),
@@ -232,13 +236,19 @@ fn every_srt_cue_keeps_the_limits_and_no_word_is_lost() {
         .flat_map(|c| c.lines.iter().flat_map(|l| l.split(' ')))
         .map(str::to_string)
         .collect();
+    // Неразборчивая речь показывается пометкой вместо текста или после него.
     let spoken: Vec<String> = t
         .turns
         .iter()
-        .flat_map(|turn| turn.text.split_whitespace().map(str::to_string))
+        .flat_map(|turn| {
+            ru().turn_text(turn)
+                .split_whitespace()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
         .collect();
-    // Начало титра: имя спикера и, если есть, эмоция в скобках.
-    let names = ["Спикер", "1:", "Анна", "|", "*главная*", "(гнев):"];
+    // Начало титра: имя спикера с пометкой, если он под вопросом, и эмоция в скобках.
+    let names = ["Спикер", "1:", "Анна", "|", "*главная*", "(гнев):", "(?):"];
     let shown: Vec<String> = shown
         .into_iter()
         .filter(|w| !names.contains(&w.as_str()))

@@ -2,7 +2,7 @@ use nixyon_core::{Speaker, Transcript};
 
 use crate::clock::clock;
 use crate::labels::Labels;
-use crate::names::speaker_name;
+use crate::names::{speaker_name, turn_speaker_name};
 use crate::txt::one_line;
 
 /// Markdown: заголовок, сводка списком, таблица участников по времени речи, затем ходы.
@@ -57,10 +57,10 @@ pub fn render_markdown(
             .unwrap_or_default();
         out.push_str(&format!(
             "\n**{}**, {}{}\n\n{}\n",
-            escape(&speaker_name(transcript, turn.speaker, labels)),
+            escape(&turn_speaker_name(transcript, turn, labels)),
             clock(turn.start),
             emotion,
-            escape(&turn.text)
+            escape(&labels.turn_text(turn))
         ));
     }
     out

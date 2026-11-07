@@ -60,8 +60,8 @@ pub(crate) fn neural_labels(
     }
 }
 
-// Доля времени куска, где есть хотя бы один отрезок.
-fn coverage(start: f64, end: f64, spans: &[VoiceSpan]) -> f64 {
+/// Доля времени куска, где есть хотя бы один отрезок.
+pub(crate) fn coverage(start: f64, end: f64, spans: &[VoiceSpan]) -> f64 {
     let mut parts: Vec<(f64, f64)> = spans
         .iter()
         .map(|s| (s.start.max(start), s.end.min(end)))

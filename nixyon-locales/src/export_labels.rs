@@ -18,6 +18,8 @@ pub fn export_labels(lang: Lang) -> Result<Labels, LocaleError> {
         share: text("export.share")?,
         percent: text("export.percent")?,
         speaker_default: text("export.speaker_default")?,
+        speaker_unsure: text("export.speaker_unsure")?,
+        unclear: text("export.unclear")?,
         emotions: EmotionLabels {
             joy: text("export.emotion_joy")?,
             sadness: text("export.emotion_sadness")?,
@@ -42,6 +44,9 @@ mod tests {
         let en = export_labels(Lang::En).unwrap();
         assert_eq!(en.speaker(3), "Speaker 3");
         assert_eq!(en.percent(41), "41%");
+        assert_eq!(ru.speaker_unsure("Спикер 2"), "Спикер 2 (?)");
+        assert_eq!(ru.unclear, "[неразборчиво]");
+        assert_eq!(en.unclear, "[inaudible]");
     }
 
     #[test]

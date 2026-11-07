@@ -36,6 +36,20 @@
       "text": "Сегодня обсуждаем расшифровку разговоров на телефоне без интернета, разделение по голосам и экспорт в четыре формата для коллег",
       "words": null,
       "flags": ["clipping"]
+    },
+    {
+      "id": 4, "speaker": 2, "start": 3713.0, "end": 3716.0,
+      "text": "",
+      "words": null,
+      "flags": ["unclear", "speaker_unsure"]
+    },
+    {
+      "id": 5, "speaker": 1, "start": 3716.5, "end": 3720.0,
+      "text": "Угу",
+      "words": [
+        { "text": "Угу", "start": 3716.6, "end": 3717.0 }
+      ],
+      "flags": ["unclear"]
     }
   ]
 }
