@@ -94,6 +94,20 @@ impl<R: Runtime> Speech<R> {
             .map_err(Into::into)
     }
 
+    pub async fn pause_recording(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("pauseRecording", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn resume_recording(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("resumeRecording", ())
+            .await
+            .map_err(Into::into)
+    }
+
     /// Запись с микрофона, оборванная падением приложения и восстановленная при этом
     /// запуске; путь пустой, если восстанавливать было нечего. Отдаётся один раз.
     pub async fn recovered_recording(&self) -> crate::Result<RecordingSaved> {

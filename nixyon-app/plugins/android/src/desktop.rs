@@ -63,6 +63,14 @@ impl<R: Runtime> Speech<R> {
         Err(crate::Error::Unsupported)
     }
 
+    pub async fn pause_recording(&self) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn resume_recording(&self) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
     /// Записи с микрофона на ноутбуке нет, восстанавливать нечего.
     pub async fn recovered_recording(&self) -> crate::Result<RecordingSaved> {
         Ok(RecordingSaved {

@@ -27,6 +27,8 @@ pub fn run() {
             transcription::last_transcript,
             media::start_recording,
             media::stop_recording,
+            media::pause_recording,
+            media::resume_recording,
             media::recovered_recording,
             media::import_audio,
             media::cancel_import,
