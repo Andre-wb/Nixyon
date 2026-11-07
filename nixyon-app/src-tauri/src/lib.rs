@@ -2,6 +2,7 @@ mod editing;
 mod exporting;
 mod media;
 mod playback;
+mod reprocessing;
 mod searching;
 mod settings;
 mod speaker_names;
@@ -39,6 +40,7 @@ pub fn run() {
             playback::play_audio,
             playback::pause_audio,
             playback::close_playback,
+            reprocessing::reprocess_turn,
             voices::list_voices,
             voices::add_voice,
             voices::delete_voice,

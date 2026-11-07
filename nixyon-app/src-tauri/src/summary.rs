@@ -2,7 +2,7 @@
 //! по последней расшифровке. Модель запускает Kotlin-плагин, запрос и хранение результата
 //! на стороне ядра.
 
-mod answer;
+pub(crate) mod answer;
 pub mod last_summary;
 mod prompt;
 
