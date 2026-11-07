@@ -1,8 +1,10 @@
-use nixyon_core::{OVERLAP_FLAG, SegmentResult, Turn, VoiceSpan, Word};
+use nixyon_core::{OVERLAP_FLAG, SegmentResult, Turn, UNCLEAR_FLAG, VoiceSpan, Word};
 
 use crate::neural_labels::neural_labels;
 use crate::sample_names::SpeakerCenter;
 use crate::speaker_labels::centers_by_speaker;
+use crate::speaker_unsure::mark_speaker_unsure;
+use crate::unclear_speech::{mark_unclear, unclear_segment};
 use crate::word_cut::{piece, turn};
 use crate::word_speakers::{LabeledSpan, WordSpeaker, word_speakers};
 use crate::words::tokens_to_words;
@@ -11,6 +13,9 @@ use crate::{PipelineOptions, SpeakerCount};
 /// Ходы по нейросегментации. Текст остаётся от кусков VAD, говорящего каждое слово берёт
 /// по середине слова из отрезков нейросегментации. Кусок режется там, где меняется
 /// говорящий или начинается и кончается перекрытие; часть с перекрытием помечается.
+/// Кусок без букв, где сегментация слышит голос, даёт ход без текста с пометкой
+/// неразборчивой речи; ход, где букв мало для времени голоса, тоже помечается.
+/// Ход, голос которого мало похож на его спикера, помечается неуверенным.
 /// Номера спикеров с 1 в порядке первого появления. Куски идут по времени.
 /// Вместе с ходами отдаёт центры голосов спикеров.
 pub(crate) fn neural_turns(
@@ -28,10 +33,16 @@ pub(crate) fn neural_turns(
 
     let mut turns: Vec<Turn> = Vec::new();
     for (s, label) in segments.iter().zip(&labels.segments) {
+        let before = turns.len();
         let fallback = label.unwrap_or(0);
         let text = s.text.trim().to_string();
         let words = tokens_to_words(&s.tokens, &s.token_times, s.start, s.end);
         match words {
+            _ if unclear_segment(s, spans) => {
+                let mut t = turn(cluster_id(fallback), s.start, s.end, String::new(), None);
+                t.flags.push(UNCLEAR_FLAG.into());
+                turns.push(t);
+            }
             Some(words) if !words.is_empty() => {
                 let inside: Vec<LabeledSpan> = labeled
                     .iter()
@@ -43,7 +54,15 @@ pub(crate) fn neural_turns(
             }
             other => turns.push(turn(cluster_id(fallback), s.start, s.end, text, other)),
         }
+        mark_speaker_unsure(
+            &mut turns[before..],
+            s,
+            spans,
+            &labels.spans,
+            &labels.centers,
+        );
     }
+    mark_unclear(&mut turns, spans);
     let order = renumber(&mut turns);
     let centers = centers_by_speaker(&order, &labels.centers);
     (turns, centers)

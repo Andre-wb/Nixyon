@@ -1176,6 +1176,15 @@ body.has-player main {
   overflow-wrap: anywhere;
 }
 
+.turn-text:empty {
+  display: none;
+}
+
+.turn-unclear {
+  color: var(--label-secondary);
+  font-style: italic;
+}
+
 .search {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
