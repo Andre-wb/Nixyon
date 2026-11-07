@@ -112,6 +112,7 @@
         <div class="timeline-lanes" id="timeline-lanes"></div>
       </div>
       <button class="button button-secondary wide" id="open-stats" type="button" data-i18n="stats.button"></button>
+      <button class="button button-secondary wide" id="open-fillers" type="button" data-i18n="fillers.open" hidden></button>
       <button class="button button-secondary wide" id="open-summary" type="button" data-i18n="summary.button" hidden></button>
       <button class="button button-secondary wide" id="open-names" type="button" data-i18n="names.button" hidden></button>
       <div class="search" role="search">
@@ -238,6 +239,14 @@
     </div>
   </dialog>
 
+  <dialog class="alert" id="turn-delete-confirm" aria-labelledby="turn-delete-text">
+    <p id="turn-delete-text" data-i18n="turn_delete.confirm"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="turn-delete-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="turn-delete-yes" type="button" data-i18n="turn_delete.do"></button>
+    </div>
+  </dialog>
+
   <template id="edit-icon">
     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>
   </template>
@@ -259,6 +268,8 @@
       </label>
       <p class="hint" data-i18n="turn_sheet.hint"></p>
       <button class="button button-primary wide" id="turn-save" type="button" data-i18n="turn_sheet.save"></button>
+      <button class="button button-secondary wide" id="turn-fillers" type="button" data-i18n="turn_sheet.fillers" hidden></button>
+      <button class="button button-danger wide" id="turn-delete" type="button" data-i18n="turn_sheet.delete"></button>
       <p class="error" id="turn-error" role="alert"></p>
     </form>
   </dialog>
@@ -290,6 +301,43 @@
       <button class="button button-primary wide" id="turn-check-apply" type="button" data-i18n="turn_check.apply" hidden></button>
       <button class="button button-primary wide" id="turn-check-start" type="button" data-i18n="turn_check.start"></button>
       <p class="error" id="turn-check-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <!-- Слова-паразиты: фразы выбираются вручную или берётся весь диалог. Модель сначала
+       предлагает правки, и только по кнопке они заменяют текст реплик. -->
+  <dialog class="sheet" id="filler-sheet" aria-labelledby="filler-title">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="filler-title" data-i18n="fillers.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="hint" data-i18n="fillers.hint"></p>
+      <div class="sheet-group" id="filler-running" hidden>
+        <p class="meta" id="filler-phase" aria-live="polite" data-i18n="fillers.working"></p>
+        <div class="progress" id="filler-progress" role="progressbar" aria-labelledby="filler-phase" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span class="progress-fill" id="filler-progress-fill"></span>
+        </div>
+        <button class="button button-secondary wide" id="filler-cancel" type="button" data-i18n="common.cancel"></button>
+      </div>
+      <div class="sheet-group" id="filler-pick">
+        <label class="filler-all">
+          <input type="checkbox" id="filler-all">
+          <span data-i18n="fillers.select_all"></span>
+        </label>
+        <p class="meta" id="filler-count"></p>
+        <ul class="filler-list" id="filler-list"></ul>
+        <button class="button button-primary wide" id="filler-run-selected" type="button" data-i18n="fillers.run_selected"></button>
+        <button class="button button-secondary wide" id="filler-run-all" type="button" data-i18n="fillers.run_all"></button>
+      </div>
+      <div class="sheet-group" id="filler-result" hidden>
+        <p class="meta" id="filler-found"></p>
+        <p class="hint" id="filler-skipped" hidden></p>
+        <ul class="filler-list" id="filler-changes"></ul>
+      </div>
+      <p class="meta" id="filler-empty" role="status" data-i18n="fillers.empty" hidden></p>
+      <button class="button button-primary wide" id="filler-apply" type="button" hidden></button>
+      <p class="error" id="filler-error" role="alert"></p>
     </form>
   </dialog>
 

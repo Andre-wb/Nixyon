@@ -339,7 +339,7 @@ fn correction_from(raw: &str) -> Option<String> {
 
 /// Кавычки вокруг всего ответа — обёртка модели, а не часть фразы. Снимаются, только
 /// если внутри нет такой же пары: иначе в кавычки завёрнута не вся фраза.
-fn unquote(text: &str) -> &str {
+pub(crate) fn unquote(text: &str) -> &str {
     let mut out = text;
     for (open, close) in [('«', '»'), ('„', '“'), ('"', '"')] {
         if out.len() < open.len_utf8() + close.len_utf8()

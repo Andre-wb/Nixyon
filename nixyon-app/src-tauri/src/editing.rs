@@ -4,9 +4,10 @@
 
 use nixyon_core::Transcript;
 use nixyon_pipeline::{
-    EditError, edit_turn_text as edit_text, merge_centers, merge_speakers as merge,
-    rename_speaker as rename,
+    EditError, delete_turn as remove_turn, edit_turn_text as edit_text, merge_centers,
+    merge_speakers as merge, rename_speaker as rename,
 };
+use serde::Deserialize;
 use tauri::{AppHandle, Runtime};
 
 use crate::transcription::{CommandError, last_centers, last_transcript};
@@ -24,6 +25,7 @@ fn edit_code(e: &EditError) -> &'static str {
         EditError::TextEmpty => "text_empty",
         EditError::TextTooLong { .. } => "text_too_long",
         EditError::TextHasControlChars => "text_control_chars",
+        EditError::LastTurn => "last_turn",
     }
 }
 
@@ -114,6 +116,46 @@ pub async fn edit_turn_text<R: Runtime>(
     text: String,
 ) -> Result<Transcript, CommandError> {
     run(app, move |t| edit_text(t, id, &text)).await
+}
+
+/// Реплика удаляется целиком вместе со временем. Отменить нельзя: интерфейс спрашивает
+/// подтверждение.
+#[tauri::command]
+pub async fn delete_turn<R: Runtime>(
+    app: AppHandle<R>,
+    id: u32,
+) -> Result<Transcript, CommandError> {
+    run(app, move |t| remove_turn(t, id)).await
+}
+
+/// Правка текста реплики из листа слов-паразитов. Замена идёт, только если текст реплики
+/// всё ещё такой, каким был при проверке: реплику могли поправить вручную.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnTextChange {
+    pub id: u32,
+    pub before: String,
+    pub after: String,
+}
+
+#[tauri::command]
+pub async fn apply_turn_texts<R: Runtime>(
+    app: AppHandle<R>,
+    changes: Vec<TurnTextChange>,
+) -> Result<Transcript, CommandError> {
+    run(app, move |t| {
+        for change in changes {
+            let current = t
+                .turns
+                .iter()
+                .any(|x| x.id == change.id && x.text == change.before);
+            if current {
+                edit_text(t, change.id, &change.after)?;
+            }
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]

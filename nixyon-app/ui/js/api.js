@@ -35,6 +35,7 @@ const ERRORS = {
   export_failed: K.error_export_failed,
   hotword_too_long: K.error_hotword_too_long,
   import_failed: K.error_import_failed,
+  last_turn: K.error_last_turn,
   llm_broken: K.error_llm_broken,
   llm_busy: K.error_llm_busy,
   llm_failed: K.error_llm_failed,

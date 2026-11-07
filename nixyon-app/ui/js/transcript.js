@@ -3,6 +3,7 @@ import { $, dot, el, speakerColor } from "./dom.js";
 import { clock, dateTime } from "./format.js";
 import { K, t } from "./i18n.js";
 import { openExport } from "./export.js";
+import { fillersAvailable, openFillers } from "./fillers.js";
 import { closePlayer, openPlayer, playFrom, refreshPlayerIndex } from "./player.js";
 import { applySearch, resetSearch } from "./search.js";
 import { openStats } from "./stats.js";
@@ -67,6 +68,10 @@ export function open(transcript, newWarnings = []) {
   prepareNames(transcript);
   pushTranscript();
   openPlayer(transcript);
+}
+
+export function currentTranscript() {
+  return current;
 }
 
 export function setTranscript(transcript) {
@@ -155,7 +160,19 @@ function openTurnEdit(id) {
   $("turn-sheet-meta").textContent = `${speakerName(current, turn.speaker)}, ${clock(turn.start)}`;
   $("turn-text-input").value = turn.text;
   $("turn-error").textContent = "";
+  $("turn-fillers").hidden = !fillersAvailable();
   openModal($("turn-sheet"));
+}
+
+// Удаление фразы необратимо: сначала подтверждение.
+async function deleteTurn() {
+  $("turn-delete-confirm").close();
+  try {
+    setTranscript(await invoke("delete_turn", { id: editingTurn }));
+    $("turn-sheet").close();
+  } catch (error) {
+    $("turn-error").textContent = errorText(error);
+  }
 }
 
 // Повторная обработка: фраза слушается заново и проверяется моделью, итог только
@@ -330,6 +347,13 @@ export function initTranscript() {
   });
   $("merge-yes").addEventListener("click", merge);
   $("turn-save").addEventListener("click", saveTurnText);
+  $("turn-fillers").addEventListener("click", () => {
+    $("turn-sheet").close();
+    openFillers([editingTurn]);
+  });
+  $("turn-delete").addEventListener("click", () => openModal($("turn-delete-confirm")));
+  $("turn-delete-no").addEventListener("click", () => $("turn-delete-confirm").close());
+  $("turn-delete-yes").addEventListener("click", deleteTurn);
   $("turn-check-start").addEventListener("click", startTurnCheck);
   $("turn-check-apply").addEventListener("click", applyTurnCheck);
   $("turn-check-cancel").addEventListener("click", cancelTurnCheck);
