@@ -51,6 +51,14 @@ impl<R: Runtime> Speech<R> {
             .map_err(Into::into)
     }
 
+    /// Эмоция каждой реплики; занимает движок, как разбор записи.
+    pub async fn turn_emotions(&self, request: TurnEmotionsRequest) -> crate::Result<TurnEmotions> {
+        self.0
+            .run_mobile_plugin_async("turnEmotions", request)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn set_system_bars(&self, request: SystemBarsRequest) -> crate::Result<()> {
         self.0
             .run_mobile_plugin_async("setSystemBars", request)
@@ -217,6 +225,13 @@ impl<R: Runtime> Speech<R> {
     pub async fn download_models(&self, request: DownloadModelsRequest) -> crate::Result<()> {
         self.0
             .run_mobile_plugin_async("downloadModels", request)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn set_models_disabled(&self, request: ModelsDisabledRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("setModelsDisabled", request)
             .await
             .map_err(Into::into)
     }

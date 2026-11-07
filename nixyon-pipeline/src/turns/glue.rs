@@ -42,6 +42,11 @@ fn append(into: &mut Turn, next: Turn) {
         }
         _ => None,
     };
+    // Эмоция остаётся, только если она у обеих реплик одна: иначе неизвестно, какая из
+    // них у склеенной.
+    if into.emotion != next.emotion {
+        into.emotion = None;
+    }
 }
 
 fn same_flags(a: &[String], b: &[String]) -> bool {
@@ -90,6 +95,19 @@ mod tests {
         let t = glued(&[(1, 0.0, 1.0, "а"), (1, 1.5, 2.0, "б"), (1, 2.5, 3.0, "в")]);
         assert_eq!(t.len(), 1);
         assert_eq!(t[0].text, "а б в");
+    }
+
+    #[test]
+    fn the_emotion_survives_only_if_both_turns_had_the_same() {
+        use nixyon_core::TurnEmotion;
+        let mut turns = transcript(&[(1, 0.0, 1.0, "а"), (1, 1.0, 2.0, "б")]).turns;
+        turns[0].emotion = Some(TurnEmotion::Joy);
+        turns[1].emotion = Some(TurnEmotion::Joy);
+        assert_eq!(glue_turns(turns.clone())[0].emotion, Some(TurnEmotion::Joy));
+        turns[1].emotion = Some(TurnEmotion::Anger);
+        assert_eq!(glue_turns(turns.clone())[0].emotion, None);
+        turns[1].emotion = None;
+        assert_eq!(glue_turns(turns)[0].emotion, None);
     }
 
     #[test]

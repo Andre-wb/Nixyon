@@ -1,10 +1,10 @@
 //! Слова-паразиты: языковая модель на телефоне убирает их из выбранных фраз или из всего
 //! диалога. Фразы без таких слов модели не отправляются, поэтому лимит тратится только на
-//! нужное. Ответ модели принимается, только если он не добавляет слов и не режет фразу
-//! больше чем наполовину. Правки не сохраняются: интерфейс показывает «было» и «стало»,
+//! нужное. Ответ модели принимается, только если он получается из фразы вычёркиванием
+//! слов-паразитов, без других правок слов и их порядка. Правки не сохраняются: интерфейс показывает «было» и «стало»,
 //! замена идёт правкой `apply_turn_texts`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use nixyon_android::{SpeechExt, SummaryRequest};
 use nixyon_core::Turn;
@@ -39,11 +39,12 @@ const FILLERS: &[&str] = &[
 const MAX_TURN_CHARS: usize = 1500;
 /// Фразы одного запроса к модели: пачка, а не по одной фразе.
 const BATCH_CHARS: usize = 2000;
-/// Предел длины ответа на одну пачку.
+/// Предел длины ответа на одну пачку. Ответ не длиннее пачки: русская пачка в 2000 знаков
+/// занимает около 600 токенов модели.
 const MAX_TOKENS: u32 = 1024;
 
 /// Инструкция модели. Русская при любом языке интерфейса, как и остальные инструкции.
-const SYSTEM: &str = "Ты убираешь слова-паразиты из реплик разговора. Слова-паразиты — \
+const SYSTEM: &str = "Ты убираешь слова-паразиты из реплик разговора. Слова-паразиты: \
 «э», «эм», «ну», «вот», «типа», «короче», «значит», «как бы», «так сказать», «это самое», \
 «в общем» и похожие, которые ничего не значат. Убирай их только там, где они ничего не \
 несут. Не добавляй новых слов, не перефразируй, не меняй смысл, сохраняй язык и знаки \
@@ -59,7 +60,7 @@ pub struct FillerProgress {
     pub total: u32,
 }
 
-/// Предложенная правка одной фразы. `before` — текст как был при проверке.
+/// Предложенная правка одной фразы. `before`: текст, каким он был при проверке.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct FillerChange {
@@ -77,6 +78,15 @@ pub struct FillerResult {
     pub checked: u32,
     /// Фраз со словами-паразитами, но слишком длинных для модели.
     pub skipped: u32,
+    /// Фраз, по которым в ответе модели не нашлось строки: ответ обрезан или сбился.
+    pub unanswered: u32,
+}
+
+/// Разбор ответа на одну пачку.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct BatchReply {
+    changes: Vec<FillerChange>,
+    unanswered: u32,
 }
 
 /// Убирает слова-паразиты из реплик `ids` или, если `ids` нет, из всего диалога.
@@ -127,16 +137,21 @@ pub async fn remove_filler_words<R: Runtime>(
         if slot.cancel.is_cancelled() {
             return Err(CommandError::new(CommandError::CANCELLED));
         }
-        result.changes.extend(changes_from(batch, &reply.text));
-        result.checked += u32::try_from(batch.len()).unwrap_or(u32::MAX);
+        let parsed = changes_from(batch, &reply.text);
+        let answered = u32::try_from(batch.len())
+            .unwrap_or(u32::MAX)
+            .saturating_sub(parsed.unanswered);
+        result.changes.extend(parsed.changes);
+        result.checked += answered;
+        result.unanswered += parsed.unanswered;
     }
     let _ = on_progress.send(FillerProgress { done: total, total });
     drop(slot);
     Ok(result)
 }
 
-/// Реплики для проверки: выбранные (или все), в порядке диалога. Неизвестный номер —
-/// ошибка, иначе выбор молча станет другим.
+/// Реплики для проверки: выбранные (или все), в порядке диалога. Неизвестный номер
+/// считается ошибкой, иначе выбор молча станет другим.
 fn select(turns: &[Turn], ids: Option<&[u32]>) -> Result<Vec<Turn>, CommandError> {
     let Some(ids) = ids else {
         return Ok(turns.to_vec());
@@ -207,11 +222,15 @@ fn batch_prompt(batch: &[(u32, String)]) -> String {
         .join("\n")
 }
 
-/// Разбор ответа: строка «номер: текст» на каждую фразу пачки. Фраза без строки или с
-/// отвергнутым ответом правки не получает, остаётся как была.
-fn changes_from(batch: &[(u32, String)], raw: &str) -> Vec<FillerChange> {
+/// Разбор ответа: строка «номер: текст» на каждую фразу пачки. Фраза с отвергнутым
+/// ответом правки не получает, остаётся как была. Фраза без строки тоже остаётся как была
+/// и считается в `unanswered`.
+fn changes_from(batch: &[(u32, String)], raw: &str) -> BatchReply {
     let Some(body) = answer::clean_answer(raw) else {
-        return Vec::new();
+        return BatchReply {
+            changes: Vec::new(),
+            unanswered: u32::try_from(batch.len()).unwrap_or(u32::MAX),
+        };
     };
     let lines: HashMap<usize, &str> = body
         .lines()
@@ -221,45 +240,69 @@ fn changes_from(batch: &[(u32, String)], raw: &str) -> Vec<FillerChange> {
             Some((number.trim().parse::<usize>().ok()?, text))
         })
         .collect();
-    batch
-        .iter()
-        .enumerate()
-        .filter_map(|(i, (id, before))| {
-            let after = clean_turn(before, lines.get(&(i + 1))?)?;
-            (after != squash(before)).then(|| FillerChange {
+    let mut reply = BatchReply::default();
+    for (i, (id, before)) in batch.iter().enumerate() {
+        let Some(line) = lines.get(&(i + 1)) else {
+            reply.unanswered += 1;
+            continue;
+        };
+        if let Some(after) = clean_turn(before, line)
+            && after != squash(before)
+        {
+            reply.changes.push(FillerChange {
                 id: *id,
                 before: before.clone(),
                 after,
-            })
-        })
-        .collect()
+            });
+        }
+    }
+    reply
 }
 
 fn squash(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Ответ модели на одну фразу. Отвергается, если в нём есть слово, которого не было во
-/// фразе, если он длиннее фразы или если от фразы осталась меньше половины слов.
+/// Ответ модели на одну фразу. Принимается, только если его слова получаются из слов
+/// фразы вычёркиванием слов-паразитов целиком, без перестановок и без других вычеркнутых
+/// слов. Знаки препинания и регистр берутся из ответа.
 fn clean_turn(before: &str, reply: &str) -> Option<String> {
     let text: String = squash(reply).chars().filter(|c| !c.is_control()).collect();
     let text = unquote(text.trim());
-    if text.is_empty() {
-        return None;
-    }
     let original = words(before);
-    let known: HashSet<&str> = original.split(' ').collect();
-    let normalized = words(text);
-    let reply_words: Vec<&str> = normalized.split(' ').collect();
-    if reply_words.iter().any(|w| !known.contains(w)) {
+    let cleaned = words(text);
+    if cleaned.is_empty() {
         return None;
     }
-    let before_count = original.split(' ').count();
-    let after_count = reply_words.len();
-    if after_count > before_count || (before_count >= 4 && after_count * 2 < before_count) {
-        return None;
+    let before_words: Vec<&str> = original.split(' ').collect();
+    let after_words: Vec<&str> = cleaned.split(' ').collect();
+    only_fillers_removed(&before_words, &after_words).then(|| text.to_owned())
+}
+
+/// Можно ли получить `after` из `before`, вычёркивая только слова-паразиты. Перебор
+/// таблицей «сколько слов фразы и ответа уже сопоставлено»: жадный проход ошибается, когда
+/// паразит совпадает с обычным словом рядом («как бы как»).
+fn only_fillers_removed(before: &[&str], after: &[&str]) -> bool {
+    let fillers: Vec<Vec<&str>> = FILLERS.iter().map(|f| f.split(' ').collect()).collect();
+    let width = after.len() + 1;
+    let mut reached = vec![false; (before.len() + 1) * width];
+    reached[0] = true;
+    for i in 0..=before.len() {
+        for j in 0..=after.len() {
+            if !reached[i * width + j] {
+                continue;
+            }
+            if i < before.len() && j < after.len() && before[i] == after[j] {
+                reached[(i + 1) * width + j + 1] = true;
+            }
+            for filler in &fillers {
+                if before[i..].starts_with(filler) {
+                    reached[(i + filler.len()) * width + j] = true;
+                }
+            }
+        }
     }
-    Some(text.to_owned())
+    reached[before.len() * width + after.len()]
 }
 
 #[cfg(test)]
@@ -275,6 +318,7 @@ mod tests {
             text: text.into(),
             words: None,
             flags: Vec::new(),
+            emotion: None,
         }
     }
 
@@ -332,9 +376,10 @@ mod tests {
             (12, "Вот, да.".to_owned()),
         ];
         let reply = "1: Это хорошо.\n2: Ну, привет.\nмусор";
-        let changes = changes_from(&batch, reply);
+        let reply = changes_from(&batch, reply);
+        assert_eq!(reply.unanswered, 1);
         assert_eq!(
-            changes,
+            reply.changes,
             [FillerChange {
                 id: 7,
                 before: "Ну, это, эм, хорошо.".into(),
@@ -356,6 +401,42 @@ mod tests {
             clean_turn("ну вот мы и здесь", "мы и здесь"),
             Some("мы и здесь".into())
         );
+    }
+
+    #[test]
+    fn model_reply_that_drops_an_ordinary_word_is_rejected() {
+        assert_eq!(clean_turn("Ну, я не согласен.", "Я согласен."), None);
+        assert_eq!(
+            clean_turn("Ну, я не согласен.", "Я не согласен."),
+            Some("Я не согласен.".into())
+        );
+    }
+
+    #[test]
+    fn model_reply_that_reorders_words_is_rejected() {
+        assert_eq!(clean_turn("Ну, мы пришли домой.", "Домой мы пришли."), None);
+    }
+
+    #[test]
+    fn multiword_filler_is_removed_only_as_a_whole() {
+        assert_eq!(
+            clean_turn("Мы, как бы, готовы.", "Мы готовы."),
+            Some("Мы готовы.".into())
+        );
+        assert_eq!(clean_turn("Мы, как бы, готовы.", "Мы как готовы."), None);
+    }
+
+    #[test]
+    fn phrases_missing_from_the_reply_are_counted_as_unanswered() {
+        let batch = vec![
+            (1, "Ну, да.".to_owned()),
+            (2, "Вот, нет.".to_owned()),
+            (3, "Ну, может.".to_owned()),
+        ];
+        let reply = changes_from(&batch, "1: Да.\n2: Нет.");
+        assert_eq!(reply.changes.len(), 2);
+        assert_eq!(reply.unanswered, 1);
+        assert_eq!(changes_from(&batch, "").unanswered, 3);
     }
 
     #[test]

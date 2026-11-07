@@ -14,6 +14,8 @@ let picked = new Set();
 let running = false;
 let progress = null;
 let result = null;
+// Расшифровка, для которой получен `result`: после новой записи старые правки не нужны.
+let resultFor = null;
 
 export function fillersAvailable() {
   return available;
@@ -30,6 +32,7 @@ function renderList() {
   for (const turn of turns()) {
     const box = el("input");
     box.type = "checkbox";
+    box.className = "select-circle";
     box.value = String(turn.id);
     box.checked = picked.has(turn.id);
     box.addEventListener("change", () => {
@@ -71,6 +74,8 @@ function render() {
   $("filler-found").textContent = done ? t(K.fillers_found, { n: changes.length }) : "";
   $("filler-skipped").hidden = !(done && result.skipped > 0);
   $("filler-skipped").textContent = done ? t(K.fillers_skipped, { n: result?.skipped ?? 0 }) : "";
+  $("filler-unanswered").hidden = !(done && result.unanswered > 0);
+  $("filler-unanswered").textContent = done ? t(K.fillers_unanswered, { n: result?.unanswered ?? 0 }) : "";
   $("filler-empty").hidden = !(done && changes.length === 0);
   $("filler-apply").hidden = changes.length === 0;
   $("filler-apply").textContent = t(K.fillers_apply, { n: changes.length });
@@ -89,14 +94,17 @@ function render() {
   renderPick();
 }
 
-// Пустой список фраз — весь диалог; иначе только выбранные, в порядке диалога.
+// Пустой список фраз означает весь диалог; иначе только выбранные, в порядке диалога.
 async function run(ids) {
   $("filler-error").textContent = "";
+  $("filler-note").textContent = "";
   running = true;
   progress = null;
   result = null;
+  const transcript = currentTranscript();
   render();
   try {
+    resultFor = transcript;
     result = await invoke("remove_filler_words", {
       ids,
       onProgress: channel((p) => {
@@ -117,24 +125,39 @@ async function apply() {
   if (!result?.changes.length) return;
   const changes = result.changes.map(({ id, before, after }) => ({ id, before, after }));
   try {
-    setTranscript(await invoke("apply_turn_texts", { changes }));
+    const applied = await invoke("apply_turn_texts", { changes });
+    setTranscript(applied.transcript);
     result = null;
-    $("filler-sheet").close();
+    // Не вставшие правки не теряются молча: лист остаётся открытым и говорит, сколько их.
+    if (applied.skipped > 0) {
+      renderList();
+      render();
+      $("filler-note").textContent = t(K.fillers_apply_skipped, { n: applied.skipped });
+    } else {
+      $("filler-sheet").close();
+    }
   } catch (error) {
     $("filler-error").textContent = errorText(error);
   }
 }
 
-// Лист открывается с уже выбранными фразами, если его вызвали из реплики.
+// Лист открывается с уже выбранными фразами, если его вызвали из реплики. Готовый
+// результат проверки остаётся, пока открыта та же расшифровка.
 export function openFillers(preselected = []) {
   if (!running) {
-    picked = new Set(preselected);
-    result = null;
+    if (!sameRecording(resultFor, currentTranscript())) result = null;
+    if (preselected.length > 0 || result === null) picked = new Set(preselected);
     $("filler-error").textContent = "";
+    $("filler-note").textContent = "";
     renderList();
   }
   render();
   openModal($("filler-sheet"));
+}
+
+// Правка реплики заменяет объект расшифровки, но запись та же.
+function sameRecording(a, b) {
+  return a !== null && b !== null && a.created_at === b.created_at;
 }
 
 async function checkAvailable() {

@@ -1,7 +1,8 @@
 import { errorText, invoke } from "./api.js";
 import { $ } from "./dom.js";
 import { K, resolveLanguage, setLanguage, t } from "./i18n.js";
-import { languageChanged, openModal } from "./screens.js";
+import { languageChanged, show } from "./screens.js";
+import { initSettingsModels, renderSettingsModels } from "./settings-models.js";
 import { applyTheme, themeSetting } from "./theme.js";
 
 let setting = "auto";
@@ -42,8 +43,14 @@ export function initSettings() {
     }
     $("hotwords").value = hotwords.join("\n");
     $("hotwords-status").textContent = "";
-    openModal($("settings-sheet"));
+    $("settings-models-status").textContent = "";
+    renderSettingsModels();
+    // Экран попадает в историю, чтобы системная «Назад» вела на главный экран.
+    if (location.hash !== "#settings") history.pushState(null, "", "#settings");
+    show("settings");
   });
+  $("settings-back").addEventListener("click", () => history.back());
+  initSettingsModels();
   $("hotwords-save").addEventListener("click", saveHotwords);
   for (const radio of document.querySelectorAll('input[name="theme"]')) {
     radio.addEventListener("change", async () => {

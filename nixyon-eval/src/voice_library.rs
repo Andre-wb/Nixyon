@@ -78,6 +78,7 @@ mod tests {
                     text: "а".into(),
                     words: None,
                     flags: Vec::new(),
+                    emotion: None,
                 })
                 .collect(),
         }

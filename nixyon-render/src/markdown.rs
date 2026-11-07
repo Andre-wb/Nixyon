@@ -51,10 +51,15 @@ pub fn render_markdown(
         }
     }
     for turn in &transcript.turns {
+        let emotion = labels
+            .emotion(turn.emotion)
+            .map(|e| format!(", {}", escape(e)))
+            .unwrap_or_default();
         out.push_str(&format!(
-            "\n**{}**, {}\n\n{}\n",
+            "\n**{}**, {}{}\n\n{}\n",
             escape(&speaker_name(transcript, turn.speaker, labels)),
             clock(turn.start),
+            emotion,
             escape(&turn.text)
         ));
     }

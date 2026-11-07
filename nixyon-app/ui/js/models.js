@@ -10,6 +10,7 @@ const TEXTS = {
   live: [K.models_live_name, K.models_live_desc],
   denoiser: [K.models_denoiser_name, K.models_denoiser_desc],
   age: [K.models_age_name, K.models_age_desc],
+  emotion: [K.models_emotion_name, K.models_emotion_desc],
   llm: [K.models_llm_name, K.models_llm_desc],
 };
 
@@ -44,24 +45,50 @@ function toDownload() {
   return (status?.packs ?? []).filter((p) => !p.installed && (p.required || chosen.has(p.key)));
 }
 
-function row(pack) {
+// Строка модели: название, описание и размер слева, справа переключатель. У обязательной
+// и уже скачанной модели переключателя нет, вместо него надпись.
+// Название, описание и размер модели; общие для экрана загрузки и настроек.
+export function modelText(pack) {
   const [name, desc] = TEXTS[pack.key] ?? [null, null];
-  const item = el("li");
-  const label = el("label", "model-row");
-  const box = el("input");
-  box.type = "checkbox";
-  box.checked = pack.required || pack.installed || chosen.has(pack.key);
-  box.disabled = pack.required || pack.installed || downloading;
-  box.addEventListener("change", () => {
-    if (box.checked) chosen.add(pack.key);
-    else chosen.delete(pack.key);
-    renderTotal();
-  });
   const text = el("span", "model-text");
   text.append(el("span", "model-name", name ? t(name) : pack.key));
   if (desc) text.append(el("span", "meta", t(desc)));
-  const size = el("span", "model-size", pack.installed ? t(K.models_installed) : bytes(pack.size));
-  label.append(box, text, size);
+  text.append(el("span", "model-size", bytes(pack.size)));
+  return text;
+}
+
+// Ответ плагина о моделях; null, если управления моделями нет.
+export function currentStatus() {
+  return status;
+}
+
+// Перечитывает состояние моделей и сообщает об этом подписчикам: так кнопки протокола и
+// имён узнают, что языковую модель включили или выключили.
+export async function refreshModels() {
+  await refresh();
+  changed(false);
+}
+
+function row(pack) {
+  const item = el("li");
+  const fixed = pack.required || pack.installed;
+  const label = el(fixed ? "div" : "label", "model-row");
+  label.append(modelText(pack));
+  if (fixed) {
+    label.append(el("span", "model-state", t(pack.installed ? K.models_installed : K.models_required)));
+  } else {
+    const box = el("input", "switch");
+    box.type = "checkbox";
+    box.setAttribute("role", "switch");
+    box.checked = chosen.has(pack.key);
+    box.disabled = downloading;
+    box.addEventListener("change", () => {
+      if (box.checked) chosen.add(pack.key);
+      else chosen.delete(pack.key);
+      renderTotal();
+    });
+    label.append(box);
+  }
   item.append(label);
   return item;
 }

@@ -124,6 +124,40 @@ pub struct SpeakerAges {
     pub speakers: Vec<SpeakerAgeVerdict>,
 }
 
+/// Реплика в секундах от начала записи.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmotionTurn {
+    pub id: u32,
+    pub start_sec: f64,
+    pub end_sec: f64,
+}
+
+/// Запрос эмоций реплик по WAV 16 кГц записи.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnEmotionsRequest {
+    pub wav_path: String,
+    pub turns: Vec<EmotionTurn>,
+}
+
+/// Ответ по реплике: `emotion` None, если реплика слишком короткая или модель не уверена.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnEmotionVerdict {
+    pub id: u32,
+    pub emotion: Option<nixyon_core::TurnEmotion>,
+}
+
+/// `available`: false, если модели эмоций нет в наборе или она выключена; тогда `turns`
+/// пуст.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnEmotions {
+    pub available: bool,
+    pub turns: Vec<TurnEmotionVerdict>,
+}
+
 /// Тема значков строки состояния и навигации: `dark` для тёмного интерфейса.
 #[derive(Serialize)]
 pub struct SystemBarsRequest {
@@ -347,7 +381,7 @@ pub struct PlayerEvent {
 }
 
 /// Модель или набор моделей из каталога в APK. `key`: "speech" (обязательный набор речи),
-/// "live", "denoiser", "age", "llm". `size`: сколько байт качать.
+/// "live", "denoiser", "age", "emotion", "llm". `size`: сколько байт качать.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelPackStatus {
@@ -368,6 +402,15 @@ pub struct ModelsStatus {
     pub pending: Vec<String>,
     pub pending_allow_metered: bool,
     pub metered: bool,
+    /// Необязательные модели, выключенные в настройках.
+    #[serde(default)]
+    pub disabled: Vec<String>,
+}
+
+/// Какие необязательные модели выключены; остальные включены.
+#[derive(Serialize)]
+pub struct ModelsDisabledRequest {
+    pub packs: Vec<String>,
 }
 
 /// Загрузка моделей с зеркала: ключи `ModelPackStatus`, ход загрузки идёт в канал.
@@ -433,13 +476,14 @@ mod tests {
     #[test]
     fn models_status_and_download_progress_from_kotlin_are_understood() {
         let status: ModelsStatus = serde_json::from_str(
-            r#"{"packs":[{"key":"speech","required":true,"size":320000000,"installed":false}],"downloading":true,"pending":["speech","llm"],"pendingAllowMetered":true,"metered":false}"#,
+            r#"{"packs":[{"key":"speech","required":true,"size":320000000,"installed":false}],"downloading":true,"pending":["speech","llm"],"pendingAllowMetered":true,"metered":false,"disabled":["llm"]}"#,
         )
         .unwrap();
         assert_eq!(status.packs[0].key, "speech");
         assert!(status.packs[0].required && !status.packs[0].installed);
         assert_eq!(status.pending, ["speech", "llm"]);
         assert!(status.pending_allow_metered);
+        assert_eq!(status.disabled, ["llm"]);
         let progress: ModelDownloadProgress =
             serde_json::from_str(r#"{"phase":"waiting","done":10,"total":2293388448}"#).unwrap();
         assert_eq!(progress.total, 2_293_388_448);

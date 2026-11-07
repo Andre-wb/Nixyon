@@ -41,6 +41,12 @@ class RecordingService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
             active.set(true)
+            // Запись могла остановиться раньше, чем сервис успел запуститься: тогда он
+            // останавливается сразу после startForeground.
+            if (gate.enteredForeground()) {
+                active.set(false)
+                stopSelf()
+            }
         } catch (e: Exception) {
             // Без сервиса запись остановится при сворачивании, как раньше.
             Log.e(TAG, "foreground service записи не запустился", e)
@@ -52,6 +58,7 @@ class RecordingService : Service() {
 
     override fun onDestroy() {
         active.set(false)
+        gate.destroyed()
         super.onDestroy()
     }
 
@@ -78,6 +85,7 @@ class RecordingService : Service() {
 
         // Сервис запущен и держит запись в foreground.
         val active = AtomicBoolean(false)
+        private val gate = ForegroundStopGate()
 
         // Запуск при начале записи, пока приложение на экране: из фона Android 14+ не даёт
         // запустить foreground service для микрофона. false: запустить не удалось.
@@ -85,6 +93,7 @@ class RecordingService : Service() {
             val intent = Intent(context, RecordingService::class.java)
                 .putExtra(EXTRA_TITLE, title)
                 .putExtra(EXTRA_CHANNEL, channel)
+            gate.starting()
             return try {
                 ContextCompat.startForegroundService(context, intent)
                 true
@@ -95,7 +104,7 @@ class RecordingService : Service() {
         }
 
         fun stop(context: Context) {
-            context.stopService(Intent(context, RecordingService::class.java))
+            if (gate.requestStop()) context.stopService(Intent(context, RecordingService::class.java))
             active.set(false)
         }
     }

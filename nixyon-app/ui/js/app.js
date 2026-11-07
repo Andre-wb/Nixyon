@@ -40,7 +40,9 @@ async function start() {
   show("home");
   window.addEventListener("popstate", () => {
     if (handleModalBack()) return;
-    if (location.hash !== "#transcript" && location.hash !== "#voices" && location.hash !== "#models") show("home");
+    // С экрана загрузки моделей, открытого из настроек, «Назад» возвращает в настройки.
+    if (location.hash === "#settings") show("settings");
+    else if (location.hash !== "#transcript" && location.hash !== "#voices" && location.hash !== "#models") show("home");
   });
   await initModels(Boolean(settings.models_prompt_seen));
   setLast(await invoke("last_transcript").catch(() => null));

@@ -48,10 +48,10 @@ fn convert(input: impl Read, raw: &Path, tmp: &Path) -> Result<QualityReport, Au
 }
 
 /// Вырезает из записи кусок `[from_sec, to_sec)` и переводит его в WAV 16 кГц моно PCM16
-/// с выравниванием громкости — тот же конвейер, что и для всей записи, но уровни меряются
+/// с выравниванием громкости: тот же конвейер, что и для всей записи, но уровни меряются
 /// по самому куску: одна фраза может быть тише записи в целом. Нужно, чтобы прослушать
 /// реплику заново, не пересчитывая всю встречу. Конец записи дальше её длины обрезается,
-/// пустой кусок (начало за концом записи) — ошибка.
+/// пустой кусок (начало за концом записи) считается ошибкой.
 pub fn slice_to_wav16k(
     input: &Path,
     output: &Path,
@@ -105,7 +105,7 @@ fn slice(input: impl Read, raw: &Path, tmp: &Path, from: u64, to: u64) -> Result
 }
 
 // Первый проход: 16 кГц моно во временный файл, но только сэмплы куска; уровни и
-// кривая усиления — по куску, остальная запись не нужна и не дочитывается.
+// кривая усиления по куску, остальная запись не нужна и не дочитывается.
 fn resample_slice(
     input: impl Read,
     raw: &Path,
@@ -329,7 +329,7 @@ mod tests {
         slice_to_wav16k(&input, &part, 0.4, 0.9).unwrap();
         let (_, all) = read_all(&std::fs::read(&whole).unwrap()).unwrap();
         let (_, sliced) = read_all(&std::fs::read(&part).unwrap()).unwrap();
-        // Время фрагмента то же, что в расшифровке: сэмпл 6400 — это 0,4 с от начала.
+        // Время фрагмента то же, что в расшифровке: сэмпл 6400 приходится на 0,4 с от начала.
         let expected = &all[6_400..14_400];
         assert_eq!(sliced.len(), expected.len());
         let worst = sliced
@@ -388,8 +388,13 @@ mod tests {
     #[test]
     fn missing_slice_input_is_an_io_error() {
         let dir = TempDir::new("slice-missing");
-        let err = slice_to_wav16k(&dir.path().join("nope.wav"), &dir.path().join("out.wav"), 0.0, 1.0)
-            .unwrap_err();
+        let err = slice_to_wav16k(
+            &dir.path().join("nope.wav"),
+            &dir.path().join("out.wav"),
+            0.0,
+            1.0,
+        )
+        .unwrap_err();
         assert!(matches!(err, AudioError::Io(_)));
     }
 }

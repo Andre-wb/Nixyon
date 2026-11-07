@@ -50,6 +50,7 @@ mod tests {
             text: "раз два".into(),
             words: None,
             flags: Vec::new(),
+            emotion: None,
         };
         Transcript {
             schema_version: SCHEMA_VERSION,

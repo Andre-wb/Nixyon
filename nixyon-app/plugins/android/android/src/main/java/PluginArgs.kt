@@ -45,6 +45,19 @@ class SpeakerAgesArgs {
 }
 
 @InvokeArg
+class EmotionTurnArgs {
+    var id: Int = 0
+    var startSec: Double = 0.0
+    var endSec: Double = 0.0
+}
+
+@InvokeArg
+class TurnEmotionsArgs {
+    lateinit var wavPath: String
+    var turns: Array<EmotionTurnArgs> = arrayOf()
+}
+
+@InvokeArg
 class SystemBarsArgs {
     var dark: Boolean = false
 }
@@ -128,4 +141,10 @@ class DownloadModelsArgs {
     // Заголовок уведомления о загрузке на языке интерфейса.
     var notificationTitle: String = ""
     var onProgress: Channel? = null
+}
+
+@InvokeArg
+class ModelsDisabledArgs {
+    // Ключи необязательных ModelPack, которые выключены; пусто: включены все.
+    var packs: Array<String> = arrayOf()
 }

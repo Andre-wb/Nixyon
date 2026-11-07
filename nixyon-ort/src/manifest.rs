@@ -26,6 +26,8 @@ pub enum OrtRole {
     SortformerFp32,
     /// Пол и возраст по голосу: audEERING wav2vec2-large-robust, 6 слоёв.
     AgeGender,
+    /// Эмоция реплики: GigaAM-Emo, веса MatMul в 8 бит. Лежит в основном наборе.
+    Emotion,
 }
 
 impl OrtRole {
@@ -42,6 +44,7 @@ impl OrtRole {
             OrtRole::SortformerInt8Data => "sortformer_int8_data",
             OrtRole::SortformerFp32 => "sortformer_fp32",
             OrtRole::AgeGender => "age_gender",
+            OrtRole::Emotion => "emotion",
         }
     }
 }

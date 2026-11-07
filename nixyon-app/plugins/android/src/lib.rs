@@ -12,6 +12,8 @@ mod mobile;
 
 #[cfg(target_os = "android")]
 mod age_model;
+#[cfg(target_os = "android")]
+mod emotion_model;
 mod error;
 #[cfg(target_os = "android")]
 #[allow(unsafe_code)]

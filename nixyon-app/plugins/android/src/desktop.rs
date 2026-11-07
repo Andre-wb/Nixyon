@@ -33,6 +33,13 @@ impl<R: Runtime> Speech<R> {
         Err(crate::Error::Unsupported)
     }
 
+    pub async fn turn_emotions(
+        &self,
+        _request: TurnEmotionsRequest,
+    ) -> crate::Result<TurnEmotions> {
+        Err(crate::Error::Unsupported)
+    }
+
     pub async fn set_system_bars(&self, _request: SystemBarsRequest) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }
@@ -143,6 +150,10 @@ impl<R: Runtime> Speech<R> {
     }
 
     pub async fn download_models(&self, _request: DownloadModelsRequest) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
+    pub async fn set_models_disabled(&self, _request: ModelsDisabledRequest) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }
 

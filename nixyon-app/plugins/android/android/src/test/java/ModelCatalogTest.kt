@@ -20,7 +20,7 @@ class ModelCatalogTest {
     @Test
     fun anOptionalModelMissingFromTheCatalogIsNotOffered() {
         val catalog = catalog(ModelRole.entries.filter { it != ModelRole.AGE_GENDER })
-        assertEquals(listOf(ModelPack.SPEECH, ModelPack.LIVE, ModelPack.DENOISER, ModelPack.LLM), catalog.packs)
+        assertEquals(listOf(ModelPack.SPEECH, ModelPack.LIVE, ModelPack.DENOISER, ModelPack.EMOTION, ModelPack.LLM), catalog.packs)
     }
 
     @Test

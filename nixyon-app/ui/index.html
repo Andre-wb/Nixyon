@@ -178,6 +178,47 @@
         <button class="button button-plain wide" id="models-later" type="button" data-i18n="models.later"></button>
       </div>
     </section>
+    <section class="screen" id="screen-settings" aria-labelledby="settings-title" hidden>
+      <header class="bar">
+        <button class="back" id="settings-back" type="button">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          <span data-i18n="transcript.back"></span>
+        </button>
+      </header>
+      <h1 class="title" id="settings-title" data-i18n="settings.title"></h1>
+      <div>
+        <h2 class="group-title" id="theme-title" data-i18n="settings.theme"></h2>
+        <div class="card choices" role="radiogroup" aria-labelledby="theme-title">
+          <label class="choice"><input type="radio" name="theme" value="auto"><span data-i18n="settings.theme_auto"></span></label>
+          <label class="choice"><input type="radio" name="theme" value="light"><span data-i18n="settings.theme_light"></span></label>
+          <label class="choice"><input type="radio" name="theme" value="dark"><span data-i18n="settings.theme_dark"></span></label>
+        </div>
+      </div>
+      <div>
+        <h2 class="group-title" id="language-title" data-i18n="settings.language"></h2>
+        <div class="card choices" role="radiogroup" aria-labelledby="language-title">
+          <label class="choice"><input type="radio" name="language" value="auto"><span data-i18n="settings.language_auto"></span></label>
+          <label class="choice"><input type="radio" name="language" value="ru"><span data-i18n="settings.language_ru"></span></label>
+          <label class="choice"><input type="radio" name="language" value="en"><span data-i18n="settings.language_en"></span></label>
+        </div>
+      </div>
+      <div class="settings-models" id="settings-models-block" hidden>
+        <h2 class="group-title" id="settings-models-title" data-i18n="settings.models"></h2>
+        <ul class="card models" id="settings-models" aria-labelledby="settings-models-title"></ul>
+        <p class="meta settings-note" data-i18n="settings.models_hint"></p>
+        <button class="button button-secondary wide" id="settings-models-download" type="button" data-i18n="models.missing_download" hidden></button>
+        <p class="status" id="settings-models-status" role="status"></p>
+      </div>
+      <div class="sheet-group">
+        <label class="field">
+          <span data-i18n="settings.hotwords"></span>
+          <textarea id="hotwords" rows="5" autocomplete="off" spellcheck="false"></textarea>
+        </label>
+        <p class="meta" data-i18n="settings.hotwords_hint"></p>
+        <button class="button button-secondary wide" id="hotwords-save" type="button" data-i18n="settings.hotwords_save"></button>
+        <p class="status" id="hotwords-status" role="status"></p>
+      </div>
+    </section>
   </main>
 
   <dialog class="alert" id="models-metered" aria-labelledby="models-metered-text">
@@ -284,8 +325,30 @@
     </form>
   </dialog>
 
+  <!-- Эмоция реплики: выбор из списка, ввести свою нельзя. Выбор сохраняется сразу. -->
+  <dialog class="sheet" id="emotion-sheet" aria-labelledby="emotion-sheet-title">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="emotion-sheet-title" data-i18n="emotion.sheet_title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <p class="meta" id="emotion-sheet-meta"></p>
+      <div class="card choices" role="radiogroup" aria-labelledby="emotion-sheet-title">
+        <label class="choice"><input type="radio" name="emotion" value="neutral"><span data-i18n="emotion.neutral"></span></label>
+        <label class="choice"><input type="radio" name="emotion" value="joy"><span class="emotion-dot" data-emotion="joy" aria-hidden="true"></span><span data-i18n="emotion.joy"></span></label>
+        <label class="choice"><input type="radio" name="emotion" value="sadness"><span class="emotion-dot" data-emotion="sadness" aria-hidden="true"></span><span data-i18n="emotion.sadness"></span></label>
+        <label class="choice"><input type="radio" name="emotion" value="anger"><span class="emotion-dot" data-emotion="anger" aria-hidden="true"></span><span data-i18n="emotion.anger"></span></label>
+        <label class="choice"><input type="radio" name="emotion" value="fear"><span class="emotion-dot" data-emotion="fear" aria-hidden="true"></span><span data-i18n="emotion.fear"></span></label>
+        <label class="choice"><input type="radio" name="emotion" value="surprise"><span class="emotion-dot" data-emotion="surprise" aria-hidden="true"></span><span data-i18n="emotion.surprise"></span></label>
+        <label class="choice"><input type="radio" name="emotion" value="disgust"><span class="emotion-dot" data-emotion="disgust" aria-hidden="true"></span><span data-i18n="emotion.disgust"></span></label>
+      </div>
+      <p class="hint" data-i18n="emotion.sheet_hint"></p>
+      <p class="error" id="emotion-error" role="alert"></p>
+    </form>
+  </dialog>
+
   <!-- Повторная обработка одной реплики: её звук слушается заново, затем текст
-       проверяет языковая модель. Итог только предлагается, замена — обычной правкой. -->
+       проверяет языковая модель. Итог только предлагается, замена идёт обычной правкой. -->
   <dialog class="sheet" id="turn-check-sheet" aria-labelledby="turn-check-title">
     <form method="dialog" class="sheet-body">
       <div class="sheet-head">
@@ -332,7 +395,7 @@
       </div>
       <div class="sheet-group" id="filler-pick">
         <label class="filler-all">
-          <input type="checkbox" id="filler-all">
+          <input class="select-circle" type="checkbox" id="filler-all">
           <span data-i18n="fillers.select_all"></span>
         </label>
         <p class="meta" id="filler-count"></p>
@@ -343,10 +406,12 @@
       <div class="sheet-group" id="filler-result" hidden>
         <p class="meta" id="filler-found"></p>
         <p class="hint" id="filler-skipped" hidden></p>
+        <p class="hint" id="filler-unanswered" hidden></p>
         <ul class="filler-list" id="filler-changes"></ul>
       </div>
       <p class="meta" id="filler-empty" role="status" data-i18n="fillers.empty" hidden></p>
       <button class="button button-primary wide" id="filler-apply" type="button" hidden></button>
+      <p class="meta" id="filler-note" role="status"></p>
       <p class="error" id="filler-error" role="alert"></p>
     </form>
   </dialog>
@@ -427,36 +492,5 @@
     </form>
   </dialog>
 
-  <dialog class="sheet" id="settings-sheet" aria-labelledby="settings-title">
-    <form method="dialog" class="sheet-body">
-      <div class="sheet-head">
-        <h2 id="settings-title" data-i18n="settings.title"></h2>
-        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
-      </div>
-      <div>
-        <h3 class="group-title" id="theme-title" data-i18n="settings.theme"></h3>
-        <div class="card choices" role="radiogroup" aria-labelledby="theme-title">
-          <label class="choice"><input type="radio" name="theme" value="auto"><span data-i18n="settings.theme_auto"></span></label>
-          <label class="choice"><input type="radio" name="theme" value="light"><span data-i18n="settings.theme_light"></span></label>
-          <label class="choice"><input type="radio" name="theme" value="dark"><span data-i18n="settings.theme_dark"></span></label>
-        </div>
-      </div>
-      <div>
-        <h3 class="group-title" id="language-title" data-i18n="settings.language"></h3>
-        <div class="card choices" role="radiogroup" aria-labelledby="language-title">
-          <label class="choice"><input type="radio" name="language" value="auto"><span data-i18n="settings.language_auto"></span></label>
-          <label class="choice"><input type="radio" name="language" value="ru"><span data-i18n="settings.language_ru"></span></label>
-          <label class="choice"><input type="radio" name="language" value="en"><span data-i18n="settings.language_en"></span></label>
-        </div>
-      </div>
-      <label class="field">
-        <span data-i18n="settings.hotwords"></span>
-        <textarea id="hotwords" rows="5" autocomplete="off" spellcheck="false"></textarea>
-      </label>
-      <p class="meta" data-i18n="settings.hotwords_hint"></p>
-      <button class="button button-secondary wide" id="hotwords-save" type="button" data-i18n="settings.hotwords_save"></button>
-      <p class="status" id="hotwords-status" role="status"></p>
-    </form>
-  </dialog>
 </body>
 </html>

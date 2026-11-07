@@ -60,6 +60,7 @@ mod tests {
             text: "раз".into(),
             words,
             flags: Vec::new(),
+            emotion: None,
         }
     }
 

@@ -19,9 +19,12 @@ class LocatedLlm(val size: Long, val offset: Long, private val descriptor: Parce
 // (демо-сборка), где она лежит несжатой и читается прямо из файла APK, без копии.
 class LlmLocator(private val context: Context) {
 
-    fun isAvailable(): Boolean = folderManifest()?.isFile == true || readApkManifest() != null
+    // Выключенная в настройках модель считается отсутствующей.
+    fun isAvailable(): Boolean =
+        !disabled() && (folderManifest()?.isFile == true || readApkManifest() != null)
 
     fun locate(): LocatedLlm {
+        if (disabled()) throw LlmException(LlmException.NOT_FOUND, "языковая модель выключена в настройках")
         val folderManifest = folderManifest()
         if (folderManifest != null && folderManifest.isFile) return fromFolder(folderManifest)
         val text = readApkManifest() ?: throw LlmException(LlmException.NOT_FOUND, "нет llm.json")
@@ -60,6 +63,8 @@ class LlmLocator(private val context: Context) {
         }
         return LocatedLlm(asset.length, asset.startOffset, asset.parcelFileDescriptor)
     }
+
+    private fun disabled(): Boolean = ModelPack.LLM in DisabledModels.of(context).read()
 
     private fun folderManifest(): File? =
         context.getExternalFilesDir(null)?.let { File(File(it, FOLDER), MANIFEST) }
