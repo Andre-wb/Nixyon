@@ -62,6 +62,12 @@ class SystemBarsArgs {
     var dark: Boolean = false
 }
 
+// Пауза и продолжение записи: заголовок уведомления на языке интерфейса.
+@InvokeArg
+class PauseArgs {
+    var notificationTitle: String = ""
+}
+
 @InvokeArg
 class RecordArgs {
     var onEvent: Channel? = null

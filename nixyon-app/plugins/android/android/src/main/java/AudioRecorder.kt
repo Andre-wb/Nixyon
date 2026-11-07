@@ -48,7 +48,7 @@ class AudioRecorder(
         // Первая причина остановки остаётся: пользователь, лимит, место или обрыв.
         val stopReason = AtomicReference<String?>(null)
         // Пока пауза, микрофон открыт, но звук не пишется и не идёт в живой текст.
-        @Volatile var paused = false
+        val pauses = PauseClock()
         val gate = MicGate(REOPEN_MS)
         val startedAt = SystemClock.elapsedRealtime()
         var result: RecordingResult? = null
@@ -104,13 +104,16 @@ class AudioRecorder(
     }
 
     // Пауза и продолжение: та же запись, тот же файл. Время на паузе в длительность не входит.
-    fun pause() = setPaused(true)
+    // Возвращают, сколько секунд звука уже записано: по ним уведомление продолжает таймер.
+    fun pause(): Double = setPaused(true)
 
-    fun resume() = setPaused(false)
+    fun resume(): Double = setPaused(false)
 
-    private fun setPaused(paused: Boolean) {
+    private fun setPaused(paused: Boolean): Double {
         val s = synchronized(lock) { session } ?: throw MediaException(MediaException.NOT_RECORDING, "запись не идёт")
-        s.paused = paused
+        val now = SystemClock.elapsedRealtime()
+        if (paused) s.pauses.pause(now) else s.pauses.resume(now)
+        return s.writer.durationSec
     }
 
     // Останавливает запись и ждёт, пока файл будет дописан и сохранён.
@@ -142,7 +145,7 @@ class AudioRecorder(
                         continue
                     }
                 }
-                if (s.paused) continue
+                if (s.pauses.isPaused) continue
                 for (i in 0 until n) Pcm16.put(bytes, 2 * i, buffer[i].toInt())
                 s.writer.write(bytes, n * 2)
                 s.live?.offer(buffer, n)
@@ -227,20 +230,22 @@ class AudioRecorder(
         return RecordingResult(done.absolutePath, duration, reason)
     }
 
-    // Сколько звука не попало в файл: время записи минус записанное. Если поток
+    // Сколько звука не попало в файл: время записи без пауз минус записанное. Если поток
     // записи не успевал читать микрофон или микрофон отваливался, это видно здесь. Только
     // числа: звук и текст в лог не пишутся.
     private fun logGaps(s: Session, writtenSec: Double, reason: String) {
         val now = SystemClock.elapsedRealtime()
         val elapsedSec = (now - s.startedAt) / 1000.0
-        val lostSec = elapsedSec - writtenSec
+        val pausedSec = s.pauses.pausedMs(now) / 1000.0
+        val lostSec = elapsedSec - pausedSec - writtenSec
         Log.i(
             TAG,
             String.format(
                 Locale.ROOT,
-                "запись %s: прошло %.1f с, записано %.1f с, микрофон открыт заново %d раз, не записано %.1f с",
+                "запись %s: прошло %.1f с, из них на паузе %.1f с, записано %.1f с, микрофон открыт заново %d раз, не записано %.1f с",
                 reason,
                 elapsedSec,
+                pausedSec,
                 writtenSec,
                 s.gate.reopens(),
                 lostSec,

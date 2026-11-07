@@ -2,7 +2,8 @@
 //! делает Kotlin-плагин; здесь команды для интерфейса и пересылка событий.
 
 use nixyon_android::{
-    ImportOutcome, ImportRequest, RecordRequest, RecorderEvent, RecordingSaved, SpeechExt,
+    ImportOutcome, ImportRequest, PauseRequest, RecordRequest, RecorderEvent, RecordingSaved,
+    SpeechExt,
 };
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
@@ -67,14 +68,27 @@ pub async fn stop_recording<R: Runtime>(app: AppHandle<R>) -> Result<RecordingSa
 }
 
 /// Ставит запись на паузу: микрофон открыт, звук не пишется. Продолжается тем же файлом.
+/// Заголовок уведомления о записи меняется на переданный.
 #[tauri::command]
-pub async fn pause_recording<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
-    app.speech().pause_recording().await.map_err(plugin_error)
+pub async fn pause_recording<R: Runtime>(
+    app: AppHandle<R>,
+    notification_title: String,
+) -> Result<(), CommandError> {
+    app.speech()
+        .pause_recording(PauseRequest { notification_title })
+        .await
+        .map_err(plugin_error)
 }
 
 #[tauri::command]
-pub async fn resume_recording<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
-    app.speech().resume_recording().await.map_err(plugin_error)
+pub async fn resume_recording<R: Runtime>(
+    app: AppHandle<R>,
+    notification_title: String,
+) -> Result<(), CommandError> {
+    app.speech()
+        .resume_recording(PauseRequest { notification_title })
+        .await
+        .map_err(plugin_error)
 }
 
 /// Запись с микрофона, оборванная падением приложения: её восстанавливает плагин, когда ядро

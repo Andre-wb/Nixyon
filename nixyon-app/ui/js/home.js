@@ -22,6 +22,8 @@ let unknownCount = true;
 let count = 2;
 let recording = false;
 let paused = false;
+// Команда паузы ещё не ответила: второе нажатие в это время ничего не делает.
+let pausing = false;
 let liveLines = [];
 let startedAt = 0;
 // Пауза: когда её поставили и сколько всего длилась до текущей.
@@ -147,13 +149,20 @@ async function stopRecording() {
 
 // Кнопка паузы: первое нажатие ставит запись на паузу, второе продолжает её в том же файле.
 async function togglePause() {
-  if (!recording) return;
+  if (!recording || pausing) return;
   const pause = !paused;
+  pausing = true;
+  $("record-pause").disabled = true;
   try {
-    await invoke(pause ? "pause_recording" : "resume_recording");
+    await invoke(pause ? "pause_recording" : "resume_recording", {
+      notificationTitle: t(pause ? K.recording_notification_paused : K.recording_notification_title),
+    });
   } catch (error) {
     notice(errorText(error), { code: errorCode(error) });
     return;
+  } finally {
+    pausing = false;
+    $("record-pause").disabled = false;
   }
   const now = Date.now();
   if (pause) pausedAt = now;

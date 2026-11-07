@@ -188,6 +188,7 @@
   "recording.empty": "Ничего не записалось.",
   "recording.name": "Запись",
   "recording.notification_channel": "Запись",
+  "recording.notification_paused": "Запись на паузе",
   "recording.notification_title": "Идёт запись",
   "recording.recovered": "Приложение закрылось во время записи. Восстановлено {time}.",
   "recording.recovered_transcribe": "Расшифровать",

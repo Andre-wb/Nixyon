@@ -94,16 +94,16 @@ impl<R: Runtime> Speech<R> {
             .map_err(Into::into)
     }
 
-    pub async fn pause_recording(&self) -> crate::Result<()> {
+    pub async fn pause_recording(&self, request: PauseRequest) -> crate::Result<()> {
         self.0
-            .run_mobile_plugin_async("pauseRecording", ())
+            .run_mobile_plugin_async("pauseRecording", request)
             .await
             .map_err(Into::into)
     }
 
-    pub async fn resume_recording(&self) -> crate::Result<()> {
+    pub async fn resume_recording(&self, request: PauseRequest) -> crate::Result<()> {
         self.0
-            .run_mobile_plugin_async("resumeRecording", ())
+            .run_mobile_plugin_async("resumeRecording", request)
             .await
             .map_err(Into::into)
     }

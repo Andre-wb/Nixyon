@@ -536,19 +536,16 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
-    fun pauseRecording(invoke: Invoke) {
-        try {
-            recorder.pause()
-            invoke.resolve()
-        } catch (e: MediaException) {
-            invoke.reject(e.message, e.code)
-        }
-    }
+    fun pauseRecording(invoke: Invoke) = setPaused(invoke, true)
 
     @Command
-    fun resumeRecording(invoke: Invoke) {
+    fun resumeRecording(invoke: Invoke) = setPaused(invoke, false)
+
+    private fun setPaused(invoke: Invoke, paused: Boolean) {
+        val args = invoke.parseArgs(PauseArgs::class.java)
         try {
-            recorder.resume()
+            val recorded = if (paused) recorder.pause() else recorder.resume()
+            RecordingService.update(activity.applicationContext, args.notificationTitle, recorded, paused)
             invoke.resolve()
         } catch (e: MediaException) {
             invoke.reject(e.message, e.code)

@@ -188,6 +188,7 @@
   "recording.empty": "Nothing was recorded.",
   "recording.name": "Recording",
   "recording.notification_channel": "Recording",
+  "recording.notification_paused": "Recording paused",
   "recording.notification_title": "Recording in progress",
   "recording.recovered": "The app closed during recording. {time} was recovered.",
   "recording.recovered_transcribe": "Transcribe",

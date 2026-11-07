@@ -63,11 +63,11 @@ impl<R: Runtime> Speech<R> {
         Err(crate::Error::Unsupported)
     }
 
-    pub async fn pause_recording(&self) -> crate::Result<()> {
+    pub async fn pause_recording(&self, _request: PauseRequest) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }
 
-    pub async fn resume_recording(&self) -> crate::Result<()> {
+    pub async fn resume_recording(&self, _request: PauseRequest) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }
 

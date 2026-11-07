@@ -164,6 +164,13 @@ pub struct SystemBarsRequest {
     pub dark: bool,
 }
 
+/// Пауза или продолжение записи: заголовок уведомления на языке интерфейса.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PauseRequest {
+    pub notification_title: String,
+}
+
 /// Начало записи: события (уровень, автоостановка) идут в канал.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
