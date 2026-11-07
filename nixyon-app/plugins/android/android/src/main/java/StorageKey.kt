@@ -21,7 +21,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-// Ошибка для интерфейса: приложите палец (locked) или на телефоне нет отпечатка.
+// Ошибка для интерфейса: приложите палец (locked), на телефоне нет отпечатка или ключ
+// стёрт системой (storage_key_lost).
 class StorageLockedException(val code: String) : Exception(code)
 
 // Ключ данных для шифрования файлов. Сам ключ хранится обёрнутым ключом Android Keystore,
@@ -29,15 +30,20 @@ class StorageLockedException(val code: String) : Exception(code)
 // CryptoObject). Развёрнутый ключ остаётся в памяти процесса: запись в фоне и чтение
 // файлов после разблокировки отпечатка не просят его снова. Обёртка лежит в
 // noBackupFilesDir и в резервную копию не попадает.
-// Если ключ Keystore пропал (восстановление на другом телефоне, сброс ключей), создаётся
-// новый ключ данных: файлы под старым прочитать уже нельзя, ядро их удалит. Временный
-// сбой Keystore ключ не заменяет. Прежняя обёртка без отпечатка переносится на новую
+// Ключ под отпечатком система стирает, если на телефоне снять блокировку экрана. Тогда
+// новый ключ молча не создаётся: приложение сообщает, что старые записи не прочитать, и
+// начинает заново только по `reset`, после подтверждения пользователя. Временный сбой
+// Keystore ключ не заменяет. Прежняя обёртка без отпечатка переносится на новую
 // при первой разблокировке: для этого тоже нужен палец. Если на телефоне нет отпечатка,
 // блокировки нет совсем: ключ открывается сразу.
 class StorageKey(private val context: Context) {
     @Volatile
     private var cached: SecretKey? = null
     private val prompting = AtomicBoolean(false)
+
+    // Последнее открытие нашло стёртый ключ: только тогда разрешён `reset`.
+    @Volatile
+    private var lost = false
 
     // Ключ после разблокировки. До неё запись и чтение файлов невозможны.
     fun get(): SecretKey = cached ?: throw StorageLockedException(LOCKED)
@@ -57,13 +63,6 @@ class StorageKey(private val context: Context) {
             prompting.set(false)
             onDone(result)
         }
-        if (BiometricManager.from(context).canAuthenticate(STRENGTH) != BiometricManager.BIOMETRIC_SUCCESS) {
-            // Отпечатка нет: блокировки нет, ключ открывается сразу. Файл, запертый отпечатком,
-            // без отпечатка не открыть: нужно добавить отпечаток в настройках телефона.
-            if (read(BIO_FILE) != null) finish(Result.failure(StorageLockedException(UNAVAILABLE)))
-            else finish(runCatching { openPlain() })
-            return
-        }
         try {
             open(activity, finish)
         } catch (e: Throwable) {
@@ -72,24 +71,63 @@ class StorageKey(private val context: Context) {
         }
     }
 
+    // Стирает ключ, который система уже сделала бесполезным, чтобы начать заново. Работает,
+    // только если последнее открытие нашло ключ стёртым: иначе это удаление живых данных.
+    fun reset() {
+        if (!lost) throw StorageLockedException(LOCKED)
+        File(context.noBackupFilesDir, BIO_FILE).delete()
+        keyStore().let { if (it.containsAlias(BIO_ALIAS)) it.deleteEntry(BIO_ALIAS) }
+        lost = false
+        Log.w(TAG_LOG, "стёртый ключ данных удалён по просьбе пользователя")
+    }
+
     private fun open(activity: FragmentActivity, finish: (Result<SecretKey>) -> Unit) {
-        val wrapping = keyStore().getKey(BIO_ALIAS, null) as? SecretKey
         val wrapped = read(BIO_FILE)
-        if (wrapping != null && wrapped != null && wrapped.size == IV + KEY_BYTES + TAG) {
-            val cipher = Cipher.getInstance(TRANSFORM)
+        val wrapping = keyStore().getKey(BIO_ALIAS, null) as? SecretKey
+        val cipher = Cipher.getInstance(TRANSFORM)
+        val valid = wrapped != null && wrapped.size == IV + KEY_BYTES + TAG
+        var invalidated = false
+        if (valid && wrapping != null) {
             try {
                 cipher.init(Cipher.DECRYPT_MODE, wrapping, GCMParameterSpec(TAG * 8, wrapped, 0, IV))
             } catch (e: KeyPermanentlyInvalidatedException) {
-                Log.w(TAG_LOG, "ключ Keystore сброшен системой")
-                create(activity, null, finish)
-                return
+                Log.w(TAG_LOG, "ключ Keystore стёрт системой")
+                invalidated = true
             }
-            authenticate(activity, cipher, finish) { authed ->
-                SecretKeySpec(authed.doFinal(wrapped, IV, wrapped.size - IV), "AES")
-            }
-            return
         }
-        create(activity, legacyKey(), finish)
+        val state = KeyState(
+            canAuthenticate = BiometricManager.from(context).canAuthenticate(STRENGTH) == BiometricManager.BIOMETRIC_SUCCESS,
+            bioFile = wrapped != null,
+            bioFileValid = valid,
+            bioKey = wrapping != null,
+            bioKeyInvalidated = invalidated,
+            legacyFile = File(context.noBackupFilesDir, LEGACY_FILE).exists(),
+        )
+        lost = false
+        when (KeyOpenings.choose(state)) {
+            KeyOpening.PLAIN -> finish(runCatching { openPlain() })
+            KeyOpening.UNAVAILABLE -> finish(Result.failure(StorageLockedException(UNAVAILABLE)))
+            KeyOpening.LOST -> {
+                Log.w(TAG_LOG, "ключ данных под отпечатком потерян")
+                lost = true
+                finish(Result.failure(StorageLockedException(KEY_LOST)))
+            }
+            KeyOpening.BIOMETRIC -> authenticate(activity, cipher, finish) { authed ->
+                SecretKeySpec(authed.doFinal(wrapped!!, IV, wrapped.size - IV), "AES")
+            }
+            KeyOpening.MIGRATE -> {
+                // Прежняя обёртка не разворачивается: при запертом ключе это потеря, о которой
+                // надо сказать; без него, как и раньше, ключ создаётся заново.
+                val legacy = legacyKey()
+                if (legacy == null && state.bioFile) {
+                    lost = true
+                    finish(Result.failure(StorageLockedException(KEY_LOST)))
+                } else {
+                    create(activity, legacy, finish)
+                }
+            }
+            KeyOpening.CREATE -> create(activity, null, finish)
+        }
     }
 
     // Новый ключ данных: либо перенесённый из прежней обёртки, либо случайный.
@@ -222,6 +260,7 @@ class StorageKey(private val context: Context) {
         const val KEY_BYTES = 32
         const val LOCKED = "locked"
         const val UNAVAILABLE = "biometric_unavailable"
+        const val KEY_LOST = "storage_key_lost"
         private const val STRENGTH = BiometricManager.Authenticators.BIOMETRIC_STRONG
     }
 }

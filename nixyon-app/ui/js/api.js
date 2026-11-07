@@ -72,6 +72,7 @@ const ERRORS = {
   silent: K.error_silent,
   speaker_unnamed: K.error_speaker_unnamed,
   storage_failed: K.error_storage_failed,
+  storage_key_lost: K.error_storage_key_lost,
   storage_low: K.error_storage_low,
   too_long: K.error_too_long,
   too_many_hotwords: K.error_too_many_hotwords,

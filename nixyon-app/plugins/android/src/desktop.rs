@@ -122,6 +122,10 @@ impl<R: Runtime> Speech<R> {
         Err(crate::Error::Unsupported)
     }
 
+    pub async fn reset_storage_key(&self) -> crate::Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
     pub async fn render_pdf(&self, _path: String, _blocks: String) -> crate::Result<()> {
         Err(crate::Error::Unsupported)
     }

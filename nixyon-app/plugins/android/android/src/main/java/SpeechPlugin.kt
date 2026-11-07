@@ -335,6 +335,21 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    // Удаляет ключ, который система стёрла, чтобы начать с чистого хранилища. Плагин
+    // соглашается, только если последнее открытие нашло ключ стёртым.
+    @Command
+    fun resetStorageKey(invoke: Invoke) {
+        try {
+            keys.reset()
+            invoke.resolve()
+        } catch (e: StorageLockedException) {
+            invoke.reject("storage key is not lost", e.code)
+        } catch (e: Throwable) {
+            Log.e(TAG, "стёртый ключ данных не удалён", e)
+            invoke.reject("storage key reset failed", "storage_failed")
+        }
+    }
+
     // Один раз за процесс. Новая запись и импорт начинаются только после подготовки
     // хранилища ядром (media.rs), поэтому ни один `.part` здесь сейчас не пишется.
     private fun recoverOnce(key: SecretKey) {

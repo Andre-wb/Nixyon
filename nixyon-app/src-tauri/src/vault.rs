@@ -34,11 +34,14 @@ pub struct Storage {
     pub paths: StoragePaths,
 }
 
-/// Ключ не открыт: палец не приложен или отменён, либо на телефоне нет отпечатка. Эти
-/// коды интерфейс показывает как есть; всё остальное — сбой хранилища.
+/// Ключ не открыт: палец не приложен или отменён, на телефоне нет отпечатка или система
+/// стёрла ключ. Эти коды интерфейс показывает как есть; остальное считается сбоем
+/// хранилища.
 fn storage_key_error(e: nixyon_android::Error) -> CommandError {
     match e.rejected_code() {
-        Some(code @ ("locked" | "biometric_unavailable")) => CommandError::new(code),
+        Some(code @ ("locked" | "biometric_unavailable" | "storage_key_lost")) => {
+            CommandError::new(code)
+        }
         _ => CommandError::logged(CommandError::STORAGE_FAILED, e),
     }
 }
@@ -48,6 +51,17 @@ fn storage_key_error(e: nixyon_android::Error) -> CommandError {
 #[tauri::command]
 pub async fn unlock_storage<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
     storage(&app).await.map(|_| ())
+}
+
+/// Начать с чистого хранилища, когда система стёрла ключ под отпечатком: старые файлы уже
+/// не прочитать, их удалит подготовка хранилища при следующем открытии. Плагин отказывает,
+/// если ключ не стёрт.
+#[tauri::command]
+pub async fn reset_storage<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    app.speech()
+        .reset_storage_key()
+        .await
+        .map_err(storage_key_error)
 }
 
 /// Папки приложения и хранилище с ключом. Первый вызов после запуска получает ключ и

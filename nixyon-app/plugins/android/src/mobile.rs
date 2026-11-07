@@ -174,6 +174,13 @@ impl<R: Runtime> Speech<R> {
             .map_err(Into::into)
     }
 
+    pub async fn reset_storage_key(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("resetStorageKey", ())
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn render_pdf(&self, path: String, blocks: String) -> crate::Result<()> {
         self.0
             .run_mobile_plugin_async("renderPdf", PdfRequest { path, blocks })

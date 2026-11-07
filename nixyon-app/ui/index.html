@@ -18,8 +18,16 @@
       <p class="meta" data-i18n="lock.hint"></p>
       <p class="error" id="lock-error" role="alert"></p>
       <button class="button button-primary wide" id="lock-retry" type="button" data-i18n="lock.open"></button>
+      <button class="button button-danger wide" id="lock-reset" type="button" data-i18n="lock.reset" hidden></button>
     </div>
   </div>
+  <dialog class="alert" id="lock-reset-confirm" aria-labelledby="lock-reset-text">
+    <p id="lock-reset-text" data-i18n="lock.reset_confirm"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="lock-reset-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="lock-reset-yes" type="button" data-i18n="lock.reset_do"></button>
+    </div>
+  </dialog>
   <main>
     <section class="screen" id="screen-home" aria-labelledby="home-title" hidden>
       <header class="bar">
