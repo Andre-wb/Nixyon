@@ -5,7 +5,9 @@
 use std::path::{Path, PathBuf};
 
 use nixyon_audio::convert_to_wav16k;
-use nixyon_core::{AudioInfo, CancelFlag, EngineInfo, SegmentResult, Transcript, VoiceSpan};
+use nixyon_core::{
+    AudioInfo, CancelFlag, EngineInfo, SegmentResult, SpeechLanguage, Transcript, VoiceSpan,
+};
 use nixyon_pipeline::{PipelineOptions, SpeakerCount, TranscriptMeta, build_transcript};
 use nixyon_sherpa::{ModelManifest, SherpaEngine, SherpaModels, analyze_default};
 use serde_json::Value;
@@ -38,6 +40,7 @@ fn meta() -> TranscriptMeta {
             asr: "asr".into(),
             embedding: "embedding".into(),
         },
+        language: SpeechLanguage::Ru,
     }
 }
 
@@ -91,6 +94,7 @@ fn analyze(engine: &SherpaEngine, wav: &Path) -> (Vec<SegmentResult>, Vec<VoiceS
         engine,
         &converted,
         &PipelineOptions::default(),
+        SpeechLanguage::Ru,
         &CancelFlag::new(),
     )
     .unwrap();

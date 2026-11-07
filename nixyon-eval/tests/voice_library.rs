@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use nixyon_audio::convert_to_wav16k;
 use nixyon_core::{
-    AudioInfo, CancelFlag, EngineInfo, NEURAL_BLOCK_SEC, SegmentResult, SpeechEngine, VoiceSample,
-    VoiceSegmenter, VoiceSpan,
+    AudioInfo, CancelFlag, EngineInfo, NEURAL_BLOCK_SEC, SegmentResult, SpeechEngine,
+    SpeechLanguage, VoiceSample, VoiceSegmenter, VoiceSpan,
 };
 use nixyon_eval::{RecordRun, Truth, VoiceModel, library_from_meeting, score_record};
 use nixyon_ort::{OrtManifest, OrtRole};
@@ -44,7 +44,11 @@ fn analyze(engine: &SherpaEngine, wav: &Path) -> (Vec<SegmentResult>, Vec<VoiceS
     let report = convert_to_wav16k(wav, &converted).unwrap();
     let options = PipelineOptions::default();
     let segments = engine
-        .analyze(&converted, &options.engine_options(), &CancelFlag::new())
+        .analyze(
+            &converted,
+            &options.engine_options(SpeechLanguage::Ru),
+            &CancelFlag::new(),
+        )
         .unwrap();
     let speech: Vec<(f64, f64)> = segments.iter().map(|s| (s.start, s.end)).collect();
     let spans = engine
@@ -79,6 +83,7 @@ fn meta(name: &str, duration_sec: f64) -> TranscriptMeta {
             asr: String::new(),
             embedding: String::new(),
         },
+        language: SpeechLanguage::Ru,
     }
 }
 

@@ -21,7 +21,8 @@ use nixyon_android::{
 };
 use nixyon_audio::{TARGET_SAMPLE_RATE, convert_reader_to_wav16k};
 use nixyon_core::{
-    AudioInfo, EngineInfo, ModelOverlaps, NEURAL_BLOCK_SEC, Transcript, hotwords_line, rfc3339_utc,
+    AudioInfo, EngineInfo, ModelOverlaps, NEURAL_BLOCK_SEC, SpeechLanguage, Transcript,
+    hotwords_line, rfc3339_utc,
 };
 use nixyon_pipeline::{
     MIN_SILENT_OVERLAP_SEC, PipelineError, PipelineOptions, Segmentation, SpeakerCount,
@@ -114,19 +115,23 @@ pub async fn transcribe<R: Runtime>(
     // Окна для эмбеддингов голоса и нейросегментация просятся, только если их
     // использует конвейер.
     let options = PipelineOptions::default();
+    // Окна от языка речи не зависят.
     let (window_sec, step_sec) = options
-        .engine_options()
+        .engine_options(SpeechLanguage::Ru)
         .windows
         .map_or((0.0, 0.0), |w| (w.window_sec(), w.step_sec()));
     let neural = options.neural_segmentation;
     let model_overlaps = options.needs_model_overlaps();
-    // Горячие слова: имена из голосов участников и список из настроек.
+    // Горячие слова: имена из голосов участников и список из настроек. Язык речи из
+    // настроек; None: плагин определит его по записи.
     let store_for_words = store.clone();
-    let hotwords = tauri::async_runtime::spawn_blocking(move || {
-        hotwords_line(&merge_hotwords(
+    let (hotwords, language) = tauri::async_runtime::spawn_blocking(move || {
+        let settings = crate::settings::load(&store_for_words);
+        let words = hotwords_line(&merge_hotwords(
             &crate::voices::names(&store_for_words),
-            &crate::settings::load(&store_for_words).hotwords,
-        ))
+            &settings.hotwords,
+        ));
+        (words, settings.speech_language.fixed())
     })
     .await
     .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
@@ -143,6 +148,7 @@ pub async fn transcribe<R: Runtime>(
             overlap_threshold: options.model_overlap_threshold,
             min_overlap_sec: MIN_SILENT_OVERLAP_SEC,
             hotwords,
+            language,
             on_progress: Channel::new(move |body| {
                 if let InvokeResponseBody::Json(text) = body
                     && let Ok(p) = serde_json::from_str::<AnalyzeProgress>(&text)
@@ -196,6 +202,7 @@ pub async fn transcribe<R: Runtime>(
             asr: summary.asr_models,
             embedding: summary.embedding_model,
         },
+        language: summary.language,
     };
     let source = input.clone();
     let store_for_build = store.clone();

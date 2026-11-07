@@ -122,6 +122,7 @@ pub fn build_transcript_from(
         created_at: meta.created_at,
         audio: meta.audio,
         engine: meta.engine,
+        language: meta.language,
         speakers: ids
             .into_iter()
             .map(|id| Speaker {

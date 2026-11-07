@@ -1,5 +1,7 @@
 package dev.demo.nixyon.speech
 
+import android.util.Log
+import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -13,6 +15,8 @@ class AnalysisSummary(
     val sameSpeakerCosine: Double,
     // Куски VAD (начало, конец) в секундах: по ним обрезаются отрезки нейросегментации.
     val speech: List<Pair<Double, Double>>,
+    // Язык, на котором распознана запись: заданный или определённый по ней.
+    val language: SpeechLanguage,
 )
 
 // Почти тот же порядок, что у движка на ноутбуке (nixyon-sherpa): VAD режет запись на
@@ -25,12 +29,17 @@ class AnalysisSummary(
 // эмбеддинги голоса по окнам. Где речь, ищет SpeechFinder: с шумоподавителем в наборе длинные
 // куски VAD режутся по звуку после него, а распознавание и модель голоса всё равно слушают запись.
 // hotwords: горячие слова одной строкой через «/», как их собирает Rust; пусто: без них.
+// language: язык речи; null: определить по кускам речи записи (SpeechLanguageDetector), затем
+// распознавать моделью этого языка.
 class SpeechAnalyzer(
     private val models: SpeechModels,
     private val windows: WindowSpans?,
     private val hotwords: String,
+    private val language: SpeechLanguage?,
 ) {
     private val speech = mutableListOf<Pair<Double, Double>>()
+    private lateinit var recognizer: OfflineRecognizer
+    private var useHotwords = false
 
     fun run(
         wav: File,
@@ -50,6 +59,10 @@ class SpeechAnalyzer(
             found
         }
         val padded = paddedBounds(bounds, totalSamples, SPEECH_PAD_SAMPLES)
+        val spoken = language ?: SpeechLanguageDetector(models.located).detect(wav, padded, totalSamples, pass::checkCancelled)
+        Log.i(TAG, "язык речи: ${spoken.code}${if (language == null) " (определён по записи)" else ""}")
+        recognizer = models.recognizers.of(spoken)
+        useHotwords = spoken.hotwords && hotwords.isNotEmpty()
         val groups = recognitionGroups(padded, ASR_GROUPS, MAX_GROUP_SAMPLES, MAX_GAP_SAMPLES)
         WavPcm16Reader(wav).use { reader ->
             SegmentsWriter(out).use { writer ->
@@ -74,6 +87,7 @@ class SpeechAnalyzer(
                     embeddingModel = manifest.file(VoiceChoice.ROLE).path,
                     sameSpeakerCosine = VoiceChoice.SAME_SPEAKER_COSINE,
                     speech = speech.toList(),
+                    language = spoken,
                 )
             }
         }
@@ -110,15 +124,15 @@ class SpeechAnalyzer(
     }
 
     private fun recognize(samples: FloatArray): PieceText {
-        val stream = if (hotwords.isEmpty()) {
-            models.recognizer.createStream()
+        val stream = if (!useHotwords) {
+            recognizer.createStream()
         } else {
-            models.recognizer.createStream(hotwords)
+            recognizer.createStream(hotwords)
         }
         val result = try {
             stream.acceptWaveform(samples, SpeechModels.SAMPLE_RATE)
-            models.recognizer.decode(stream)
-            models.recognizer.getResult(stream)
+            recognizer.decode(stream)
+            recognizer.getResult(stream)
         } finally {
             stream.release()
         }
@@ -144,6 +158,8 @@ class SpeechAnalyzer(
     private fun embed(samples: FloatArray): FloatArray = models.voice.embed(samples)
 
     companion object {
+        private const val TAG = "NixyonSpeech"
+
         // Значения совпадают с движком на ноутбуке (nixyon-sherpa, config.rs): запас 0,2 с
         // с каждой стороны куска; запись до 20 с, где VAD речи не нашёл, идёт целиком.
         private const val SPEECH_PAD_SAMPLES = 3_200L

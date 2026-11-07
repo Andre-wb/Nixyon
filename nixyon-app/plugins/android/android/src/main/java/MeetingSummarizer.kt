@@ -23,9 +23,10 @@ class MeetingSummarizer(private val context: Context, private val freeMemory: ()
         withModel { opened -> generate(opened, system, user, maxTokens, progress) }
 
     // Протокол встречи любой длины. parts: сколько частей понадобилось (1: встреча целиком).
-    fun summarizeMeeting(system: String, user: String, maxTokens: Int, progress: LlmProgress): MeetingSummary =
+    // language: язык встречи, на нём просится сведение частей.
+    fun summarizeMeeting(system: String, user: String, maxTokens: Int, language: SpeechLanguage, progress: LlmProgress): MeetingSummary =
         withModel { opened ->
-            val long = LongSummary { text, p -> generate(opened, system, text, maxTokens, p) }
+            val long = LongSummary(language) { text, p -> generate(opened, system, text, maxTokens, p) }
             val text = long.run(user, progress)
             MeetingSummary(text, long.parts.coerceAtLeast(1), long.combines)
         }

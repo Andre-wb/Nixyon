@@ -76,6 +76,7 @@ pub fn run() {
             settings::get_settings,
             settings::set_language,
             settings::set_theme,
+            settings::set_speech_language,
             settings::set_system_bars,
             settings::set_hotwords,
             settings::set_models_prompt_seen,

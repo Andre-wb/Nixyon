@@ -1,7 +1,8 @@
-use nixyon_core::SpeechEdges;
+use nixyon_core::{SpeechEdges, SpeechLanguage};
 use sherpa_onnx::{
     OfflineRecognizerConfig, OfflineSpeakerDiarizationConfig, OfflineTransducerModelConfig,
-    SileroVadModelConfig, SpeakerEmbeddingExtractorConfig, VadModelConfig,
+    SileroVadModelConfig, SpeakerEmbeddingExtractorConfig, SpokenLanguageIdentificationConfig,
+    SpokenLanguageIdentificationWhisperConfig, VadModelConfig,
 };
 
 use crate::{Decoding, ModelManifest, ModelRole, SherpaError};
@@ -34,7 +35,8 @@ pub const MAX_GAP_SAMPLES: usize = 32_000;
 /// в такие куски речь нескольких людей. От 10 с портились запись с наложением голосов и
 /// шум 5 дБ, от 20 с терялся выигрыш на шуме 20 дБ. Как LONG_PIECE_SECONDS в SpeechFinder.kt.
 pub const LONG_PIECE_SAMPLES: usize = 240_000;
-const GIGAAM_MODEL_TYPE: &str = "nemo_transducer";
+// GigaAM и Parakeet оба выгружены из NeMo, тип модели у них один.
+const NEMO_MODEL_TYPE: &str = "nemo_transducer";
 // Горячие слова разбиваются на токены словарём BPE той же модели.
 const HOTWORDS_MODELING_UNIT: &str = "bpe";
 const MAX_THREADS: usize = 4;
@@ -65,21 +67,25 @@ pub fn vad(manifest: &ModelManifest, edges: SpeechEdges) -> VadModelConfig {
     }
 }
 
+/// Распознаватель языка `language`: GigaAM для русского, Parakeet для английского.
 pub fn recognizer(
     manifest: &ModelManifest,
+    language: SpeechLanguage,
     decoding: Decoding,
     threads: i32,
 ) -> Result<OfflineRecognizerConfig, SherpaError> {
+    let decoding = decoding.for_language(language);
     let mut config = OfflineRecognizerConfig::default();
-    // У GigaAM признаки (64 мел-полосы и т. п.) задаёт сама модель через метаданные,
+    // Признаки (число мел-полос и т. п.) задают сами модели NeMo через метаданные,
     // значения feat_config по умолчанию будут переопределены.
+    let [encoder, decoder, joiner, tokens] = ModelRole::asr(language);
     config.model_config.transducer = OfflineTransducerModelConfig {
-        encoder: Some(manifest.path(ModelRole::AsrEncoder)),
-        decoder: Some(manifest.path(ModelRole::AsrDecoder)),
-        joiner: Some(manifest.path(ModelRole::AsrJoiner)),
+        encoder: Some(manifest.path(encoder)),
+        decoder: Some(manifest.path(decoder)),
+        joiner: Some(manifest.path(joiner)),
     };
-    config.model_config.tokens = Some(manifest.path(ModelRole::AsrTokens));
-    config.model_config.model_type = Some(GIGAAM_MODEL_TYPE.into());
+    config.model_config.tokens = Some(manifest.path(tokens));
+    config.model_config.model_type = Some(NEMO_MODEL_TYPE.into());
     config.model_config.num_threads = threads;
     config.model_config.provider = Some("cpu".into());
     match decoding {
@@ -94,6 +100,18 @@ pub fn recognizer(
         }
     }
     Ok(config)
+}
+
+/// Определение языка записи моделью Whisper tiny. Один поток: отрезков всего пять.
+pub fn language_id(manifest: &ModelManifest) -> SpokenLanguageIdentificationConfig {
+    SpokenLanguageIdentificationConfig {
+        whisper: SpokenLanguageIdentificationWhisperConfig {
+            encoder: Some(manifest.path(ModelRole::LidEncoder)),
+            decoder: Some(manifest.path(ModelRole::LidDecoder)),
+            tail_paddings: 0,
+        },
+        ..SpokenLanguageIdentificationConfig::default()
+    }
 }
 
 pub fn embedder(manifest: &ModelManifest, threads: i32) -> SpeakerEmbeddingExtractorConfig {

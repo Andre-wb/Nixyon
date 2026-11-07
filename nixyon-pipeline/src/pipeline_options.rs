@@ -1,5 +1,5 @@
 use nixyon_cluster::SAME_SPEAKER_CENTROID_COSINE;
-use nixyon_core::{EngineOptions, SpeechEdges, WindowSpec};
+use nixyon_core::{EngineOptions, SpeechEdges, SpeechLanguage, WindowSpec};
 
 use crate::{
     LONG_SEGMENT_SEC, MAX_AUTO_SPEAKERS, MIN_SPEAKER_SEC, SAMPLE_THRESHOLD, SilentOverlaps,
@@ -53,7 +53,8 @@ pub struct PipelineOptions {
 
 impl PipelineOptions {
     /// Что нужно попросить у движка под эти настройки: окна только тому, кто их использует.
-    pub fn engine_options(&self) -> EngineOptions {
+    /// Язык речи у каждой записи свой, поэтому задаётся отдельно.
+    pub fn engine_options(&self, language: SpeechLanguage) -> EngineOptions {
         EngineOptions {
             windows: self
                 .window_penalty()
@@ -68,6 +69,7 @@ impl PipelineOptions {
             max_speech_sec: self.max_speech_sec,
             drop_music: self.drop_music,
             asr_groups: self.asr_groups,
+            language,
         }
     }
 
@@ -130,24 +132,39 @@ mod tests {
 
     #[test]
     fn neural_segmentation_asks_the_engine_for_no_windows() {
-        assert_eq!(PipelineOptions::default().engine_options().windows, None);
+        assert_eq!(
+            PipelineOptions::default()
+                .engine_options(SpeechLanguage::Ru)
+                .windows,
+            None
+        );
         let vad_only = PipelineOptions {
             neural_segmentation: false,
             ..PipelineOptions::default()
         };
-        assert!(vad_only.engine_options().windows.is_some());
+        assert!(
+            vad_only
+                .engine_options(SpeechLanguage::Ru)
+                .windows
+                .is_some()
+        );
     }
 
     #[test]
     fn only_speaker_split_by_vad_asks_for_tight_speech_edges() {
         assert_eq!(
-            PipelineOptions::default().engine_options().edges,
+            PipelineOptions::default()
+                .engine_options(SpeechLanguage::Ru)
+                .edges,
             SpeechEdges::Padded
         );
         let vad_only = PipelineOptions {
             neural_segmentation: false,
             ..PipelineOptions::default()
         };
-        assert_eq!(vad_only.engine_options().edges, SpeechEdges::Tight);
+        assert_eq!(
+            vad_only.engine_options(SpeechLanguage::Ru).edges,
+            SpeechEdges::Tight
+        );
     }
 }

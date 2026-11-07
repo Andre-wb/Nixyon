@@ -12,6 +12,9 @@
 //! встречи» тех же шести человек для замера библиотеки голосов, из клипов, которых нет ни
 //! в диалогах (клипы 0 и 1 сессии), ни в образцах голоса (2 и 3): клипы 4 и 5 и клипы 6
 //! и 7; границы речи по громкости, у этих клипов нет проверенных границ.
+//! en2, en4, en6: английская VoxForge (папка `voxforge-en`), три женщины и трое мужчин с
+//! родным английским, клип за клипом с паузами; проверенных границ у этих клипов нет,
+//! границы по громкости.
 //! Состав и порядок реплик фиксированы, поэтому каждый запуск даёт те же файлы.
 
 mod clip;
@@ -101,6 +104,33 @@ fn run(
             build(out, "ru4_fast", &clips, Joining::NoPause)?;
             build(out, "ru4_overlap", &clips, Joining::Overlap(&OVERLAPS_SEC))?;
         }
+    }
+    let voxforge_en = cache.join("voxforge-en");
+    let people_en = [
+        "Anniepoo",
+        "camdixon",
+        "Catbells",
+        "tomhannen",
+        "Melissa",
+        "tsmock",
+    ];
+    let by_loudness = Pick {
+        first: 0,
+        known_bounds: false,
+    };
+    for count in [2, 4, 6] {
+        let mut clips = Vec::new();
+        for person in &people_en[..count] {
+            clips.extend(voxforge_clips(
+                &voxforge_en,
+                person,
+                by_loudness,
+                &bounds,
+                &fixes,
+            )?);
+        }
+        shuffle(&mut clips, 7);
+        build(out, &format!("en{count}"), &clips, Joining::Natural)?;
     }
     for (name, first) in [("prior6a", 4), ("prior6b", 6)] {
         let pick = Pick {

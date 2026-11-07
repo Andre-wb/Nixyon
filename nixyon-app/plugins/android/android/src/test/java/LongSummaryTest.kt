@@ -1,6 +1,7 @@
 package dev.demo.nixyon.speech
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -33,7 +34,7 @@ class LongSummaryTest {
     }
 
     private fun run(model: FakeModel, user: String): Pair<String, LongSummary> {
-        val long = LongSummary(model::generate)
+        val long = LongSummary(SpeechLanguage.RU, model::generate)
         val text = long.run(user) { phase, done, total -> model.progress += Triple(phase, done, total) }
         return text to long
     }
@@ -121,7 +122,7 @@ class LongSummaryTest {
                 return if (user.contains("Протокол части")) "Свод" else "Часть"
             }
         }
-        val long = LongSummary(model::generate)
+        val long = LongSummary(SpeechLanguage.RU, model::generate)
         assertEquals("Свод", long.run(meeting(turns)) { _, _, _ -> })
         assertTrue(long.combines >= 3)
     }
@@ -129,7 +130,7 @@ class LongSummaryTest {
     @Test
     fun otherErrorsStopAtOnce() {
         val requests = mutableListOf<String>()
-        val long = LongSummary { user, _ ->
+        val long = LongSummary(SpeechLanguage.RU) { user, _ ->
             requests += user
             if (requests.size == 1) throw LlmException(LlmException.TOO_LONG, "длинно")
             throw LlmException(LlmException.CANCELLED, "отменено")
@@ -151,5 +152,14 @@ class LongSummaryTest {
         assertEquals(3, parsed.turns.size)
         assertEquals(text, parsed.text())
         assertEquals("Итог", MeetingParts.cleanAnswer("<think>\nдумаю\n</think>\n Итог \n"))
+    }
+
+    @Test
+    fun englishMeetingIsCombinedInEnglish() {
+        val request = MeetingParts.combineRequest(header, listOf("A", "B"), SpeechLanguage.EN)
+        assertTrue(request.startsWith("$header\n\nThe meeting is long"))
+        assertTrue(request.contains("Minutes of part 1 of 2:\nA"))
+        assertTrue(request.contains("Minutes of part 2 of 2:\nB"))
+        assertFalse(request.contains("Протокол"))
     }
 }

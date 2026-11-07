@@ -22,6 +22,8 @@ class AnalyzeArgs {
     var minOverlapSec: Double = 0.0
     // Горячие слова через «/»; пусто: без них.
     var hotwords: String = ""
+    // Язык речи: "ru" или "en"; null: определить по записи.
+    var language: String? = null
     var onProgress: Channel? = null
 }
 
@@ -113,6 +115,8 @@ class SummaryArgs {
     lateinit var system: String
     lateinit var user: String
     var maxTokens: Int = 0
+    // Язык встречи: "ru" или "en".
+    lateinit var language: String
     var onProgress: Channel? = null
 }
 

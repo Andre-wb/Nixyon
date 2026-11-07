@@ -6,6 +6,7 @@
 # время разбора текста и ответа, наибольшая память процесса, найдено задач из эталона.
 # Задача считается найденной, если в одной строке ответа есть исполнитель и хотя бы одно
 # слово из эталона; выдуманное и пропущенное по смыслу проверяется чтением ответов.
+# Встречи meeting-en-*.txt идут с английской инструкцией, остальные с русской.
 set -euo pipefail
 
 SERVER="$1"
@@ -17,6 +18,10 @@ SYSTEM='Ты составляешь протокол встречи по её р
 Краткое содержание: 3–5 предложений.
 Решения: список, каждое с новой строки через «- ». Если решений нет, напиши «Решений нет».
 Задачи: список, каждая с новой строки: имя исполнителя, двоеточие, что сделать, в скобках срок. Например: «- Пётр: отправить отчёт поставщику (до вторника)». Исполнителя пиши так, как он назван в расшифровке. Если срок не назван, пиши «(срок не назван)». Если задач нет, напиши «Задач нет».'
+SYSTEM_EN='You write the minutes of a meeting from its transcript. Write in English and only what is in the transcript, do not make anything up. Answer strictly in this format:
+Summary: 3–5 sentences.
+Decisions: a list, each on a new line starting with "- ". If there are no decisions, write "No decisions".
+Tasks: a list, each on a new line: the assignee'"'"'s name, a colon, what to do, the deadline in parentheses. For example: "- Peter: send the report to the supplier (by Tuesday)". Write the assignee as they are named in the transcript. If no deadline is named, write "(no deadline named)". If there are no tasks, write "No tasks".'
 
 mkdir -p "$OUT"
 echo "| Модель | Встреча | Разбор текста, с | Ответ, с | Всего, с | Память, МБ | Задачи |"
@@ -34,7 +39,9 @@ for model in "$@"; do
   done
   for text in "$DATA"/meeting-*.txt; do
     meeting="$(basename "$text" .txt)"
-    body="$(jq -n --arg system "$SYSTEM" --rawfile user "$text" '{
+    system="$SYSTEM"
+    [[ "$meeting" == meeting-en-* ]] && system="$SYSTEM_EN"
+    body="$(jq -n --arg system "$system" --rawfile user "$text" '{
       messages: [{role: "system", content: $system}, {role: "user", content: $user}],
       temperature: 0, max_tokens: 1024, cache_prompt: false,
       chat_template_kwargs: {enable_thinking: false}

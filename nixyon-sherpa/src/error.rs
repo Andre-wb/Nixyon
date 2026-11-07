@@ -31,6 +31,8 @@ pub enum SherpaError {
     SegmentationFailed { offset: f64, reason: String },
     #[error("модель голоса: {0}")]
     Voice(String),
+    #[error("определение языка: {0}")]
+    Language(String),
     #[error("в образце голоса {0:.1} с речи, нужно больше")]
     SampleTooShort(f64),
     #[error("обработка отменена")]

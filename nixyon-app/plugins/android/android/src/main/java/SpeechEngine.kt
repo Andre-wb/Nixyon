@@ -41,6 +41,7 @@ class SpeechEngine(private val context: Context) {
         }
 
     // Одна обработка за раз: модели общие, а две обработки поделили бы ядра пополам.
+    // language: язык речи; null: определить по записи.
     // spans: нейросегментация вторым проходом (файл отрезков и длина блока), null: без неё.
     // overlaps: поиск перекрытий по модели сегментации, null: без него. Оба прохода идут в
     // фазе голосов и делят её полосу пополам.
@@ -49,6 +50,7 @@ class SpeechEngine(private val context: Context) {
         out: File,
         windows: WindowSpans?,
         hotwords: String,
+        language: SpeechLanguage?,
         spans: NeuralRequest?,
         overlaps: OverlapRequest?,
         progress: (phase: String, doneSec: Double, totalSec: Double) -> Unit,
@@ -57,7 +59,7 @@ class SpeechEngine(private val context: Context) {
         cancelled = flag
         val models = ensureLoaded()
         var phase = PhaseTiming(models.voice)
-        val summary = SpeechAnalyzer(models, windows, hotwords).run(wav, out, flag) { done, total ->
+        val summary = SpeechAnalyzer(models, windows, hotwords, language).run(wav, out, flag) { done, total ->
             progress(PHASE_RECOGNIZE, done, total)
         }
         phase.log(PHASE_RECOGNIZE, summary.durationSec)

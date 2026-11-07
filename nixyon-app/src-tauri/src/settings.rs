@@ -1,9 +1,10 @@
-//! Настройки приложения: язык интерфейса, тема, горячие слова для распознавания,
+//! Настройки приложения: язык интерфейса, тема, язык речи и горячие слова для распознавания,
 //! показан ли экран загрузки моделей и срок автоочистки звука встреч.
 //! Хранятся в `files/settings.json`.
 
 mod cleanup_days;
 mod hotword_list;
+mod speech_language_choice;
 
 use nixyon_android::{SpeechExt, SystemBarsRequest};
 use serde::{Deserialize, Serialize};
@@ -38,6 +39,9 @@ pub struct Settings {
     pub language: Language,
     #[serde(default)]
     pub theme: Theme,
+    /// Язык речи записей; по умолчанию определяется по записи.
+    #[serde(default)]
+    pub speech_language: SpeechLanguageChoice,
     /// Слова и имена, которые распознавание пишет охотнее; по одному на элемент.
     #[serde(default)]
     pub hotwords: Vec<String>,
@@ -50,6 +54,7 @@ pub struct Settings {
 }
 
 pub use hotword_list::merge_hotwords;
+pub use speech_language_choice::SpeechLanguageChoice;
 
 const FILE: &str = "settings.json";
 const BAD_CLEANUP_DAYS: &str = "bad_cleanup_days";
@@ -97,6 +102,23 @@ pub async fn set_language<R: Runtime>(
     tauri::async_runtime::spawn_blocking(move || {
         let mut settings = load(&store);
         settings.language = language;
+        save(&store, &settings)
+            .map(|()| settings)
+            .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
+    })
+    .await
+    .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
+}
+
+#[tauri::command]
+pub async fn set_speech_language<R: Runtime>(
+    app: AppHandle<R>,
+    choice: SpeechLanguageChoice,
+) -> Result<Settings, CommandError> {
+    let store = files_store(&app).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut settings = load(&store);
+        settings.speech_language = choice;
         save(&store, &settings)
             .map(|()| settings)
             .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
@@ -210,6 +232,7 @@ mod tests {
             &Settings {
                 language: Language::En,
                 theme: Theme::Dark,
+                speech_language: SpeechLanguageChoice::En,
                 hotwords: vec!["Скайлс".into()],
                 models_prompt_seen: true,
                 audio_cleanup_days: Some(30),
@@ -219,6 +242,7 @@ mod tests {
         assert_eq!(load(&store).language, Language::En);
         assert_eq!(load(&store).hotwords, ["Скайлс"]);
         assert_eq!(load(&store).theme, Theme::Dark);
+        assert_eq!(load(&store).speech_language, SpeechLanguageChoice::En);
         assert!(load(&store).models_prompt_seen);
         assert_eq!(load(&store).audio_cleanup_days, Some(30));
         std::fs::write(store.dir().join(FILE), "{\"language\":\"de\"}").unwrap();
@@ -226,9 +250,12 @@ mod tests {
         std::fs::write(store.dir().join(FILE), "{}").unwrap();
         assert_eq!(load(&store).language, Language::Auto);
         assert_eq!(load(&store).theme, Theme::Auto);
+        assert_eq!(load(&store).speech_language, SpeechLanguageChoice::Auto);
         assert!(!load(&store).models_prompt_seen);
         assert_eq!(load(&store).audio_cleanup_days, None);
         std::fs::write(store.dir().join(FILE), "{\"theme\":\"sepia\"}").unwrap();
         assert_eq!(load(&store).theme, Theme::Auto);
+        std::fs::write(store.dir().join(FILE), "{\"speech_language\":\"de\"}").unwrap();
+        assert_eq!(load(&store).speech_language, SpeechLanguageChoice::Auto);
     }
 }

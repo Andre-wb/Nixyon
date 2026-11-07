@@ -57,7 +57,7 @@ impl fmt::Display for UnscoredRecord {
 
 #[cfg(test)]
 mod tests {
-    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, Speaker};
+    use nixyon_core::{AudioInfo, EngineInfo, SCHEMA_VERSION, Speaker, SpeechLanguage};
 
     use super::*;
 
@@ -75,6 +75,7 @@ mod tests {
                 asr: String::new(),
                 embedding: String::new(),
             },
+            language: SpeechLanguage::Ru,
             speakers: talk_times
                 .iter()
                 .zip(1..)

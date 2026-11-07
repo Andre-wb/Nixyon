@@ -7,7 +7,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 use nixyon_audio::{TARGET_SAMPLE_RATE, WavWriter, convert_reader_to_wav16k};
-use nixyon_core::{AudioInfo, CancelFlag, EngineInfo};
+use nixyon_core::{AudioInfo, CancelFlag, EngineInfo, SpeechLanguage};
 use nixyon_eval::{CvClipFiles, decode_mp3_mono, hypothesis_text, list_cv_clips};
 use nixyon_metrics::word_errors;
 use nixyon_pipeline::{PipelineOptions, SpeakerCount, TranscriptMeta, build_transcript};
@@ -43,7 +43,8 @@ fn recognize(engine: &SherpaEngine, files: &CvClipFiles, wav: &Path) -> String {
     let converted = convert_reader_to_wav16k(Cursor::new(bytes), wav).unwrap();
     let options = PipelineOptions::default();
     let cancel = CancelFlag::new();
-    let (segments, spans) = analyze_default(engine, wav, &options, &cancel).unwrap();
+    let (segments, spans) =
+        analyze_default(engine, wav, &options, SpeechLanguage::Ru, &cancel).unwrap();
     let meta = TranscriptMeta {
         created_at: String::new(),
         audio: AudioInfo {
@@ -56,6 +57,7 @@ fn recognize(engine: &SherpaEngine, files: &CvClipFiles, wav: &Path) -> String {
             asr: String::new(),
             embedding: String::new(),
         },
+        language: SpeechLanguage::Ru,
     };
     let transcript = build_transcript(
         segments,

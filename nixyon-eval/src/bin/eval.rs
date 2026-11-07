@@ -48,6 +48,8 @@
 //! pyannote|sortformer-int8|sortformer-fp32` нейросегментацию; по умолчанию модели основного
 //! набора. Другие модели берутся из набора ort, по умолчанию `<папка моделей>/ort`, другая
 //! папка задаётся `--ort-models <папка>`.
+//! `--language auto|ru|en`: язык речи записей. `auto` (по умолчанию, как в приложении)
+//! определяет язык каждой записи по пяти кускам речи и печатает его.
 //! `--no-truth` прогоняет записи без разметки: нужен только `<имя>.wav`, имена записей и
 //! `--dump` обязательны, число спикеров всегда «не знаю». Метрики не считаются, на каждую
 //! запись печатается строка: длина звука, время обработки, RTF, число спикеров и крупных
@@ -69,8 +71,8 @@ use std::time::Instant;
 
 use nixyon_audio::{TARGET_SAMPLE_RATE, convert_to_wav16k};
 use nixyon_core::{
-    AudioInfo, CancelFlag, EngineInfo, EngineOptions, NEURAL_BLOCK_SEC, SpeechEngine, VoiceSample,
-    VoiceSegmenter, WindowSpec, to_json,
+    AudioInfo, CancelFlag, EngineInfo, EngineOptions, NEURAL_BLOCK_SEC, SpeechEngine,
+    SpeechLanguage, VoiceSample, VoiceSegmenter, WindowSpec, to_json,
 };
 use nixyon_core::{ModelOverlaps, SegmentResult, VoiceSpan};
 use nixyon_eval::{
@@ -85,7 +87,7 @@ use nixyon_pipeline::{
 };
 use nixyon_sherpa::{
     BEAM_PATHS, Decoding, HOTWORD_SCORE, ModelManifest, Parallel, SherpaEngine, SherpaModels,
-    denoise_wav, threads,
+    denoise_wav, detect_wav_language, threads,
 };
 
 const USAGE: &str = "использование: eval <папка моделей> <папка записей> [--speakers auto|truth] \
@@ -95,7 +97,7 @@ const USAGE: &str = "использование: eval <папка моделей
      [--beam-paths <число>] [--greedy] [--hotwords <файл>] [--dump <папка>] [--denoise <модель>] [--no-vad-denoise] \
      [--voice-model campplus|redimnet2|redimnet2-b0|redimnet2-b1|redimnet2-b2|redimnet2-b3|redimnet2-b3-vb2|redimnet2-b6-dyn] [--segmenter pyannote|sortformer-int8|sortformer-fp32] \
      [--ort-models <папка>] [--no-truth] [--combo <имя>=<голос>,<сегментация>,<порог> ...] \
-     [--model-threads <число>] [--embed-jobs <число>] [--asr-jobs <число>] [имя записи ...]";
+     [--model-threads <число>] [--embed-jobs <число>] [--asr-jobs <число>] [--language auto|ru|en] [имя записи ...]";
 
 const VOICE_MODEL_ERROR: &str = "--voice-model: campplus, redimnet2, redimnet2-b0, redimnet2-b1, \
      redimnet2-b2, redimnet2-b3, redimnet2-b3-vb2 или redimnet2-b6-dyn";
@@ -124,6 +126,8 @@ struct Args {
     model_threads: Option<usize>,
     embed_jobs: usize,
     asr_jobs: usize,
+    /// Язык речи записей; None: определять по каждой записи.
+    language: Option<SpeechLanguage>,
     names: Vec<String>,
 }
 
@@ -156,6 +160,7 @@ fn parse_args(raw: Vec<String>) -> Result<Args, String> {
     let mut engine = EngineOptions::default();
     let mut pipeline = PipelineOptions::default();
     let mut neural_block_sec = NEURAL_BLOCK_SEC;
+    let mut language = None;
     let mut samples = None;
     let mut library = Vec::new();
     let mut thresholds = Vec::new();
@@ -218,6 +223,14 @@ fn parse_args(raw: Vec<String>) -> Result<Args, String> {
                 .and_then(|v| v.parse::<f32>().ok())
                 .filter(|p| (0.0..1.0).contains(p))
                 .ok_or("--overlap-threshold: вероятность от 0 до 1")?;
+        } else if arg == "--language" {
+            language = match iter.next().as_deref() {
+                Some("auto") => None,
+                Some(code) => {
+                    Some(SpeechLanguage::from_code(code).ok_or("--language: auto, ru или en")?)
+                }
+                None => return Err("--language: auto, ru или en".into()),
+            };
         } else if arg == "--asr-groups" {
             pipeline.asr_groups = true;
         } else if arg == "--min-speaker-sec" {
@@ -382,11 +395,14 @@ fn parse_args(raw: Vec<String>) -> Result<Args, String> {
         records: records.into(),
         count_from_truth,
         engine: EngineOptions {
-            windows: engine.windows.or(pipeline.engine_options().windows),
+            windows: engine
+                .windows
+                .or(pipeline.engine_options(SpeechLanguage::Ru).windows),
             hotwords,
-            edges: pipeline.engine_options().edges,
-            ..pipeline.engine_options()
+            edges: pipeline.engine_options(SpeechLanguage::Ru).edges,
+            ..pipeline.engine_options(SpeechLanguage::Ru)
         },
+        language,
         pipeline,
         neural_block_sec,
         samples,
@@ -534,7 +550,7 @@ fn run(args: &Args) -> Result<String, Box<dyn std::error::Error>> {
             &[],
             count(args, &truth),
             &args.pipeline,
-            meta(name, analyzed.audio_sec),
+            meta(name, analyzed.audio_sec, analyzed.language),
             &CancelFlag::new(),
         )?;
         let remembered = library_from_meeting(&transcript, &centers, &truth);
@@ -624,7 +640,7 @@ fn run_unscored(args: &Args) -> Result<String, Box<dyn std::error::Error>> {
             &[],
             SpeakerCount::Auto,
             &options,
-            meta(name, record.audio_sec),
+            meta(name, record.audio_sec, record.language),
             &CancelFlag::new(),
         )?;
         let processing_sec = record.analysis_sec + started.elapsed().as_secs_f64();
@@ -696,7 +712,7 @@ fn run_combos_unscored(
                 &[],
                 SpeakerCount::Auto,
                 &combo_options(args, combo),
-                meta(name, record.audio_sec),
+                meta(name, record.audio_sec, record.language),
                 &CancelFlag::new(),
             )?;
             let processing_sec = record.analysis_sec + started.elapsed().as_secs_f64();
@@ -822,6 +838,7 @@ fn count(args: &Args, truth: &Truth) -> SpeakerCount {
 }
 
 struct Analyzed {
+    language: SpeechLanguage,
     segments: Vec<SegmentResult>,
     spans: Vec<VoiceSpan>,
     overlaps: ModelOverlaps,
@@ -835,20 +852,27 @@ fn analyze(
     args: &Args,
     name: &str,
 ) -> Result<Analyzed, Box<dyn std::error::Error>> {
-    let ((segments, spans, overlaps), audio_sec, analysis_sec) = with_wav16k(args, name, |wav| {
-        let segments = engine
-            .analyze(wav, &args.engine, &CancelFlag::new())
-            .map_err(|e| e.to_string())?;
-        let spans = if args.pipeline.neural_segmentation {
-            let speech: Vec<(f64, f64)> = segments.iter().map(|s| (s.start, s.end)).collect();
-            engine
-                .voice_spans(wav, &speech, args.neural_block_sec, &CancelFlag::new())
-                .map_err(|e| e.to_string())?
-        } else {
-            Vec::new()
-        };
-        Ok((segments, spans, model_overlaps(powerset, args, wav)?))
-    })?;
+    let ((language, segments, spans, overlaps), audio_sec, analysis_sec) =
+        with_wav16k(args, name, |wav| {
+            let options = record_options(engine, args, name, wav)?;
+            let segments = engine
+                .analyze(wav, &options, &CancelFlag::new())
+                .map_err(|e| e.to_string())?;
+            let spans = if args.pipeline.neural_segmentation {
+                let speech: Vec<(f64, f64)> = segments.iter().map(|s| (s.start, s.end)).collect();
+                engine
+                    .voice_spans(wav, &speech, args.neural_block_sec, &CancelFlag::new())
+                    .map_err(|e| e.to_string())?
+            } else {
+                Vec::new()
+            };
+            Ok((
+                options.language,
+                segments,
+                spans,
+                model_overlaps(powerset, args, wav)?,
+            ))
+        })?;
     let embedded: usize = segments.iter().map(|s| s.windows.len()).sum();
     if embedded > 0 {
         eprintln!("{name}: окон с эмбеддингом {embedded}");
@@ -860,6 +884,7 @@ fn analyze(
         eprintln!("{name}: перекрытий по модели {}", overlaps.spans.len());
     }
     Ok(Analyzed {
+        language,
         segments,
         spans,
         overlaps,
@@ -916,23 +941,29 @@ fn analyze_by_combos(
         .pipeline
         .neural_segmentation
         .then_some(args.neural_block_sec);
-    let ((results, overlaps), audio_sec, total_sec) = with_wav16k(args, name, |wav| {
+    let ((language, results, overlaps), audio_sec, total_sec) = with_wav16k(args, name, |wav| {
+        let options = record_options(engine, args, name, wav)?;
         let results = analyze_combos(
             engine.models(),
             extra,
             &args.combos,
             wav,
-            &args.engine,
+            &options,
             neural,
             &CancelFlag::new(),
         )
         .map_err(|e| e.to_string())?;
-        Ok((results, model_overlaps(powerset, args, wav)?))
+        Ok((
+            options.language,
+            results,
+            model_overlaps(powerset, args, wav)?,
+        ))
     })?;
     let common_sec = total_sec - results.iter().map(|r| r.own_sec).sum::<f64>();
     Ok(results
         .into_iter()
         .map(|r| Analyzed {
+            language,
             segments: r.segments,
             spans: r.spans,
             overlaps: overlaps.clone(),
@@ -940,6 +971,28 @@ fn analyze_by_combos(
             analysis_sec: common_sec + r.own_sec,
         })
         .collect())
+}
+
+// Опции движка для записи: язык из `--language` или определённый по ней.
+fn record_options(
+    engine: &SherpaEngine,
+    args: &Args,
+    name: &str,
+    wav: &Path,
+) -> Result<EngineOptions, String> {
+    let language = match args.language {
+        Some(language) => language,
+        None => {
+            let found = detect_wav_language(engine.models(), wav, &args.engine, &CancelFlag::new())
+                .map_err(|e| e.to_string())?;
+            eprintln!("{name}: язык {}", found.code());
+            found
+        }
+    };
+    Ok(EngineOptions {
+        language,
+        ..args.engine.clone()
+    })
 }
 
 // Переводит запись в 16 кГц тем же путём, что приложение (с выравниванием громкости и, по
@@ -997,7 +1050,7 @@ fn score_analyzed(
         samples,
         count(args, truth),
         options,
-        meta(name, audio_sec),
+        meta(name, audio_sec, record.language),
         &CancelFlag::new(),
     )?;
     let processing_sec = record.analysis_sec + started.elapsed().as_secs_f64();
@@ -1020,7 +1073,7 @@ fn score_analyzed(
     })?)
 }
 
-fn meta(name: &str, duration_sec: f64) -> TranscriptMeta {
+fn meta(name: &str, duration_sec: f64, language: SpeechLanguage) -> TranscriptMeta {
     TranscriptMeta {
         created_at: String::new(),
         audio: AudioInfo {
@@ -1033,6 +1086,7 @@ fn meta(name: &str, duration_sec: f64) -> TranscriptMeta {
             asr: String::new(),
             embedding: String::new(),
         },
+        language,
     }
 }
 
@@ -1190,7 +1244,10 @@ mod tests {
     fn no_word_cut_without_neural_segmentation_asks_for_no_windows() {
         let args = parse(&["--no-neural", "--no-word-cut"]);
         assert!(!args.pipeline.word_cut);
-        assert_eq!(args.pipeline.engine_options().windows, None);
+        assert_eq!(
+            args.pipeline.engine_options(SpeechLanguage::Ru).windows,
+            None
+        );
         assert_eq!(args.engine.windows, None);
     }
 

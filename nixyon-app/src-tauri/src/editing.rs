@@ -367,6 +367,7 @@ mod tests {
                 asr: "a".into(),
                 embedding: "e".into(),
             },
+            language: nixyon_core::SpeechLanguage::Ru,
             speakers: vec![speaker(1), speaker(2)],
             turns: vec![turn(1, 1, 0.0), turn(2, 2, 3.0)],
         }

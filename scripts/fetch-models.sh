@@ -9,6 +9,8 @@
 # модели на Hugging Face с закреплённой ревизией, сумма снята при скачивании. У потоковой
 # модели для живого текста сумма совпала с той, что релиз указывает сам в checksum.txt.
 # У шумоподавителя GTCRN сумма совпала с checksum.txt релиза speech-enhancement-models.
+# У Whisper tiny для определения языка сумма совпала с checksum.txt релиза asr-models.
+# Parakeet берётся пофайлово с Hugging Face (см. PARAKEET_FILES).
 #
 # Каждый файл сначала берётся с зеркала на сервере Nixyon Hub (scripts/model-mirror.sh),
 # затем из исходного места.
@@ -22,7 +24,7 @@ BASE_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download"
 source "${ROOT}/scripts/model-mirror.sh"
 
 # Меняется при любой смене моделей: по нему приложение видит, что набор другой.
-VERSION="giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8"
+VERSION="giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8+parakeet-tdt-0.6b-v3-int8+whisper-tiny-lid-int8"
 # GigaAM v3 с пунктуацией: сразу даёт знаки препинания, заглавные буквы и числа цифрами.
 GIGAAM="sherpa-onnx-nemo-transducer-punct-giga-am-v3-russian-2025-12-16"
 # Нейросегментация: кто и когда говорит, включая наложения голосов.
@@ -38,6 +40,24 @@ TOKENIZER="gigaam-v3-tokenizer.model"
 # Распознавание звуков по классам AudioSet (речь, музыка, пение): по нему отбрасываются
 # куски, где вместо речи звучит музыка. CED tiny, лицензия Apache-2.0.
 TAGGING="sherpa-onnx-ced-tiny-audio-tagging-2024-04-19"
+# Определение языка записи (русский или английский): многоязычный Whisper tiny, лицензия MIT.
+WHISPER="sherpa-onnx-whisper-tiny"
+
+# Английская речь: NVIDIA Parakeet TDT 0.6B v3 в выгрузке sherpa-onnx (int8, лицензия
+# CC BY 4.0). Архив в релизе asr-models перепакован 2026-11-07 и не совпадает со своей
+# суммой в checksum.txt, поэтому файлы берутся по одному из репозитория выгрузки на
+# Hugging Face с закреплённой ревизией; суммы совпали с LFS-суммами репозитория и с
+# файлами из архива. Имя файла в models/_download/ и SHA-256.
+PARAKEET_URL="https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/ed5d745623472f97cfc2e6c2916ee248798fc5a8"
+PARAKEET_FILES=(
+  "encoder.int8.onnx parakeet-v3-encoder.int8.onnx 1afbe69c1ffdabee94755f42e4daf1d93549131a3da11356bda84fcef0f2c479"
+  "decoder.int8.onnx parakeet-v3-decoder.int8.onnx 0222a86147299d4dee90edf95b6d13827edb42ad8b7c9cf0b2582f030937c0b5"
+  "joiner.int8.onnx parakeet-v3-joiner.int8.onnx cbd02f3696e9944970111fb439d9c3fd365a80374565f13f2b9c7007d253fc98"
+  "tokens.txt parakeet-v3-tokens.txt d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"
+)
+# Словаря BPE для горячих слов у Parakeet нет: поиск по лучам sherpa-onnx 2.0.1 на этой
+# модели теряет фразы в кусках из нескольких фраз (на en2 из трёх фраз куска осталось две),
+# а жадный поиск их не теряет. Английская речь распознаётся жадным поиском без горячих слов.
 
 # Эмоция реплики: GigaAM-Emo (SberDevices, лицензия MIT), своя выгрузка ONNX с весами
 # MatMul в 8 бит (scripts/export-gigaam-emo.py, там же замеры). Чекпойнт emo.ckpt скачан
@@ -57,6 +77,7 @@ DOWNLOADS=(
   "audio-tagging-models/${TAGGING}.tar.bz2 84baf315b57d61aa69480c4fee878dab54cbc7be3e877db334e65d8b087e23c3"
   # Шумоподавление GTCRN для второго VAD: им режутся длинные куски VAD в шуме.
   "speech-enhancement-models/gtcrn_simple.onnx e77603ac0c23dac3227dd2d7135b3a585cbee2679048aecfa886657d3ae1b534"
+  "asr-models/${WHISPER}.tar.bz2 c46116994e539aa165266d96b325252728429c12535eb9d8b6a2b10f129e66b1"
 )
 
 mkdir -p "${CACHE}"
@@ -87,6 +108,19 @@ else
     curl -fSL --retry 3 -o "${tokenizer}.part" "${TOKENIZER_URL}" || exit 1
   mv "${tokenizer}.part" "${tokenizer}"
 fi
+
+for entry in "${PARAKEET_FILES[@]}"; do
+  read -r remote name expected <<<"${entry}"
+  target="${CACHE}/${name}"
+  if [[ -f "${target}" ]] && [[ "$(sha256_of "${target}")" == "${expected}" ]]; then
+    echo "есть: ${name}"
+    continue
+  fi
+  echo "скачиваю: ${name}"
+  model_download "${target}.part" "${expected}" \
+    curl -fSL --retry 3 -o "${target}.part" "${PARAKEET_URL}/${remote}" || exit 1
+  mv "${target}.part" "${target}"
+done
 
 emotion_missing() {
   echo "на зеркале нет ${EMOTION_FILE}: выгрузите его scripts/export-gigaam-emo.py" >&2
@@ -122,6 +156,12 @@ ROLES=(
   "denoiser denoiser.onnx"
   "age_gender age-gender.onnx"
   "emotion ${EMOTION_FILE}"
+  "asr_en_encoder asr-en-encoder.int8.onnx"
+  "asr_en_decoder asr-en-decoder.int8.onnx"
+  "asr_en_joiner asr-en-joiner.int8.onnx"
+  "asr_en_tokens asr-en-tokens.txt"
+  "lid_encoder lid-encoder.int8.onnx"
+  "lid_decoder lid-decoder.int8.onnx"
 )
 
 manifest="${MODELS}/models.json"
@@ -309,6 +349,10 @@ tar -xjf "${CACHE}/${TAGGING}.tar.bz2" -C "${CACHE}" \
   "${TAGGING}/model.int8.onnx" \
   "${TAGGING}/class_labels_indices.csv"
 
+tar -xjf "${CACHE}/${WHISPER}.tar.bz2" -C "${CACHE}" \
+  "${WHISPER}/tiny-encoder.int8.onnx" \
+  "${WHISPER}/tiny-decoder.int8.onnx"
+
 cp "${CACHE}/${GIGAAM}/encoder.int8.onnx" "${MODELS}/asr-encoder.int8.onnx"
 cp "${CACHE}/${GIGAAM}/decoder.onnx" "${MODELS}/asr-decoder.onnx"
 cp "${CACHE}/${GIGAAM}/joiner.onnx" "${MODELS}/asr-joiner.onnx"
@@ -324,6 +368,14 @@ cp "${CACHE}/${LIVE}/tokens.txt" "${MODELS}/live-tokens.txt"
 cp "${CACHE}/${TAGGING}/model.int8.onnx" "${MODELS}/tagging.int8.onnx"
 cp "${CACHE}/${TAGGING}/class_labels_indices.csv" "${MODELS}/tagging-labels.csv"
 cp "${CACHE}/gtcrn_simple.onnx" "${MODELS}/denoiser.onnx"
+cp "${CACHE}/parakeet-v3-encoder.int8.onnx" "${MODELS}/asr-en-encoder.int8.onnx"
+cp "${CACHE}/parakeet-v3-decoder.int8.onnx" "${MODELS}/asr-en-decoder.int8.onnx"
+cp "${CACHE}/parakeet-v3-joiner.int8.onnx" "${MODELS}/asr-en-joiner.int8.onnx"
+cp "${CACHE}/parakeet-v3-tokens.txt" "${MODELS}/asr-en-tokens.txt"
+# Определению языка хватает int8: сравнивается только русский с английским. Файл токенов
+# Whisper определению языка не нужен.
+cp "${CACHE}/${WHISPER}/tiny-encoder.int8.onnx" "${MODELS}/lid-encoder.int8.onnx"
+cp "${CACHE}/${WHISPER}/tiny-decoder.int8.onnx" "${MODELS}/lid-decoder.int8.onnx"
 # Модель голоса приложения на Android берётся из набора ort, где её сумма уже сверена.
 # Жёсткая ссылка, если можно: вторая копия 51 МБ на диске не нужна.
 rm -f "${MODELS}/redimnet2-b6.onnx"

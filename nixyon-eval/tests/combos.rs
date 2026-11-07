@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use nixyon_audio::{TARGET_SAMPLE_RATE, convert_to_wav16k};
 use nixyon_core::{
     AudioInfo, CancelFlag, EngineInfo, NEURAL_BLOCK_SEC, SegmentResult, SpeechEngine,
-    VoiceSegmenter, VoiceSpan, to_json,
+    SpeechLanguage, VoiceSegmenter, VoiceSpan, to_json,
 };
 use nixyon_eval::{Combo, ComboModels, analyze_combos};
 use nixyon_ort::OrtManifest;
@@ -75,6 +75,7 @@ fn transcript(
             asr: String::new(),
             embedding: String::new(),
         },
+        language: SpeechLanguage::Ru,
     };
     let (t, _) = build_transcript_with_centers(
         segments,
@@ -99,7 +100,7 @@ fn separate(dir: &Path, name: &str, combo: &Combo, wav: &Path) -> String {
         .unwrap();
     let models = combo.segmenter.apply(models, &ort, THREADS).unwrap();
     let engine = SherpaEngine::new(models);
-    let options = PipelineOptions::default().engine_options();
+    let options = PipelineOptions::default().engine_options(SpeechLanguage::Ru);
     let segments = engine.analyze(wav, &options, &CancelFlag::new()).unwrap();
     let speech: Vec<(f64, f64)> = segments.iter().map(|s| (s.start, s.end)).collect();
     let spans = engine
@@ -122,7 +123,7 @@ fn together(
         &extra,
         combos,
         wav,
-        &PipelineOptions::default().engine_options(),
+        &PipelineOptions::default().engine_options(SpeechLanguage::Ru),
         Some(NEURAL_BLOCK_SEC),
         &CancelFlag::new(),
     )

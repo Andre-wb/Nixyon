@@ -1,4 +1,4 @@
-use nixyon_core::{AudioInfo, EngineInfo};
+use nixyon_core::{AudioInfo, EngineInfo, SpeechLanguage};
 
 /// Сведения о записи, которые конвейер не вычисляет сам.
 #[derive(Debug, Clone)]
@@ -7,4 +7,6 @@ pub struct TranscriptMeta {
     pub created_at: String,
     pub audio: AudioInfo,
     pub engine: EngineInfo,
+    /// Язык речи, на котором запись распознана.
+    pub language: SpeechLanguage,
 }
