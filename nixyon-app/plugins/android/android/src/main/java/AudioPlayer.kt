@@ -131,7 +131,7 @@ class AudioPlayer(private val context: Context, private val keys: StorageKey) : 
         send("paused", positionSec(p))
     }
 
-    // Перемотка от текущего места; отрицательное значение — назад.
+    // Перемотка от текущего места; при отрицательном значении назад.
     override fun skip(deltaSec: Double) {
         val p = player ?: return
         seek(positionSec(p) + deltaSec)
@@ -185,10 +185,9 @@ class AudioPlayer(private val context: Context, private val keys: StorageKey) : 
 
     // Если позиция вне отрезков, перематывает к началу следующего. false: отрезков не осталось.
     private fun inRanges(p: MediaPlayer): Boolean {
-        val list = ranges ?: return true
         val pos = positionSec(p)
-        val next = list.firstOrNull { it.end > pos } ?: return false
-        if (next.start > pos) seekTo(p, next.start)
+        val target = PlaybackSpans.target(ranges, pos) ?: return false
+        if (target > pos) seekTo(p, target)
         return true
     }
 

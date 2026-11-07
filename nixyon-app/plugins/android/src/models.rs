@@ -381,7 +381,7 @@ pub struct PlayRequest {
     pub from_sec: Option<f64>,
 }
 
-/// Скорость проигрывания: 1 — обычная.
+/// Скорость проигрывания, обычная равна 1.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackSpeedRequest {
@@ -405,7 +405,7 @@ pub struct PlaybackRangesRequest {
     pub ranges: Vec<PlaybackRange>,
 }
 
-/// Перемотка на столько секунд от текущего места; отрицательное — назад.
+/// Перемотка на столько секунд от текущего места, при отрицательном значении назад.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkipRequest {

@@ -1143,14 +1143,14 @@ p {
 }
 
 .player-speeds .chip {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 var(--space-3);
   font-variant-numeric: tabular-nums;
 }
 
 .player-speaker {
   flex: 1 1 140px;
-  min-height: 36px;
+  min-height: 44px;
   max-width: 100%;
   padding: 0 var(--space-2);
   border: 1px solid var(--separator);

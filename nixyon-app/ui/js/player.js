@@ -229,7 +229,7 @@ export async function closePlayer() {
   if (wasOpen) await invoke("close_playback").catch(() => {});
 }
 
-// Играть с места. Если участник выбран, а место — реплика другого, выбор сбрасывается:
+// Играть с места. Если участник выбран, а место попало в реплику другого, выбор сбрасывается:
 // иначе звук сразу ушёл бы к следующей реплике выбранного.
 export async function playFrom(sec) {
   if (!opened) return;

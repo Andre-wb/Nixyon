@@ -65,7 +65,7 @@ class RecordingService : Service() {
     companion object {
         private const val TAG = "NixyonSpeech"
         private const val CHANNEL_ID = "nixyon-recording"
-        private const val NOTIFICATION_ID = 1
+        private const val NOTIFICATION_ID = NotificationIds.RECORDING
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_CHANNEL = "channel"
 
