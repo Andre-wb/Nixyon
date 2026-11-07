@@ -31,6 +31,7 @@ pub fn prepare(store: &FilesStore, cache: &Path) {
     // Индекс уже проверен выше: под потерянным ключом он удалён, и папки встреч, тоже
     // нечитаемые, уходят вместе с ним.
     crate::meetings::startup::tidy(store, &|path| secure(store, path));
+    crate::meetings::backfill::fill_participants(store);
     let recordings = store.dir().join(RECORDINGS_DIR);
     sweep(&recordings, |name| name.ends_with(".part"));
     if let Ok(entries) = std::fs::read_dir(&recordings) {

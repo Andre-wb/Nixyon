@@ -254,6 +254,16 @@ p {
   min-height: 44px;
 }
 
+/* Действия экрана справа; на узком экране или крупным шрифтом переносятся на новую
+   строку, а не уводят панель вбок. */
+.bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
 .icon {
   width: 24px;
   height: 24px;
@@ -550,11 +560,6 @@ p {
   cursor: pointer;
 }
 
-.last-label {
-  font-size: var(--text-footnote);
-  color: var(--label-secondary);
-}
-
 .last-file {
   font-weight: 600;
   overflow-wrap: anywhere;
@@ -617,6 +622,28 @@ p {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.meeting-row {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.meeting-row .meta {
+  overflow-wrap: anywhere;
+}
+
+.meetings-empty {
+  padding: 0 var(--space-4);
 }
 
 .voice-row {

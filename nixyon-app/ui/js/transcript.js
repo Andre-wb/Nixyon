@@ -1,10 +1,11 @@
 import { channel, errorCode, errorText, invoke } from "./api.js";
 import { $, dot, el, speakerColor } from "./dom.js";
-import { clock, dateTime } from "./format.js";
+import { clock } from "./format.js";
 import { emotionChip, initEmotion, openEmotion } from "./emotion.js";
 import { K, t } from "./i18n.js";
 import { openExport } from "./export.js";
 import { fillersAvailable, openFillers } from "./fillers.js";
+import { meetingMeta, meetingTitle, openRename } from "./meeting-title.js";
 import { closePlayer, openPlayer, playFrom, refreshPlayerIndex } from "./player.js";
 import { applySearch, resetSearch } from "./search.js";
 import { openStats } from "./stats.js";
@@ -17,6 +18,8 @@ import { loadVoices } from "./voices.js";
 const OVERLAP_FLAG = "overlap";
 
 let current = null;
+// Своё название открытой встречи; null: встреча называется датой и временем.
+let title = null;
 let warnings = [];
 let editing = null;
 let pendingMerge = null;
@@ -60,8 +63,9 @@ export function speakerName(transcript, id) {
   return speaker?.name || t(K.export_speaker_default, { n: id });
 }
 
-export function open(transcript, newWarnings = []) {
+export function open(transcript, newWarnings = [], newTitle = null) {
   current = transcript;
+  title = newTitle;
   warnings = newWarnings;
   resetSearch();
   closePlayer();
@@ -87,10 +91,14 @@ export function setTranscript(transcript) {
   for (const listener of changeListeners) listener(transcript);
 }
 
+function renderTitle() {
+  $("transcript-file").textContent = meetingTitle(title, current.created_at);
+  $("transcript-meta").textContent = meetingMeta(title, current.created_at, current.audio.duration_sec);
+}
+
 function render() {
   if (!current) return;
-  $("transcript-file").textContent = current.audio.file;
-  $("transcript-meta").textContent = `${dateTime(current.created_at)}, ${clock(current.audio.duration_sec)}`;
+  renderTitle();
   $("transcript-warning").hidden = !warnings.includes("clipping");
 
   const speakers = $("speakers");
@@ -354,6 +362,15 @@ async function merge() {
 export function initTranscript() {
   $("back").addEventListener("click", () => history.back());
   $("open-export").addEventListener("click", () => current && openExport(current));
+  $("open-rename").addEventListener("click", () => {
+    if (!current) return;
+    const meeting = currentMeeting();
+    openRename(meeting, title, (renamed) => {
+      if (currentMeeting() !== meeting) return;
+      title = renamed;
+      renderTitle();
+    });
+  });
   $("open-stats").addEventListener("click", () => current && openStats(current));
   $("speaker-save").addEventListener("click", saveName);
   $("speaker-remember").addEventListener("click", rememberVoice);

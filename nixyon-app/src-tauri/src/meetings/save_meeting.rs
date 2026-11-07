@@ -11,6 +11,7 @@ use nixyon_pipeline::SpeakerCenter;
 use super::index_entry::IndexEntry;
 use super::meeting_dir::MeetingDir;
 use super::meeting_id::MeetingId;
+use super::participant::participants;
 use super::{audio_file, centers_file, index, transcript_file};
 use crate::vault::FilesStore;
 
@@ -31,12 +32,14 @@ pub fn save_meeting(store: &FilesStore, meeting: NewMeeting<'_>) -> std::io::Res
         audio,
         created_secs,
     } = meeting;
-    let mut meetings = index::load(store)?;
-    let id = free_id(store.dir(), &meetings, created_secs);
-    transcript.created_at = id.as_str().to_owned();
-    let dir = MeetingDir::of(&id).path(store.dir());
-    std::fs::create_dir_all(&dir)?;
-    let written = (|| {
+    // Папка, которую успели создать: если индекс не записался, её нужно убрать.
+    let mut created = None;
+    let written = index::update(store, |meetings| {
+        let id = free_id(store.dir(), meetings, created_secs);
+        transcript.created_at = id.as_str().to_owned();
+        let dir = MeetingDir::of(&id).path(store.dir());
+        std::fs::create_dir_all(&dir)?;
+        created = Some(dir);
         transcript_file::save(store, &id, &transcript)?;
         if let Err(e) = centers_file::save(store, &id, centers) {
             log::warn!("центры голосов не сохранены, запомнить голос будет нельзя: {e}");
@@ -45,15 +48,22 @@ pub fn save_meeting(store: &FilesStore, meeting: NewMeeting<'_>) -> std::io::Res
             id: id.clone(),
             duration_sec: transcript.audio.duration_sec,
             file: transcript.audio.file.clone(),
+            title: None,
+            participants: Some(participants(&transcript)),
         });
-        index::save(store, &meetings)
-    })();
-    if let Err(e) = written {
-        if let Err(e) = std::fs::remove_dir_all(&dir) {
-            log::warn!("папка несохранённой встречи не удалена: {e}");
+        Ok(id)
+    });
+    let id = match written {
+        Ok(id) => id,
+        Err(e) => {
+            if let Some(dir) = created
+                && let Err(e) = std::fs::remove_dir_all(&dir)
+            {
+                log::warn!("папка несохранённой встречи не удалена: {e}");
+            }
+            return Err(e);
         }
-        return Err(e);
-    }
+    };
     if let Err(e) = audio_file::move_in(store.dir(), &id, audio) {
         log::warn!("запись не перенесена к встрече, проигрывать будет нечего: {e}");
     }
@@ -107,7 +117,10 @@ mod tests {
         assert_eq!(saved.created_at, id.as_str());
         assert_eq!(transcript_file::load(&store, &id), Some(saved));
         assert_eq!(centers_file::load(&store, &id).unwrap().len(), 1);
-        assert_eq!(index::load(&store).unwrap()[0].id, id);
+        let entry = &index::load(&store).unwrap()[0];
+        assert_eq!(entry.id, id);
+        assert_eq!(entry.title, None);
+        assert_eq!(entry.participants, Some(Vec::new()));
         assert!(!audio.exists());
         assert!(audio_file::path(store.dir(), &id).is_some());
     }

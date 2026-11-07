@@ -82,14 +82,16 @@ mod tests {
         let known = folder(&store, 100);
         let orphan = folder(&store, 200);
         std::fs::write(store.dir().join("last_audio.txt"), b"/data/rec.wav").unwrap();
-        index::save(
-            &store,
-            &[IndexEntry {
+        index::update(&store, |m| {
+            m.push(IndexEntry {
                 id: MeetingId::from_unix_secs(100),
                 duration_sec: 1.0,
                 file: "a.wav".into(),
-            }],
-        )
+                title: None,
+                participants: None,
+            });
+            Ok(())
+        })
         .unwrap();
         let secured = RefCell::new(Vec::new());
         tidy(&store, &|p| secured.borrow_mut().push(p.to_path_buf()));

@@ -1,6 +1,8 @@
 import { invoke } from "./api.js";
 import { initExport } from "./export.js";
-import { failed, initHome, setLast } from "./home.js";
+import { failed, initHome } from "./home.js";
+import { initMeetingTitle } from "./meeting-title.js";
+import { initMeetings } from "./meetings.js";
 import { initModels } from "./models.js";
 import { unlockApp } from "./lock.js";
 import { initPlayer } from "./player.js";
@@ -24,6 +26,8 @@ async function start() {
   applySetting(settings.language);
   applyHotwords(settings.hotwords);
   initHome();
+  initMeetings();
+  initMeetingTitle();
   initProcessing(failed);
   initTranscript();
   initSettings();
@@ -45,7 +49,6 @@ async function start() {
     else if (location.hash !== "#transcript" && location.hash !== "#voices" && location.hash !== "#models") show("home");
   });
   await initModels(Boolean(settings.models_prompt_seen));
-  setLast(await invoke("latest_meeting").catch(() => null));
 }
 
 start();

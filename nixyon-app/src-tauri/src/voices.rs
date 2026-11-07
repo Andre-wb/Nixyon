@@ -124,8 +124,13 @@ fn load(files: &FilesStore) -> Result<Vec<VoiceRecord>, CommandError> {
     store::load(files).map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
 }
 
-fn save(files: &FilesStore, voices: &[VoiceRecord]) -> Result<(), CommandError> {
-    store::save(files, voices).map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
+/// Изменение голосов под блокировкой файла; ошибка изменения оставляет файл как был.
+fn update<T>(
+    files: &FilesStore,
+    change: impl FnOnce(&mut Vec<VoiceRecord>) -> Result<T, CommandError>,
+) -> Result<T, CommandError> {
+    store::update(files, change)
+        .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
 }
 
 // Запись образца берётся только из папок приложения, как запись для расшифровки.
@@ -208,17 +213,17 @@ pub async fn add_voice<R: Runtime>(
     );
     tauri::async_runtime::spawn_blocking(move || {
         // Файл перечитывается: пока считался эмбеддинг, список мог измениться.
-        let mut voices = load(&files)?;
-        add_sample(
-            &mut voices,
-            &name,
-            sample.embedding,
-            sample.voice_model,
-            created_at,
-        )
-        .map_err(|_| CommandError::new(CommandError::VOICE_NAME_TAKEN))?;
-        save(&files, &voices)?;
-        Ok(view(&voices))
+        update(&files, |voices| {
+            add_sample(
+                voices,
+                &name,
+                sample.embedding,
+                sample.voice_model,
+                created_at,
+            )
+            .map_err(|_| CommandError::new(CommandError::VOICE_NAME_TAKEN))?;
+            Ok(view(voices))
+        })
     })
     .await
     .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
@@ -231,14 +236,14 @@ pub async fn delete_voice<R: Runtime>(
 ) -> Result<VoicesView, CommandError> {
     let files = storage(&app).await?.store;
     tauri::async_runtime::spawn_blocking(move || {
-        let mut voices = load(&files)?;
-        let before = voices.len();
-        voices.retain(|v| v.name != name);
-        if voices.len() == before {
-            return Err(CommandError::new(CommandError::UNKNOWN_VOICE));
-        }
-        save(&files, &voices)?;
-        Ok(view(&voices))
+        update(&files, |voices| {
+            let before = voices.len();
+            voices.retain(|v| v.name != name);
+            if voices.len() == before {
+                return Err(CommandError::new(CommandError::UNKNOWN_VOICE));
+            }
+            Ok(view(voices))
+        })
     })
     .await
     .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
@@ -265,20 +270,20 @@ pub fn remember_speaker(
         .and_then(|centers| centers.into_iter().find(|(id, _)| *id == speaker))
         .map(|(_, embedding)| embedding)
         .ok_or_else(|| CommandError::new(NO_VOICE_CENTER))?;
-    let mut voices = load(files)?;
-    remember(
-        &mut voices,
-        &name,
-        MeetingCenter {
-            meeting: transcript.created_at.clone(),
-            embedding,
-            remembered_at,
-            // Центр посчитан той же моделью голоса, что и вся расшифровка.
-            voice_model: Some(transcript.engine.embedding.clone()),
-        },
-    );
-    save(files, &voices)?;
-    Ok(view(&voices))
+    update(files, |voices| {
+        remember(
+            voices,
+            &name,
+            MeetingCenter {
+                meeting: transcript.created_at.clone(),
+                embedding,
+                remembered_at,
+                // Центр посчитан той же моделью голоса, что и вся расшифровка.
+                voice_model: Some(transcript.engine.embedding.clone()),
+            },
+        );
+        Ok(view(voices))
+    })
 }
 
 #[tauri::command]
@@ -413,9 +418,8 @@ mod tests {
             created_at: "2026-10-29T10:00:00Z".into(),
             centers,
         };
-        store::save(
-            &d,
-            &[
+        store::update(&d, |v| {
+            v.extend([
                 voice(
                     "Анна",
                     Some("redimnet2-b6.onnx"),
@@ -426,8 +430,10 @@ mod tests {
                 ),
                 voice("Борис", None, vec![center("m1", 0.3, None)]),
                 voice("Вера", Some("embedding.onnx"), Vec::new()),
-            ],
-        )
+            ]);
+            Ok::<_, ()>(())
+        })
+        .unwrap()
         .unwrap();
         let used: Vec<(String, Vec<f32>)> = samples(&d, "redimnet2-b6.onnx")
             .into_iter()

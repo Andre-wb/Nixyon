@@ -1,12 +1,20 @@
 //! Индекс архива встреч в `files/meetings.json`, зашифрован. Встреча есть в архиве, только
 //! когда у неё есть строка здесь.
 
+use std::sync::{Mutex, PoisonError};
+
 use serde::{Deserialize, Serialize};
 
 use super::index_entry::IndexEntry;
+use super::meeting_id::MeetingId;
 use crate::vault::FilesStore;
 
 pub const FILE: &str = "meetings.json";
+
+/// Индекс меняют сохранение встречи, переименование и правки участников, в том числе
+/// одновременно из разных команд. Без общей блокировки на весь цикл «прочитать, изменить,
+/// записать» одна из двух записей потерялась бы.
+static WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Serialize, Deserialize)]
 struct IndexFile {
@@ -25,7 +33,7 @@ pub fn load(store: &FilesStore) -> std::io::Result<Vec<IndexEntry>> {
 }
 
 /// Оборванная запись не портит прежний индекс.
-pub fn save(store: &FilesStore, meetings: &[IndexEntry]) -> std::io::Result<()> {
+fn save(store: &FilesStore, meetings: &[IndexEntry]) -> std::io::Result<()> {
     let json = serde_json::to_vec(&IndexFile {
         meetings: meetings.to_vec(),
     })
@@ -33,14 +41,31 @@ pub fn save(store: &FilesStore, meetings: &[IndexEntry]) -> std::io::Result<()> 
     store.write(FILE, &json)
 }
 
-/// Самая поздняя встреча: id одной ширины, и строки сравниваются как время.
-pub fn latest(meetings: &[IndexEntry]) -> Option<&IndexEntry> {
-    meetings.iter().max_by(|a, b| a.id.cmp(&b.id))
+/// Читает индекс, даёт его изменить и записывает. Ошибка изменения оставляет индекс как
+/// был.
+pub fn update<T>(
+    store: &FilesStore,
+    change: impl FnOnce(&mut Vec<IndexEntry>) -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    let _guard = WRITE_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut meetings = load(store)?;
+    let result = change(&mut meetings)?;
+    save(store, &meetings)?;
+    Ok(result)
+}
+
+/// Строка встречи, если она есть в индексе.
+pub fn find(store: &FilesStore, id: &MeetingId) -> std::io::Result<Option<IndexEntry>> {
+    Ok(load(store)?.into_iter().find(|m| &m.id == id))
+}
+
+/// Нет строки встречи в индексе: команда отвечает `no_transcript`.
+pub fn not_found() -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::NotFound, "встречи нет в индексе")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::meeting_id::MeetingId;
     use super::*;
 
     fn entry(secs: u64) -> IndexEntry {
@@ -48,24 +73,86 @@ mod tests {
             id: MeetingId::from_unix_secs(secs),
             duration_sec: 2.5,
             file: "встреча.m4a".into(),
+            title: None,
+            participants: Some(Vec::new()),
         }
     }
 
     #[test]
-    fn index_is_saved_sealed_and_latest_is_the_greatest_id() {
+    fn index_is_saved_sealed_and_read_back() {
         let store = crate::vault::test_store("meetings-index");
         assert_eq!(load(&store).unwrap(), Vec::new());
         let meetings = vec![entry(200), entry(1_000_000), entry(5)];
-        save(&store, &meetings).unwrap();
+        update(&store, |m| {
+            m.extend(meetings.iter().cloned());
+            Ok(())
+        })
+        .unwrap();
         assert_eq!(load(&store).unwrap(), meetings);
-        assert_eq!(latest(&meetings), Some(&meetings[1]));
-        assert_eq!(latest(&[]), None);
+        assert_eq!(
+            find(&store, &MeetingId::from_unix_secs(5)).unwrap(),
+            Some(meetings[2].clone())
+        );
+        assert_eq!(find(&store, &MeetingId::from_unix_secs(6)).unwrap(), None);
         let on_disk = std::fs::read(store.dir().join(FILE)).unwrap();
         assert!(
             !on_disk
                 .windows("встреча".len())
                 .any(|w| w == "встреча".as_bytes())
         );
+    }
+
+    #[test]
+    fn index_of_the_previous_version_without_title_and_participants_is_read() {
+        let store = crate::vault::test_store("meetings-index-previous");
+        let json =
+            r#"{"meetings":[{"id":"2026-11-07T10:00:00Z","duration_sec":1.5,"file":"a.wav"}]}"#;
+        store.write(FILE, json.as_bytes()).unwrap();
+        let meetings = load(&store).unwrap();
+        assert_eq!(meetings.len(), 1);
+        assert_eq!(meetings[0].title, None);
+        assert_eq!(meetings[0].participants, None);
+    }
+
+    #[test]
+    fn failed_change_leaves_the_index_as_it_was() {
+        let store = crate::vault::test_store("meetings-index-failed-change");
+        update(&store, |m| {
+            m.push(entry(1));
+            Ok(())
+        })
+        .unwrap();
+        let err = update(&store, |m| {
+            m.clear();
+            Err::<(), _>(not_found())
+        })
+        .unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert_eq!(load(&store).unwrap(), vec![entry(1)]);
+    }
+
+    #[test]
+    fn simultaneous_changes_lose_no_meeting() {
+        let store = crate::vault::test_store("meetings-index-race");
+        std::thread::scope(|s| {
+            for secs in 0..16 {
+                let store = &store;
+                s.spawn(move || {
+                    update(store, |m| {
+                        // Пауза между чтением и записью: без блокировки все потоки успели
+                        // бы прочитать один и тот же индекс.
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                        m.push(entry(secs));
+                        Ok(())
+                    })
+                    .unwrap()
+                });
+            }
+        });
+        let mut ids: Vec<_> = load(&store).unwrap().into_iter().map(|m| m.id).collect();
+        ids.sort();
+        let expected: Vec<_> = (0..16).map(MeetingId::from_unix_secs).collect();
+        assert_eq!(ids, expected);
     }
 
     #[test]
@@ -84,6 +171,13 @@ mod tests {
         assert_eq!(
             load(&store).unwrap_err().kind(),
             std::io::ErrorKind::InvalidData
+        );
+        assert!(
+            update(&store, |m| {
+                m.clear();
+                Ok(())
+            })
+            .is_err()
         );
     }
 }

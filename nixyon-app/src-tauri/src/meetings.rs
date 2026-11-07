@@ -3,19 +3,27 @@
 //! встречей, получает её id параметром: скрытой «открытой встречи» в ядре нет.
 
 pub mod audio_file;
+pub mod backfill;
 pub mod centers_file;
+pub mod edit_lock;
 mod index;
 mod index_entry;
 mod legacy;
+pub mod list_meetings;
 mod meeting_dir;
 mod meeting_id;
+mod meeting_title;
+pub mod open_meeting;
+mod opened_meeting;
+mod participant;
+pub mod rename_meeting;
 mod save_meeting;
+mod save_transcript;
 pub mod startup;
 pub mod summary_file;
 pub mod transcript_file;
 
 use nixyon_core::Transcript;
-use tauri::{AppHandle, Runtime};
 
 use crate::transcription::CommandError;
 use crate::vault::FilesStore;
@@ -23,6 +31,7 @@ use crate::vault::FilesStore;
 pub use index::FILE as INDEX_FILE;
 pub use meeting_id::MeetingId;
 pub use save_meeting::{NewMeeting, save_meeting};
+pub use save_transcript::save_transcript;
 
 pub const NO_TRANSCRIPT: &str = "no_transcript";
 
@@ -42,29 +51,24 @@ pub fn load(store: &FilesStore, meeting: &str) -> Result<(MeetingId, Transcript)
     Ok((id, transcript))
 }
 
+/// Своё название встречи из индекса. Индекс не читается: встреча без своего названия,
+/// причина в логе.
+pub fn title(store: &FilesStore, id: &MeetingId) -> Option<String> {
+    match index::find(store, id) {
+        Ok(entry) => entry.and_then(|e| e.title),
+        Err(e) => {
+            log::warn!("название встречи не прочитано: {e}");
+            None
+        }
+    }
+}
+
 /// Есть ли ещё встреча: фоновая работа не сохраняет результат встрече, которой уже нет.
 pub fn exists(store: &FilesStore, id: &MeetingId) -> bool {
     meeting_dir::MeetingDir::of(id)
         .path(store.dir())
         .join(meeting_dir::TRANSCRIPT)
         .is_file()
-}
-
-/// Самая поздняя встреча архива: её показывает главный экран.
-pub fn latest(store: &FilesStore) -> std::io::Result<Option<Transcript>> {
-    let meetings = index::load(store)?;
-    Ok(index::latest(&meetings).and_then(|m| transcript_file::load(store, &m.id)))
-}
-
-#[tauri::command]
-pub async fn latest_meeting<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<Option<Transcript>, CommandError> {
-    let store = crate::vault::storage(&app).await?.store;
-    tauri::async_runtime::spawn_blocking(move || latest(&store))
-        .await
-        .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?
-        .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))
 }
 
 #[cfg(test)]
@@ -94,13 +98,17 @@ pub fn test_meeting(store: &FilesStore, transcript: &Transcript) -> MeetingId {
     let id = MeetingId::parse(&transcript.created_at).expect("created_at теста формы id");
     std::fs::create_dir_all(meeting_dir::MeetingDir::of(&id).path(store.dir())).unwrap();
     transcript_file::save(store, &id, transcript).unwrap();
-    let mut meetings = index::load(store).unwrap();
-    meetings.push(index_entry::IndexEntry {
-        id: id.clone(),
-        duration_sec: transcript.audio.duration_sec,
-        file: transcript.audio.file.clone(),
-    });
-    index::save(store, &meetings).unwrap();
+    index::update(store, |meetings| {
+        meetings.push(index_entry::IndexEntry {
+            id: id.clone(),
+            duration_sec: transcript.audio.duration_sec,
+            file: transcript.audio.file.clone(),
+            title: None,
+            participants: Some(participant::participants(transcript)),
+        });
+        Ok(())
+    })
+    .unwrap();
     id
 }
 
@@ -111,17 +119,16 @@ mod tests {
     #[test]
     fn meeting_is_loaded_by_id_and_unknown_or_malformed_id_is_no_transcript() {
         let store = crate::vault::test_store("meetings-load");
-        assert_eq!(latest(&store).unwrap(), None);
         let first = test_transcript("2026-11-07T10:00:00Z");
         let second = test_transcript("2026-11-07T11:00:00Z");
-        test_meeting(&store, &second);
+        let other = test_meeting(&store, &second);
+        assert!(exists(&store, &other));
         let id = test_meeting(&store, &first);
         assert_eq!(
             load(&store, "2026-11-07T10:00:00Z").unwrap(),
             (id.clone(), first)
         );
         assert!(exists(&store, &id));
-        assert_eq!(latest(&store).unwrap(), Some(second));
         for bad in ["2026-11-07T12:00:00Z", "../meetings.json", ""] {
             assert_eq!(load(&store, bad).unwrap_err().code, NO_TRANSCRIPT);
         }

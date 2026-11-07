@@ -25,7 +25,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             transcription::transcribe,
             transcription::cancel_transcription,
-            meetings::latest_meeting,
+            meetings::list_meetings::list_meetings,
+            meetings::open_meeting::open_meeting,
+            meetings::rename_meeting::rename_meeting,
             media::start_recording,
             media::stop_recording,
             media::pause_recording,

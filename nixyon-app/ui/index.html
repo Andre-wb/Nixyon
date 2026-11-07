@@ -92,11 +92,12 @@
         <button class="button button-plain" id="recovered-transcribe" type="button" data-i18n="recording.recovered_transcribe" hidden></button>
       </div>
 
-      <button class="last card" id="last" type="button" hidden>
-        <span class="last-label" data-i18n="home.last"></span>
-        <span class="last-file" id="last-file"></span>
-        <span class="meta" id="last-meta"></span>
-      </button>
+      <div class="group">
+        <h2 class="group-title" id="meetings-title" data-i18n="home.meetings"></h2>
+        <ul class="card speakers" id="meetings-list" aria-labelledby="meetings-title" hidden></ul>
+        <p class="meta meetings-empty" id="meetings-empty" data-i18n="home.meetings_empty" hidden></p>
+        <p class="error" id="meetings-error" role="alert"></p>
+      </div>
 
       <p class="hint" data-i18n="home.offline"></p>
     </section>
@@ -122,7 +123,10 @@
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
           <span data-i18n="transcript.back"></span>
         </button>
-        <button class="button button-plain" id="open-export" type="button" data-i18n="export_sheet.button"></button>
+        <div class="bar-actions">
+          <button class="button button-plain" id="open-rename" type="button" data-i18n="transcript.rename"></button>
+          <button class="button button-plain" id="open-export" type="button" data-i18n="export_sheet.button"></button>
+        </div>
       </header>
       <h1 class="title transcript-title" id="transcript-file"></h1>
       <p class="meta" id="transcript-meta"></p>
@@ -287,6 +291,22 @@
         <p class="hint" data-i18n="speaker.merge_hint"></p>
         <ul class="card speakers" id="merge-targets"></ul>
       </div>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="meeting-sheet" aria-labelledby="meeting-sheet-title">
+    <form method="dialog" class="sheet-body" id="meeting-form">
+      <div class="sheet-head">
+        <h2 id="meeting-sheet-title" data-i18n="meeting_sheet.title"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <label class="field">
+        <span data-i18n="meeting_sheet.label"></span>
+        <input id="meeting-title-input" type="text" maxlength="100" autocomplete="off" enterkeyhint="done">
+      </label>
+      <p class="hint" data-i18n="meeting_sheet.hint"></p>
+      <button class="button button-primary wide" id="meeting-save" type="button" data-i18n="meeting_sheet.save"></button>
+      <p class="error" id="meeting-error" role="alert"></p>
     </form>
   </dialog>
 

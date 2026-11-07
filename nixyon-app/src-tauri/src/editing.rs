@@ -10,7 +10,7 @@ use nixyon_pipeline::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
-use crate::meetings::{centers_file, transcript_file};
+use crate::meetings::{centers_file, edit_lock, save_transcript};
 use crate::transcription::CommandError;
 use crate::vault::FilesStore;
 
@@ -35,17 +35,36 @@ pub fn apply(
     meeting: &str,
     edit: impl FnOnce(&mut Transcript) -> Result<(), EditError>,
 ) -> Result<Transcript, CommandError> {
+    edit_lock::locked(|| apply_unlocked(store, meeting, edit))
+}
+
+/// То же без блокировки: для правок, которые уже держат её сами.
+fn apply_unlocked(
+    store: &FilesStore,
+    meeting: &str,
+    edit: impl FnOnce(&mut Transcript) -> Result<(), EditError>,
+) -> Result<Transcript, CommandError> {
     let (id, mut transcript) = crate::meetings::load(store, meeting)?;
     edit(&mut transcript).map_err(|e| CommandError::new(edit_code(&e)))?;
-    transcript_file::save(store, &id, &transcript)
+    save_transcript(store, &id, &transcript)
         .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
     Ok(transcript)
 }
 
 /// Слияние спикеров вместе с их центрами голосов: центры смешиваются с весом по времени
 /// речи до слияния. Если новые центры не записались, старые стираются, чтобы по ним не
-/// запомнить чужой голос.
+/// запомнить чужой голос. Расшифровка и центры меняются под одной блокировкой, чтобы
+/// другая правка не вклинилась между ними.
 pub fn merge_with_centers(
+    store: &FilesStore,
+    meeting: &str,
+    keep: u32,
+    absorb: u32,
+) -> Result<Transcript, CommandError> {
+    edit_lock::locked(|| merge_unlocked(store, meeting, keep, absorb))
+}
+
+fn merge_unlocked(
     store: &FilesStore,
     meeting: &str,
     keep: u32,
@@ -53,7 +72,7 @@ pub fn merge_with_centers(
 ) -> Result<Transcript, CommandError> {
     let id = crate::meetings::meeting_id(meeting)?;
     let mut weights = (0.0, 0.0);
-    let transcript = apply(store, meeting, |t| {
+    let transcript = apply_unlocked(store, meeting, |t| {
         let talk = |id| t.speaker(id).map_or(0.0, |s| s.talk_time_sec);
         weights = (talk(keep), talk(absorb));
         merge(t, keep, absorb)
@@ -212,6 +231,7 @@ pub async fn set_turn_emotion<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::meetings::transcript_file;
 
     fn change(id: u32, before: &str, after: &str) -> TurnTextChange {
         TurnTextChange {
@@ -220,6 +240,40 @@ mod tests {
             after: after.into(),
             delete: false,
         }
+    }
+
+    #[test]
+    fn simultaneous_edits_of_one_meeting_lose_no_change() {
+        let store = crate::vault::test_store("editing-race");
+        let mut t = crate::meetings::test_transcript("2026-11-07T10:00:00Z");
+        t.speakers = (1..=16)
+            .map(|id| nixyon_core::Speaker {
+                id,
+                name: None,
+                talk_time_sec: 1.0,
+                turns: 1,
+                words: 1,
+                age: None,
+                gender: None,
+            })
+            .collect();
+        let id = crate::meetings::test_meeting(&store, &t);
+        std::thread::scope(|s| {
+            for speaker in 1..=16 {
+                let store = &store;
+                s.spawn(move || {
+                    apply(store, "2026-11-07T10:00:00Z", |t| {
+                        // Пауза между чтением и записью: без блокировки все потоки успели
+                        // бы прочитать одну и ту же расшифровку.
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                        rename(t, speaker, &format!("Участник {speaker}"))
+                    })
+                    .unwrap()
+                });
+            }
+        });
+        let saved = transcript_file::load(&store, &id).unwrap();
+        assert!(saved.speakers.iter().all(|s| s.name.is_some()));
     }
 
     #[test]

@@ -80,6 +80,8 @@ const ERRORS = {
   text_control_chars: K.error_text_control_chars,
   text_empty: K.error_text_empty,
   text_too_long: K.error_text_too_long,
+  title_control_chars: K.error_title_control_chars,
+  title_too_long: K.error_title_too_long,
   unknown_speaker: K.error_unknown_speaker,
   unknown_turn: K.error_unknown_turn,
   unknown_voice: K.error_unknown_voice,
