@@ -14,7 +14,7 @@ class EmotionVerdict(val id: Int, val emotion: String?)
 // прохода их можно отпустить (SpeechEngine.turnEmotions).
 class TurnEmotions(private val located: LocatedModels) {
     fun run(wav: File, turns: List<EmotionTurn>, cancelled: AtomicBoolean): List<EmotionVerdict> {
-        val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, MAX_THREADS)
+        val threads = CpuCores.computeThreads
         // Модель грузится секунды: отмена до начала не ждёт загрузки.
         checkCancelled(cancelled)
         return EmotionModel.open(located.source, located.manifest.file(ModelRole.EMOTION), threads).use { model ->
@@ -36,8 +36,6 @@ class TurnEmotions(private val located: LocatedModels) {
     }
 
     companion object {
-        private const val MAX_THREADS = 4
-
         // Реплики по началу в записи вместе с границами в сэмплах; у пустой или вывернутой
         // границ нет. Ответы идут в том же порядке.
         fun ordered(turns: List<EmotionTurn>): List<Pair<EmotionTurn, Pair<Long, Long>?>> =

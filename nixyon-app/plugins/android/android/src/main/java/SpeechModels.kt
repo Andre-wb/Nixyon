@@ -61,7 +61,6 @@ class SpeechModels private constructor(
         // Порог низкий, как в движке на ноутбуке: при 0,5 VAD пропускал тихую речь и
         // короткие слова целиком, а ложный кусок без речи распознаётся пустым текстом.
         private const val VAD_THRESHOLD = 0.2f
-        private const val MAX_THREADS = 4
         // Поиск по лучам всегда, чтобы горячие слова работали без второй копии модели.
         // Значения те же, что у движка на ноутбуке (nixyon-sherpa: config::recognizer,
         // HOTWORD_SCORE, BEAM_PATHS); слова разбиваются на токены словарём BPE той же модели.
@@ -88,7 +87,7 @@ class SpeechModels private constructor(
         fun load(located: LocatedModels): SpeechModels {
             val source = located.source
             val manifest = located.manifest
-            val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, MAX_THREADS)
+            val threads = CpuCores.computeThreads
             val vadConfig = vadConfig(located)
             val denoiserConfig = if (manifest.hasDenoiser) denoiserConfig(located) else null
             val recognizerConfig = recognizerConfig(located, threads)

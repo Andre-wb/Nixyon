@@ -10,8 +10,10 @@ object MeetingLlmNative {
     }
 
     // fd: открытый файл, где с offset начинается модель (отдельный файл или APK).
-    // Дескриптор копируется, вызывающий закрывает свой сам.
-    external fun nativeOpen(fd: Int, offset: Long, contextTokens: Int, threads: Int): Long
+    // Дескриптор копируется, вызывающий закрывает свой сам. threads: потоки на выдачу ответа,
+    // batchThreads: на чтение запроса. repack: переложить веса под инструкции процессора
+    // (быстрее, но копия весов в памяти, LlmMemory); false: веса остаются в файле.
+    external fun nativeOpen(fd: Int, offset: Long, contextTokens: Int, threads: Int, batchThreads: Int, repack: Boolean): Long
 
     // Ответ в UTF-8: из байтов строка собирается в Kotlin, JNI не умеет символы вне BMP.
     external fun nativeGenerate(handle: Long, system: String, user: String, maxTokens: Int, progress: LlmProgress): ByteArray

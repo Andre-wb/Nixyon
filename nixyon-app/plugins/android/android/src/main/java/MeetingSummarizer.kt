@@ -38,8 +38,15 @@ class MeetingSummarizer(private val context: Context, private val freeMemory: ()
         }
         try {
             val opened = locator.locate().use { model ->
-                checkMemory(model.size)
-                MeetingLlmNative.nativeOpen(model.fd, model.offset, CONTEXT_TOKENS, threads())
+                val load = chooseLoad(model.size)
+                MeetingLlmNative.nativeOpen(
+                    model.fd,
+                    model.offset,
+                    CONTEXT_TOKENS,
+                    CpuCores.generateThreads,
+                    CpuCores.computeThreads,
+                    load.repack,
+                )
             }
             synchronized(lock) {
                 handle = opened
@@ -71,26 +78,30 @@ class MeetingSummarizer(private val context: Context, private val freeMemory: ()
         }
     }
 
-    private fun checkMemory(modelBytes: Long) {
-        val enough = { memory: MemorySnapshot -> LlmMemory.isEnough(memory.availableBytes, memory.lowMemory, modelBytes) }
-        val (memory, freed) = DeviceMemory.check({ DeviceMemory.read(context) }, enough, freeMemory)
+    // Быстрая загрузка с копией весов, если на неё хватает памяти, иначе веса из файла
+    // (LlmMemory). Чтобы загрузить быстро, сначала отпускаются модели речи, если движок
+    // свободен; хватает в итоге только на буферы, модель грузится из файла.
+    private fun chooseLoad(modelBytes: Long): LlmLoad {
+        val choose = { memory: MemorySnapshot -> LlmMemory.choose(memory.availableBytes, memory.lowMemory, modelBytes) }
+        val (memory, freed) = DeviceMemory.check({ DeviceMemory.read(context) }, { choose(it) == LlmLoad.FAST }, freeMemory)
         if (freed) Log.i(TAG, "для языковой модели отпущены модели речи: свободно ${memory.availableBytes shr 20} МБ")
-        if (!enough(memory)) {
-            throw LlmException(
-                LlmException.NO_MEMORY,
-                "свободно ${memory.availableBytes shr 20} МБ, нужно ${(modelBytes + LlmMemory.HEADROOM_BYTES) shr 20} МБ",
-            )
-        }
+        val load = choose(memory) ?: throw LlmException(
+            LlmException.NO_MEMORY,
+            "свободно ${memory.availableBytes shr 20} МБ, нужно хотя бы ${LlmMemory.WORKING_BYTES shr 20} МБ",
+        )
+        Log.i(
+            TAG,
+            "языковая модель: ${if (load.repack) "быстрая загрузка с копией весов" else "веса из файла, памяти мало"}, " +
+                "свободно ${memory.availableBytes shr 20} МБ, модель ${modelBytes shr 20} МБ, " +
+                "потоков ${CpuCores.computeThreads} на чтение и ${CpuCores.generateThreads} на ответ",
+        )
+        return load
     }
-
-    private fun threads(): Int = Runtime.getRuntime().availableProcessors().coerceIn(1, MAX_THREADS)
 
     companion object {
         private const val TAG = "NixyonSpeech"
         // Контекст 4096 токенов: встреча и ответ должны уложиться в него вместе.
         const val CONTEXT_TOKENS = 4096
-        // Не больше 4 потоков, как в примере llama.cpp для Android: у телефонов часть ядер медленные.
-        private const val MAX_THREADS = 4
     }
 }
 
