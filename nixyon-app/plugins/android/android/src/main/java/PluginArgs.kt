@@ -195,3 +195,8 @@ class ModelsDisabledArgs {
 class BiometricArgs {
     var enabled: Boolean = false
 }
+
+@InvokeArg
+class LlmGpuArgs {
+    var enabled: Boolean = false
+}

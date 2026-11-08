@@ -8,8 +8,13 @@ import android.util.Log
 // выгружается: 2,3 ГБ в памяти между запросами держать незачем. Запрос один за раз.
 // Протокол длинной встречи идёт по частям (LongSummary): модель грузится один раз на все
 // части и сведение. Если модели не хватает памяти, freeMemory отпускает модели речи
-// (SpeechEngine.unload, если движок свободен), и память проверяется ещё раз.
-class MeetingSummarizer(private val context: Context, private val freeMemory: () -> Boolean) {
+// (SpeechEngine.unload, если движок свободен), и память проверяется ещё раз. Видеокарта
+// по настройке LlmGpu.
+class MeetingSummarizer(
+    private val context: Context,
+    private val freeMemory: () -> Boolean,
+    private val gpu: LlmGpu,
+) {
     private val locator = LlmLocator(context)
     private val lock = Any()
     private var running = false
@@ -40,6 +45,8 @@ class MeetingSummarizer(private val context: Context, private val freeMemory: ()
         try {
             val opened = locator.locate().use { model ->
                 val load = chooseLoad(model.size)
+                val choice = gpu.choose(load)
+                if (choice != GpuChoice.OFF) Log.i(TAG, "языковая модель: ${choice.reason}")
                 MeetingLlmNative.nativeOpen(
                     model.fd,
                     model.offset,
@@ -47,6 +54,7 @@ class MeetingSummarizer(private val context: Context, private val freeMemory: ()
                     CpuCores.generateThreads,
                     CpuCores.computeThreads,
                     load.repack,
+                    choice.wanted,
                 )
             }
             synchronized(lock) {
@@ -54,6 +62,9 @@ class MeetingSummarizer(private val context: Context, private val freeMemory: ()
                 if (cancelled) MeetingLlmNative.nativeCancel(opened)
             }
             try {
+                val device = String(MeetingLlmNative.nativeDevice(opened), Charsets.UTF_8)
+                gpu.lastDevice = device
+                Log.i(TAG, "языковая модель считает на: $device")
                 return block(opened)
             } finally {
                 synchronized(lock) { handle = 0L }

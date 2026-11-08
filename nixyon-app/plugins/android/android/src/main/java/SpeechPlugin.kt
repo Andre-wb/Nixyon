@@ -53,8 +53,10 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
     private val recorder = AudioRecorder(activity.applicationContext, recordings, SamplesDir(activity.filesDir), keys)
     private val importer = AudioImporter(activity.applicationContext, recordings, keys)
     private val player = AudioPlayer(activity.applicationContext, keys)
+    // Видеокарта для языковой модели, по умолчанию выключена (LlmGpu).
+    private val llmGpu = LlmGpu.of(activity.applicationContext)
     // Если языковой модели не хватает памяти, движок отпускает модели речи.
-    private val summarizer = MeetingSummarizer(activity.applicationContext, engine::unload)
+    private val summarizer = MeetingSummarizer(activity.applicationContext, engine::unload, llmGpu)
     private val importing = AtomicBoolean(false)
     private var webView: WebView? = null
     @Volatile
@@ -241,10 +243,47 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve()
     }
 
-    // Есть ли на устройстве языковая модель для протокола встречи.
+    // Есть ли на устройстве языковая модель для протокола встречи, и про видеокарту для неё:
+    // есть ли она в сборке, включена ли и на чём модель считала в последний раз (null: ещё не
+    // грузилась). В фоне: признак сборки читается из APK.
     @Command
     fun summaryStatus(invoke: Invoke) {
-        invoke.resolve(jsObject("available" to summarizer.isAvailable()))
+        scope.launch {
+            try {
+                invoke.resolve(
+                    jsObject(
+                        "available" to summarizer.isAvailable(),
+                        "gpuBuilt" to llmGpu.isBuilt,
+                        "gpuEnabled" to llmGpu.enabled,
+                        "gpuDevice" to (llmGpu.lastDevice ?: JSONObject.NULL),
+                    ),
+                )
+            } catch (e: Throwable) {
+                Log.e(TAG, "состояние языковой модели не прочитано", e)
+                invoke.reject("internal error", LlmException.FAILED)
+            }
+        }
+    }
+
+    // Включает или выключает видеокарту для языковой модели; действует со следующей
+    // загрузки модели. В сборке без видеокарты включить нельзя: llm_gpu_not_built.
+    @Command
+    fun setLlmGpu(invoke: Invoke) {
+        val args = invoke.parseArgs(LlmGpuArgs::class.java)
+        scope.launch {
+            try {
+                if (args.enabled && !llmGpu.isBuilt) {
+                    invoke.reject("APK собран без видеокарты", LlmGpu.NOT_BUILT_CODE)
+                    return@launch
+                }
+                llmGpu.setEnabled(args.enabled)
+                Log.i(TAG, "видеокарта для языковой модели ${if (args.enabled) "включена" else "выключена"}")
+                invoke.resolve()
+            } catch (e: Throwable) {
+                Log.e(TAG, "настройка видеокарты не сохранилась", e)
+                invoke.reject("internal error", LlmException.FAILED)
+            }
+        }
     }
 
     // Протокол встречи языковой моделью. Текст встречи и ответ в лог не пишутся.

@@ -12,6 +12,9 @@
 //   пересекаются; nativeCancel можно звать из любого потока в любой момент до
 //   nativeClose: он только выставляет атомарный флаг.
 // - Текст встречи в лог не пишется: в лог Android уходят только ошибки llama.cpp.
+// - Видеокарта (Vulkan) только по просьбе nativeOpen и только в сборке с ggml-vulkan
+//   (llm_devices.h). Не нашлась или модель на ней не загрузилась: модель на процессоре.
+//   На чём она считает, говорит nativeDevice.
 
 #include <android/log.h>
 #include <dlfcn.h>
@@ -31,6 +34,7 @@
 #include "common.h"
 #include "ggml-backend.h"
 #include "llama.h"
+#include "llm_devices.h"
 
 namespace {
 
@@ -66,6 +70,9 @@ constexpr const char *CPU_VARIANTS[] = {
     "libggml-cpu-android_armv8.6_1.so", "libggml-cpu-android_armv9.0_1.so", "libggml-cpu-android_armv9.2_1.so",
     "libggml-cpu-android_armv9.2_2.so",
 };
+
+// Библиотека видеокарты из сборки с GGML_VULKAN; в обычной сборке её нет.
+constexpr const char *VULKAN_LIBRARY = "libggml-vulkan.so";
 
 bool load_best_cpu_backend() {
     using score_fn = int (*)();
@@ -107,6 +114,8 @@ struct Session {
     std::unique_ptr<llama_context, ContextDeleter> context;
     common_chat_templates_ptr templates;
     std::atomic<bool> cancel{false};
+    // «CPU» или «Vulkan: <видеокарта>», для лога и настроек.
+    std::string device;
 };
 
 class GenerationError {
@@ -274,11 +283,39 @@ jbyteArray to_java_bytes(JNIEnv *env, const std::string &text) {
     return bytes;
 }
 
+// Модель и контекст на устройстве gpu (nullptr: процессор). false: не вышло, сессия без
+// модели и контекста. llama.cpp читает GGUF с текущего места файла, поэтому место ставится
+// заново перед каждой попыткой.
+bool open_on(Session &session, jlong offset, ggml_backend_dev_t gpu, bool repack,
+             const llama_context_params &context_params) {
+    session.context.reset();
+    session.model.reset();
+    if (fseeko(session.file.get(), static_cast<off_t>(offset), SEEK_SET) != 0) {
+        throw GenerationError(CODE_LOAD_FAILED, "смещение модели недоступно");
+    }
+    llama_model_params model_params = llama_model_default_params();
+    // Перекладка весов под dotprod и i8mm (буфер CPU_REPACK) копирует их в память
+    // процесса. Без неё веса остаются страницами отображённого файла (LlmMemory.kt).
+    nixyon_llm::DeviceList devices;
+    nixyon_llm::use_device(model_params, devices, gpu, repack);
+    session.model.reset(llama_model_load_from_file_ptr(session.file.get(), model_params));
+    if (!session.model) {
+        return false;
+    }
+    session.context.reset(llama_init_from_model(session.model.get(), context_params));
+    if (!session.context) {
+        session.model.reset();
+        return false;
+    }
+    session.device = nixyon_llm::device_name(gpu);
+    return true;
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jlong JNICALL Java_dev_demo_nixyon_speech_MeetingLlmNative_nativeOpen(
     JNIEnv *env, jobject /*unused*/, jint fd, jlong offset, jint n_ctx, jint n_threads,
-    jint n_threads_batch, jboolean repack) {
+    jint n_threads_batch, jboolean repack, jboolean want_gpu) {
     try {
         static bool backend_ready = false;
         std::call_once(backend_once, [] {
@@ -300,20 +337,6 @@ extern "C" JNIEXPORT jlong JNICALL Java_dev_demo_nixyon_speech_MeetingLlmNative_
             close(own_fd);
             throw GenerationError(CODE_LOAD_FAILED, "файл модели не открылся");
         }
-        // llama.cpp читает GGUF с текущего места файла.
-        if (fseeko(session->file.get(), static_cast<off_t>(offset), SEEK_SET) != 0) {
-            throw GenerationError(CODE_LOAD_FAILED, "смещение модели недоступно");
-        }
-        llama_model_params model_params = llama_model_default_params();
-        model_params.n_gpu_layers = 0;
-        // Перекладка весов под dotprod и i8mm (буфер CPU_REPACK) копирует их в память
-        // процесса. Без неё веса остаются страницами отображённого файла (LlmMemory.kt).
-        model_params.use_extra_bufts = repack == JNI_TRUE;
-        session->model.reset(llama_model_load_from_file_ptr(session->file.get(), model_params));
-        if (!session->model) {
-            throw GenerationError(CODE_LOAD_FAILED, "модель не загрузилась");
-        }
-
         llama_context_params context_params = llama_context_default_params();
         context_params.n_ctx = static_cast<uint32_t>(n_ctx);
         context_params.n_batch = 512;
@@ -322,9 +345,22 @@ extern "C" JNIEXPORT jlong JNICALL Java_dev_demo_nixyon_speech_MeetingLlmNative_
         context_params.n_threads_batch = n_threads_batch;
         context_params.abort_callback = cancel_requested;
         context_params.abort_callback_data = &session->cancel;
-        session->context.reset(llama_init_from_model(session->model.get(), context_params));
-        if (!session->context) {
-            throw GenerationError(CODE_LOAD_FAILED, "контекст не создан");
+
+        // Видеокарта только по просьбе: без неё библиотека Vulkan даже не грузится.
+        ggml_backend_dev_t gpu = nullptr;
+        if (want_gpu == JNI_TRUE) {
+            gpu = nixyon_llm::vulkan_device(VULKAN_LIBRARY);
+            if (gpu == nullptr) {
+                __android_log_write(ANDROID_LOG_WARN, TAG, "видеокарта Vulkan не найдена, модель на процессоре");
+            }
+        }
+        const bool on_cpu_repack = repack == JNI_TRUE;
+        bool opened = gpu != nullptr && open_on(*session, offset, gpu, on_cpu_repack, context_params);
+        if (gpu != nullptr && !opened) {
+            __android_log_write(ANDROID_LOG_WARN, TAG, "на видеокарте модель не загрузилась, модель на процессоре");
+        }
+        if (!opened && !open_on(*session, offset, nullptr, on_cpu_repack, context_params)) {
+            throw GenerationError(CODE_LOAD_FAILED, "модель не загрузилась");
         }
         session->templates = common_chat_templates_init(session->model.get(), "");
         return reinterpret_cast<jlong>(session.release());
@@ -351,6 +387,12 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_dev_demo_nixyon_speech_MeetingLlmNa
         throw_java(env, CODE_FAILED, e.what());
     }
     return nullptr;
+}
+
+// Имя устройства в UTF-8, как и ответ: описание видеокарты даёт драйвер.
+extern "C" JNIEXPORT jbyteArray JNICALL Java_dev_demo_nixyon_speech_MeetingLlmNative_nativeDevice(
+    JNIEnv *env, jobject /*unused*/, jlong handle) {
+    return to_java_bytes(env, session_of(handle)->device);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_dev_demo_nixyon_speech_MeetingLlmNative_nativeCancel(

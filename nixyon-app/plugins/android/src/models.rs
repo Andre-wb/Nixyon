@@ -285,11 +285,27 @@ pub struct PdfRequest {
     pub blocks: String,
 }
 
-/// Есть ли на устройстве языковая модель для протокола встречи.
+/// Есть ли на устройстве языковая модель для протокола встречи, и видеокарта для неё.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SummaryStatus {
     pub available: bool,
+    /// APK собран с видеокартой (Vulkan).
+    #[serde(default)]
+    pub gpu_built: bool,
+    /// Видеокарта включена в настройках.
+    #[serde(default)]
+    pub gpu_enabled: bool,
+    /// На чём модель считала в последний раз: «CPU» или «Vulkan: …». `None`: после запуска
+    /// приложения модель ещё не грузилась.
+    #[serde(default)]
+    pub gpu_device: Option<String>,
+}
+
+/// Включить или выключить видеокарту для языковой модели.
+#[derive(Serialize)]
+pub struct LlmGpuRequest {
+    pub enabled: bool,
 }
 
 /// Запрос к языковой модели: системная инструкция и текст встречи. `max_tokens`: предел
@@ -556,6 +572,27 @@ mod tests {
         let progress: ModelDownloadProgress =
             serde_json::from_str(r#"{"phase":"waiting","done":10,"total":2293388448}"#).unwrap();
         assert_eq!(progress.total, 2_293_388_448);
+    }
+
+    #[test]
+    fn summary_status_from_kotlin_is_understood() {
+        let status: SummaryStatus = serde_json::from_str(
+            r#"{"available":true,"gpuBuilt":true,"gpuEnabled":true,"gpuDevice":"Vulkan: Adreno (TM) 740"}"#,
+        )
+        .unwrap();
+        assert!(status.available && status.gpu_built && status.gpu_enabled);
+        assert_eq!(
+            status.gpu_device.as_deref(),
+            Some("Vulkan: Adreno (TM) 740")
+        );
+        let not_loaded: SummaryStatus = serde_json::from_str(
+            r#"{"available":true,"gpuBuilt":false,"gpuEnabled":false,"gpuDevice":null}"#,
+        )
+        .unwrap();
+        assert_eq!(not_loaded.gpu_device, None);
+        // Плагин без видеокарты присылает только available.
+        let old: SummaryStatus = serde_json::from_str(r#"{"available":false}"#).unwrap();
+        assert!(!old.available && !old.gpu_built && !old.gpu_enabled);
     }
 
     #[test]

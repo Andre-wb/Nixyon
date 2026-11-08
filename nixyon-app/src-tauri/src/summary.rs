@@ -3,6 +3,7 @@
 //! на стороне ядра.
 
 pub(crate) mod answer;
+pub mod gpu;
 mod prompt;
 
 use nixyon_android::{SpeechExt, SummaryProgress, SummaryRequest};

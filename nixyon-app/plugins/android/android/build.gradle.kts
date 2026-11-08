@@ -5,6 +5,14 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Видеокарта (Vulkan) для языковой модели: сборка со свойством nixyonLlmVulkan=true
+// (ORG_GRADLE_PROJECT_nixyonLlmVulkan=true) кладёт в APK ещё libggml-vulkan.so, включается
+// она в настройках приложения. Перед такой сборкой: scripts/fetch-llama-cpp.sh --vulkan.
+val llmVulkan = providers.gradleProperty("nixyonLlmVulkan").orNull == "true"
+val llamaThirdParty = "${projectDir}/../../../../third_party/llama.cpp"
+// Тег заголовков Vulkan и SPIRV, как в scripts/fetch-llama-cpp.sh.
+val vulkanHeaders = "$llamaThirdParty/vulkan-sdk-1.4.363.0"
+
 android {
     namespace = "dev.demo.nixyon.speech"
     compileSdk = 37
@@ -26,7 +34,7 @@ android {
         externalNativeBuild {
             cmake {
                 arguments += listOf(
-                    "-DNIXYON_LLAMA_SRC=${projectDir}/../../../../third_party/llama.cpp/llama.cpp-b12005",
+                    "-DNIXYON_LLAMA_SRC=$llamaThirdParty/llama.cpp-b12005",
                     "-DCMAKE_BUILD_TYPE=Release",
                     // Библиотек C++ несколько, исключения ходят между ними: общая libc++.
                     "-DANDROID_STL=c++_shared",
@@ -40,6 +48,13 @@ android {
                     "-DGGML_OPENMP=OFF",
                     "-DGGML_CPU_KLEIDIAI=OFF",
                 )
+                if (llmVulkan) {
+                    arguments += listOf(
+                        "-DNIXYON_LLM_VULKAN=ON",
+                        "-DNIXYON_VULKAN_HEADERS=$vulkanHeaders/Vulkan-Headers",
+                        "-DNIXYON_SPIRV_HEADERS=$vulkanHeaders/SPIRV-Headers",
+                    )
+                }
                 // Без отладочных данных: выпускная сборка их и так обрезает, а в отладочной
                 // они добавляли около 100 МБ к APK, который ставится на каждой проверке.
                 cFlags += "-g0"
