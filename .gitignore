@@ -44,10 +44,7 @@ rustc-ice-*.txt
 # Локальные настройки скриптов (образец в config/example.env)
 .env
 
-# Видео и звук демонстрации не хранятся в git
-/artifacts/demo/*.mp4
-/artifacts/demo/*.mov
-/artifacts/demo/*.mkv
+# Видео демонстрации идут через Git LFS (.gitattributes), звук не хранится
 /artifacts/demo/*.wav
 
 # Служебные файлы macOS

@@ -1,10 +1,8 @@
 # Текстовые файлы — LF в репозитории, независимо от системы разработчика.
 * text=auto eol=lf
-
 # Скрипты для оболочки остаются исполняемыми.
 *.sh text eol=lf
 *.py text eol=lf
-
 # Бинарные файлы не трогаются при переносе строк.
 *.png binary
 *.jpg binary
@@ -20,3 +18,7 @@
 *.onnx binary
 *.keystore binary
 *.jks binary
+artifacts/demo/*.mp4 filter=lfs diff=lfs merge=lfs -text
+artifacts/demo/*.mov filter=lfs diff=lfs merge=lfs -text
+artifacts/demo/*.mkv filter=lfs diff=lfs merge=lfs -text
+artifacts/demo/*.webm filter=lfs diff=lfs merge=lfs -text
