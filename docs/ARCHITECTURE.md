@@ -17,8 +17,10 @@ Nixyon: Android-приложение, которое расшифровывае�
 
 ### Приложение
 
-- **Интерфейс:** HTML, CSS и JS без сборщика в `nixyon-app/ui`, тексты только в словарях
-  `nixyon-app/ui/locales/ru.json` и `en.json`.
+- **Интерфейс:** HTML, CSS и JS без сборщика в `nixyon-app/ui`, тема одна, тёмная. Тексты
+  только в словарях `nixyon-app/ui/locales/ru.json` и `en.json`; модуль ключей
+  `ui/generated/i18n.js` строит `build.rs` при сборке, копия лежит в git для макета
+  `preview/`. Устройство интерфейса описано в `nixyon-app/ui/DESIGN.md`.
 - **Ядро приложения:** Rust на Tauri 2 в `nixyon-app/src-tauri`: команды для интерфейса,
   сборка расшифровки, правка, экспорт, хранилище с шифрованием, протокол встречи.
 - **Плагин Android:** Kotlin в `nixyon-app/plugins/android/android/src/main/java`: запись,

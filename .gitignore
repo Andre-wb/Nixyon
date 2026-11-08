@@ -39,6 +39,7 @@ rustc-ice-*.txt
 # Локальный toolchain, браузерные профили проверки и промежуточные файлы APK
 /.android-build/
 /dist/*.idsig
+/dist/*.apk
 
 # Локальные настройки скриптов (образец в config/example.env)
 .env
