@@ -10,7 +10,7 @@ use nixyon_android::{
     AnalyzeProgress, AnalyzeRequest, SpeechExt, SummaryProgress, SummaryRequest, read_segments,
 };
 use nixyon_audio::{AudioError, slice_reader_to_wav16k};
-use nixyon_core::{SegmentResult, hotwords_line};
+use nixyon_core::{SegmentResult, SpeechLanguage, hotwords_line};
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime, State};
@@ -31,14 +31,31 @@ const MAX_CHECK_CHARS: usize = 800;
 const CHECK_MAX_TOKENS: u32 = 512;
 
 /// Инструкция модели: сверить записанный текст с повторным распознаванием и вернуть
-/// один итоговый текст фразы. Инструкция русская при любом языке интерфейса, как и
-/// инструкция протокола встречи.
+/// один итоговый текст фразы. Инструкция на языке встречи при любом языке интерфейса,
+/// как и инструкция протокола встречи; это русская.
 const SYSTEM: &str = "Ты сверяешь текст одной фразы с её повторным распознаванием по звуку. \
 Даны два варианта: «Расшифровка», как фраза записана сейчас, и «Распознано», как её \
 услышал распознаватель заново. Брать исправления из «Распознано» можно только там, где \
 видно ошибку распознавания или опечатку; сомнительные различия оставляй как в расшифровке. \
 Сохраняй язык, смысл и знаки препинания. Ответь одной строкой: итоговым текстом фразы, \
 без пояснений, кавычек и номеров. Если ошибок нет, повтори текст расшифровки.";
+
+/// Та же инструкция для английской встречи: перевод русской один в один.
+const SYSTEM_EN: &str = "You compare the text of one phrase with its repeated recognition \
+from the audio. Two versions are given: \"Transcript\", how the phrase is written now, and \
+\"Recognized\", how the recognizer heard it again. Take corrections from \"Recognized\" only \
+where a recognition error or a typo is evident; leave doubtful differences as in the \
+transcript. Keep the language, the meaning and the punctuation. Answer with one line: the \
+final text of the phrase, without explanations, quotes or numbers. If there are no errors, \
+repeat the transcript text.";
+
+/// Инструкция проверки на языке встречи.
+fn system(language: SpeechLanguage) -> &'static str {
+    match language {
+        SpeechLanguage::Ru => SYSTEM,
+        SpeechLanguage::En => SYSTEM_EN,
+    }
+}
 
 /// Стадия повторной обработки.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -213,7 +230,8 @@ pub async fn reprocess_turn<R: Runtime>(
     // Языковая модель проверяет только эту фразу и только если она есть на устройстве;
     // без неё или при слишком длинной фразе остаётся результат повторного
     // распознавания, и лимит модели не тратится вовсе.
-    let correction = if let Some(user) = check_prompt(&app, &turn.text, &recognized).await {
+    let correction = if let Some(user) = check_prompt(&app, language, &turn.text, &recognized).await
+    {
         if cancelled(&listen_slot, &check_slot) {
             return Err(CommandError::new(CommandError::CANCELLED));
         }
@@ -221,11 +239,10 @@ pub async fn reprocess_turn<R: Runtime>(
         match app
             .speech()
             .summarize(SummaryRequest {
-                system: SYSTEM.to_owned(),
+                system: system(language).to_owned(),
                 user,
                 max_tokens: CHECK_MAX_TOKENS,
-                // Инструкция русская, ответ ждём по-русски.
-                language: nixyon_core::SpeechLanguage::Ru,
+                language,
                 on_progress: Channel::new(move |body| {
                     if let InvokeResponseBody::Json(text) = body
                         && let Ok(p) = serde_json::from_str::<SummaryProgress>(&text)
@@ -291,6 +308,7 @@ fn joined_text(mut segments: Vec<SegmentResult>) -> String {
 /// стоила бы дороже самой фразы и лимит тратится не на то.
 async fn check_prompt<R: Runtime>(
     app: &AppHandle<R>,
+    language: SpeechLanguage,
     current: &str,
     recognized: &str,
 ) -> Option<String> {
@@ -309,12 +327,16 @@ async fn check_prompt<R: Runtime>(
         log::info!("фраза длиннее {MAX_CHECK_CHARS} знаков, проверка моделью пропущена");
         return None;
     }
-    Some(prompt(current, recognized))
+    Some(prompt(language, current, recognized))
 }
 
-/// Оба варианта фразы целиком: модель сверяет их между собой.
-fn prompt(current: &str, recognized: &str) -> String {
-    format!("Расшифровка: {current}\nРаспознано: {recognized}")
+/// Оба варианта фразы целиком: модель сверяет их между собой. Подписи вариантов те же,
+/// что в инструкции на языке встречи.
+fn prompt(language: SpeechLanguage, current: &str, recognized: &str) -> String {
+    match language {
+        SpeechLanguage::Ru => format!("Расшифровка: {current}\nРаспознано: {recognized}"),
+        SpeechLanguage::En => format!("Transcript: {current}\nRecognized: {recognized}"),
+    }
 }
 
 /// Ответ модели: один текст фразы. Модель может обернуть его в кавычки или написать
@@ -415,8 +437,27 @@ mod tests {
     #[test]
     fn prompt_shows_both_variants_of_the_phrase() {
         assert_eq!(
-            prompt("текст", "тест"),
+            prompt(SpeechLanguage::Ru, "текст", "тест"),
             "Расшифровка: текст\nРаспознано: тест"
         );
+    }
+
+    #[test]
+    fn english_meeting_is_checked_in_english() {
+        assert_eq!(
+            prompt(SpeechLanguage::En, "the text", "the test"),
+            "Transcript: the text\nRecognized: the test"
+        );
+        assert!(system(SpeechLanguage::En).starts_with("You compare"));
+        assert!(system(SpeechLanguage::Ru).starts_with("Ты сверяешь"));
+        // Подписи запроса названы в инструкции, иначе модель не поймёт, где какой вариант.
+        for (language, labels) in [
+            (SpeechLanguage::Ru, ["«Расшифровка»", "«Распознано»"]),
+            (SpeechLanguage::En, ["\"Transcript\"", "\"Recognized\""]),
+        ] {
+            for label in labels {
+                assert!(system(language).contains(label), "{label}");
+            }
+        }
     }
 }

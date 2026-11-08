@@ -1,3 +1,4 @@
+use nixyon_core::SpeechLanguage;
 use rust_stemmers::{Algorithm, Stemmer};
 
 use super::typo_distance::{allowed_typos, typo_distance};
@@ -29,9 +30,15 @@ pub(crate) struct WordMatcher {
 }
 
 impl WordMatcher {
-    pub fn russian() -> Self {
+    /// Основы слов считаются по правилам языка встречи: русский стеммер не знает
+    /// английских окончаний, и наоборот.
+    pub fn of(language: SpeechLanguage) -> Self {
+        let algorithm = match language {
+            SpeechLanguage::Ru => Algorithm::Russian,
+            SpeechLanguage::En => Algorithm::English,
+        };
         WordMatcher {
-            stemmer: Stemmer::create(Algorithm::Russian),
+            stemmer: Stemmer::create(algorithm),
         }
     }
 
@@ -88,7 +95,7 @@ mod tests {
     use crate::search::word_tokens::normalize;
 
     fn kind(query: &str, text: &str) -> Option<MatchKind> {
-        let m = WordMatcher::russian();
+        let m = WordMatcher::of(SpeechLanguage::Ru);
         let q = m.query_word(normalize(query));
         let norm = normalize(text);
         let stem = m.stem(&norm);

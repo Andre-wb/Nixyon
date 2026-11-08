@@ -22,9 +22,10 @@ pub struct SearchHit {
 /// Ищет фразу запроса в текстах реплик: слова запроса подряд и по порядку. Регистр и
 /// разница ё и е не важны, знаки препинания пропускаются. Слово совпадает точно (то же
 /// слово или его начало) или нечётко (та же основа, опечатка). Сначала идут точные
-/// совпадения, затем нечёткие; внутри каждой группы по порядку ходов.
+/// совпадения, затем нечёткие; внутри каждой группы по порядку ходов. Основу слова и
+/// запроса задаёт язык встречи.
 pub fn search(transcript: &Transcript, query: &str) -> Vec<SearchHit> {
-    let matcher = WordMatcher::russian();
+    let matcher = WordMatcher::of(transcript.language);
     let query: Vec<QueryWord> = word_tokens(query)
         .into_iter()
         .map(|w| matcher.query_word(w.norm))
@@ -83,12 +84,34 @@ fn phrase_hits(
 mod tests {
     use super::*;
     use crate::test_support::transcript;
+    use nixyon_core::SpeechLanguage;
 
     fn found(turns: &[(u32, f64, f64, &str)], query: &str) -> Vec<(u32, usize, usize, MatchKind)> {
         search(&transcript(turns), query)
             .into_iter()
             .map(|h| (h.turn_id, h.start, h.end, h.kind))
             .collect()
+    }
+
+    #[test]
+    fn english_meeting_finds_other_forms_of_an_english_word() {
+        let mut t = transcript(&[
+            (1, 0.0, 1.0, "We run the tests every day."),
+            (2, 1.0, 2.0, "Everyone agreed on the plan."),
+        ]);
+        t.language = SpeechLanguage::En;
+        let kinds = |t: &Transcript, query: &str| -> Vec<(u32, MatchKind)> {
+            search(t, query)
+                .into_iter()
+                .map(|h| (h.turn_id, h.kind))
+                .collect()
+        };
+        assert_eq!(kinds(&t, "running"), [(1, MatchKind::Fuzzy)]);
+        assert_eq!(kinds(&t, "agreeing"), [(2, MatchKind::Fuzzy)]);
+        assert_eq!(kinds(&t, "plans"), [(2, MatchKind::Fuzzy)]);
+        // Русская встреча считает основы по-русски, английские формы там не сходятся.
+        t.language = SpeechLanguage::Ru;
+        assert!(kinds(&t, "running").is_empty());
     }
 
     #[test]
