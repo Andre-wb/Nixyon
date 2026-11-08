@@ -18,7 +18,3 @@
 *.onnx binary
 *.keystore binary
 *.jks binary
-artifacts/demo/*.mp4 filter=lfs diff=lfs merge=lfs -text
-artifacts/demo/*.mov filter=lfs diff=lfs merge=lfs -text
-artifacts/demo/*.mkv filter=lfs diff=lfs merge=lfs -text
-artifacts/demo/*.webm filter=lfs diff=lfs merge=lfs -text
