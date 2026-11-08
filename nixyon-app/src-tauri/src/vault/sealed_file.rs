@@ -52,6 +52,13 @@ pub fn seal_in_place(path: &Path, key: &Arc<DataKey>) -> std::io::Result<()> {
     replace_with(path, key, |w| std::io::copy(&mut plain, w).map(|_| ()))
 }
 
+/// Содержимое открытого файла `source` заменяет `path` зашифрованным, целиком или не
+/// заменяет вовсе. `source` остаётся как был.
+pub fn replace_from(path: &Path, key: &Arc<DataKey>, source: &Path) -> std::io::Result<()> {
+    let mut plain = BufReader::new(File::open(source)?);
+    replace_with(path, key, |w| std::io::copy(&mut plain, w).map(|_| ()))
+}
+
 fn replace_with(
     path: &Path,
     key: &Arc<DataKey>,
@@ -126,6 +133,24 @@ mod tests {
         assert!(!d.join("a.json.part").exists());
         assert!(first_chunk_opens(&path, &key).unwrap());
         assert!(!first_chunk_opens(&path, &test_key(2)).unwrap());
+    }
+
+    #[test]
+    fn a_file_is_replaced_by_another_sealed_or_kept_when_the_source_is_missing() {
+        let d = dir("replace");
+        let key = Arc::new(test_key(1));
+        let path = d.join("rec.wav");
+        write_atomic(&path, &key, b"old").unwrap();
+        let source = d.join("plain.wav");
+        let new: Vec<u8> = (0..CHUNK + 3).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&source, &new).unwrap();
+        replace_from(&path, &key, &source).unwrap();
+        assert!(is_sealed(&path).unwrap());
+        assert_eq!(read_bytes(&path, &key).unwrap(), new);
+        assert_eq!(std::fs::read(&source).unwrap(), new);
+        assert!(replace_from(&path, &key, &d.join("missing.wav")).is_err());
+        assert_eq!(read_bytes(&path, &key).unwrap(), new);
+        assert!(!d.join("rec.wav.part").exists());
     }
 
     #[test]

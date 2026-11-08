@@ -17,4 +17,17 @@ object Pcm16 {
         bytes[at] = (sample and 0xff).toByte()
         bytes[at + 1] = (sample shr 8).toByte()
     }
+
+    // Сводит кадры из channels каналов в моно средним, на месте: моно пишется в начало
+    // bytes. Возвращает длину моно в байтах; неполный кадр в конце отбрасывается.
+    fun downmix(bytes: ByteArray, length: Int, channels: Int): Int {
+        if (channels <= 1) return length
+        val frames = length / (2 * channels)
+        for (f in 0 until frames) {
+            var sum = 0
+            for (c in 0 until channels) sum += get(bytes, (f * channels + c) * 2)
+            put(bytes, f * 2, sum / channels)
+        }
+        return frames * 2
+    }
 }

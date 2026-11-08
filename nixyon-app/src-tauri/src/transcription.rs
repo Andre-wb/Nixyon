@@ -19,7 +19,7 @@ use nixyon_android::{
     AnalyzeProgress, AnalyzeRequest, AnalyzeSummary, SpeechExt, read_overlaps, read_segments,
     read_spans,
 };
-use nixyon_audio::{TARGET_SAMPLE_RATE, convert_reader_to_wav16k};
+use nixyon_audio::{TARGET_SAMPLE_RATE, convert_reader_to_wav16k_and_plain};
 use nixyon_core::{
     AudioInfo, EngineInfo, ModelOverlaps, NEURAL_BLOCK_SEC, SpeechLanguage, Transcript,
     hotwords_line, rfc3339_utc,
@@ -83,11 +83,13 @@ pub async fn transcribe<R: Runtime>(
         .map_or(0, |d| d.as_millis());
     let cache = Path::new(&dirs.cache);
     let wav = cache.join(format!("nixyon-{stamp}.wav"));
+    let plain = cache.join(format!("nixyon-{stamp}.plain.wav"));
     let segments_file = cache.join(format!("nixyon-{stamp}.segments.json"));
     let spans_file = cache.join(format!("nixyon-{stamp}.spans.json"));
     let overlaps_file = cache.join(format!("nixyon-{stamp}.overlaps.json"));
     let _temp = TempFiles::new(vec![
         wav.clone(),
+        plain.clone(),
         segments_file.clone(),
         spans_file.clone(),
         overlaps_file.clone(),
@@ -98,16 +100,28 @@ pub async fn transcribe<R: Runtime>(
         done_sec: 0.0,
         total_sec: 0.0,
     });
-    let (input_for_convert, wav_for_convert) = (input.clone(), wav.clone());
+    let (input_for_convert, wav_for_convert, plain_for_convert) =
+        (input.clone(), wav.clone(), plain.clone());
     let key = std::sync::Arc::clone(store.key());
     let report = tauri::async_runtime::spawn_blocking(move || {
         let source = crate::vault::open_read(&input_for_convert, &key)?;
-        convert_reader_to_wav16k(source, &wav_for_convert)
+        convert_reader_to_wav16k_and_plain(source, &wav_for_convert, &plain_for_convert)
     })
     .await
     .map_err(|e| CommandError::logged(CommandError::BAD_AUDIO, e))?
     .map_err(|e| CommandError::logged(CommandError::BAD_AUDIO, e))?;
     let warnings = quality::check_quality(&report)?;
+    // Запись встречи хранится в 16 кГц моно без выравнивания громкости: импорт 48 кГц или
+    // запись с микрофона на 48 кГц иначе занимали бы втрое больше. Не заменилась: остаётся
+    // исходная, расшифровка от этого не зависит.
+    let (input_for_store, key_for_store) = (input.clone(), std::sync::Arc::clone(store.key()));
+    let stored = tauri::async_runtime::spawn_blocking(move || {
+        crate::vault::replace_from(&input_for_store, &key_for_store, &plain)
+    })
+    .await;
+    if let Err(e) | Ok(Err(e)) = stored.map_err(std::io::Error::other) {
+        log::warn!("запись не переведена в 16 кГц, хранится исходная: {e}");
+    }
     if cancel.is_cancelled() {
         return Err(CommandError::new(CommandError::CANCELLED));
     }

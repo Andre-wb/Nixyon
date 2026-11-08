@@ -15,8 +15,8 @@ mod wav_writer;
 mod test_support;
 
 pub use convert::{
-    TARGET_SAMPLE_RATE, convert_reader_to_wav16k, convert_to_wav16k, slice_reader_to_wav16k,
-    slice_to_wav16k,
+    TARGET_SAMPLE_RATE, convert_reader_to_wav16k, convert_reader_to_wav16k_and_plain,
+    convert_to_wav16k, slice_reader_to_wav16k, slice_to_wav16k,
 };
 pub use error::AudioError;
 pub use level::{dbfs, rms};

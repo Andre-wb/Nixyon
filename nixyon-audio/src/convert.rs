@@ -24,12 +24,35 @@ pub fn convert_reader_to_wav16k(
     input: impl Read,
     output: &Path,
 ) -> Result<QualityReport, AudioError> {
+    convert_reader(input, output, None)
+}
+
+/// То же и ещё `plain`: та же запись в 16 кГц моно, но без выравнивания громкости, как её
+/// слышно на самом деле. Её хранят вместо исходной: 8 часов занимают около 0,9 ГБ при
+/// любой частоте и числе каналов исходной записи.
+pub fn convert_reader_to_wav16k_and_plain(
+    input: impl Read,
+    output: &Path,
+    plain: &Path,
+) -> Result<QualityReport, AudioError> {
+    convert_reader(input, output, Some(plain))
+}
+
+fn convert_reader(
+    input: impl Read,
+    output: &Path,
+    plain: Option<&Path>,
+) -> Result<QualityReport, AudioError> {
     let raw = output.with_extension("wav.raw.part");
     let tmp = output.with_extension("wav.part");
     let result = convert(input, &raw, &tmp);
-    // Промежуточный файл не нужен ни при успехе, ни при ошибке; его может и не быть.
+    let kept = match (&result, plain) {
+        (Ok(_), Some(plain)) => std::fs::rename(&raw, plain).map_err(AudioError::from),
+        _ => Ok(()),
+    };
+    // Промежуточный файл больше не нужен; его может и не быть.
     let _ = std::fs::remove_file(&raw);
-    match result {
+    match result.and_then(|report| kept.map(|()| report)) {
         Ok(report) => {
             std::fs::rename(&tmp, output)?;
             Ok(report)
@@ -253,6 +276,50 @@ mod tests {
             quiet_after > -30.0,
             "тихая часть после выравнивания {quiet_after:.1} дБ"
         );
+    }
+
+    #[test]
+    fn plain_copy_is_16k_mono_without_level_changes() {
+        let dir = TempDir::new("convert-plain");
+        let input = dir.path().join("in.wav");
+        // Как в соседнем тесте: громкий собеседник, пауза со слабым шумом, тихий.
+        // Выравнивание поднимет тихого, в простой копии он той же громкости.
+        let mut samples = sine(48_000, 300.0, 0.5, 2.0);
+        samples.extend((0..24_000).map(|i| if i % 2 == 0 { 0.0003 } else { -0.0003 }));
+        samples.extend(sine(48_000, 200.0, 0.01, 3.0));
+        let pcm: Vec<i16> = samples
+            .iter()
+            .flat_map(|s| {
+                let v = (s * 32_767.0) as i16;
+                [v, v]
+            })
+            .collect();
+        std::fs::write(&input, WavBytes::pcm16(48_000, 2, &pcm).build()).unwrap();
+
+        let output = dir.path().join("out.wav");
+        let plain = dir.path().join("plain.wav");
+        let file = File::open(&input).unwrap();
+        convert_reader_to_wav16k_and_plain(file, &output, &plain).unwrap();
+
+        let (format, kept) = read_all(&std::fs::read(&plain).unwrap()).unwrap();
+        assert_eq!((format.sample_rate, format.channels), (16_000, 1));
+        assert_eq!(kept.len(), 88_000);
+        let (_, leveled) = read_all(&std::fs::read(&output).unwrap()).unwrap();
+        // Дальше окрестности громкой речи: 4,2-5,5 с.
+        let quiet = |s: &[f32]| crate::dbfs(crate::rms(&s[67_200..88_000]));
+        assert!((quiet(&kept) + 43.0).abs() < 1.5, "{}", quiet(&kept));
+        assert!(quiet(&leveled) > -30.0, "{}", quiet(&leveled));
+        assert!(!dir.path().join("out.wav.raw.part").exists());
+    }
+
+    #[test]
+    fn plain_copy_is_not_left_behind_when_conversion_fails() {
+        let dir = TempDir::new("convert-plain-bad");
+        let output = dir.path().join("out.wav");
+        let plain = dir.path().join("plain.wav");
+        assert!(convert_reader_to_wav16k_and_plain(&b"not a wav"[..], &output, &plain).is_err());
+        assert!(!plain.exists());
+        assert!(!output.exists());
     }
 
     #[test]

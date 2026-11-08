@@ -31,7 +31,7 @@ class RecordingsDir(filesDir: File) : RecordingTarget(File(filesDir, "recordings
     }
 
     companion object {
-        const val MAX_SECONDS = 3 * 60 * 60
+        const val MAX_SECONDS = 8 * 60 * 60
 
         // Префикс файлов записей с микрофона; у импорта свой, "imp".
         const val RECORDING_PREFIX = "rec"

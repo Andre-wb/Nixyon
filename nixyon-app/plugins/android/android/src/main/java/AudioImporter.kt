@@ -14,7 +14,8 @@ class ImportResult(val path: String, val durationSec: Double, val name: String)
 
 // Импорт звука из файла, выбранного пользователем: Android раскодирует его сам
 // (m4a/AAC, mp3, wav, ogg/opus, flac и что ещё умеет устройство) в PCM 16 бит с
-// исходной частотой и каналами, а в 16 кГц моно его переводит ядро.
+// исходной частотой, каналы сводятся в моно средним, а в 16 кГц его переводит ядро. Моно
+// вдвое короче стерео: 8 часов на 48 кГц остаются в пределе размера WAV (4 ГБ).
 class AudioImporter(
     private val context: Context,
     private val recordings: RecordingsDir,
@@ -31,9 +32,13 @@ class AudioImporter(
         var codec: MediaCodec? = null
         val part = recordings.newPart("imp")
         var writer: WavPcm16Writer? = null
-        // Частоту и каналы WAV берёт из формата, который отдаёт декодер.
-        fun newWriter(f: MediaFormat) =
-            WavPcm16Writer(part, keys.get(), f.getInteger(MediaFormat.KEY_SAMPLE_RATE), f.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
+        // Частоту WAV берёт из формата, который отдаёт декодер; каналы декодера помнит для
+        // сведения в моно.
+        var channels = 1
+        fun newWriter(f: MediaFormat): WavPcm16Writer {
+            channels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            return WavPcm16Writer(part, keys.get(), f.getInteger(MediaFormat.KEY_SAMPLE_RATE), 1)
+        }
         try {
             try {
                 extractor.setDataSource(context, uri, null)
@@ -47,7 +52,7 @@ class AudioImporter(
             val format = extractor.getTrackFormat(track)
             val mime = format.getString(MediaFormat.KEY_MIME)!!
             val totalSec = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) / 1e6 else 0.0
-            if (totalSec > RecordingsDir.MAX_SECONDS) throw MediaException(MediaException.TOO_LONG, "файл длиннее 3 часов")
+            if (totalSec > RecordingsDir.MAX_SECONDS) throw MediaException(MediaException.TOO_LONG, "файл длиннее 8 часов")
             codec = try {
                 MediaCodec.createDecoderByType(mime).also { it.configure(format, null, null, 0) }
             } catch (e: Exception) {
@@ -99,13 +104,15 @@ class AudioImporter(
                                     Pcm16.put(chunk, i, Pcm16.fromFloat(floats.get()))
                                     i += 2
                                 }
-                                w.write(chunk, i)
+                                w.write(chunk, Pcm16.downmix(chunk, i, channels))
                             } else {
                                 if (chunk.size < info.size) chunk = ByteArray(info.size)
                                 buffer.get(chunk, 0, info.size)
-                                w.write(chunk, info.size)
+                                w.write(chunk, Pcm16.downmix(chunk, info.size, channels))
                             }
-                            if (w.durationSec > RecordingsDir.MAX_SECONDS) throw MediaException(MediaException.TOO_LONG, "файл длиннее 3 часов")
+                            if (w.durationSec > RecordingsDir.MAX_SECONDS) throw MediaException(MediaException.TOO_LONG, "файл длиннее 8 часов")
+                            // Частота выше 74 кГц за 8 часов переполнила бы размер WAV.
+                            if (w.dataBytes > WavPcm16Writer.MAX_DATA_BYTES) throw MediaException(MediaException.TOO_LONG, "звук больше предела WAV")
                             val now = System.currentTimeMillis()
                             if (now - lastReport >= REPORT_EVERY_MS) {
                                 if (!recordings.hasRoom()) throw MediaException(MediaException.STORAGE_LOW, "кончается место")

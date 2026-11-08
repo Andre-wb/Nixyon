@@ -39,6 +39,8 @@ class WavPcm16Writer(
     companion object {
         const val HEADER_BYTES = 44
         private const val UINT32_MAX = 0xFFFF_FFFFL
+        // Больше данных размер в заголовке WAV не вмещает: файл прочитался бы не целиком.
+        const val MAX_DATA_BYTES = UINT32_MAX - 36
 
         fun header(sampleRate: Int, channels: Int, dataBytes: Long): ByteArray {
             val h = ByteBuffer.allocate(HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN)

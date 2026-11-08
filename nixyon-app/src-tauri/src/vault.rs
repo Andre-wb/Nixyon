@@ -26,7 +26,7 @@ pub use files_store::FilesStore;
 #[cfg(test)]
 pub use files_store::test_store;
 pub use prepare::RECORDINGS_DIR;
-pub use sealed_file::open_read;
+pub use sealed_file::{open_read, replace_from};
 
 /// Ключ данных после первой подготовки хранилища; до неё `None`.
 #[derive(Default)]
