@@ -27,8 +27,15 @@ rustc-ice-*.txt
 /third_party/
 /models/
 
-# Модуль ключей словаря для интерфейса: его строит build.rs приложения
-/nixyon-app/ui/generated/
+# Модуль ключей словаря строит build.rs при каждой сборке приложения. В репозитории
+# лежит готовая копия: её же создаёт preview/build_i18n.py, поэтому дизайн-превью и
+# design-preview APK собираются без Rust. Остальное в папке — сборочный мусор.
+/nixyon-app/ui/generated/*
+!/nixyon-app/ui/generated/i18n.js
 
 # Настройки IDE
 /.idea/
+
+# Локальный toolchain, браузерные профили проверки и промежуточные файлы APK
+/.android-build/
+/dist/*.idsig

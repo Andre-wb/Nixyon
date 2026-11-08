@@ -220,6 +220,7 @@ export async function initModels(promptSeen) {
   $("models-download").addEventListener("click", download);
   $("models-cancel").addEventListener("click", () => invoke("cancel_model_download").catch(() => null));
   $("models-later").addEventListener("click", leave);
+  $("models-back").addEventListener("click", leave);
   onLanguageChange(render);
   await refresh();
   // Сразу отмечены все необязательные модели: так после загрузки работает всё.

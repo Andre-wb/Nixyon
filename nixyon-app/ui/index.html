@@ -1,49 +1,173 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#101112">
   <title>Nixyon</title>
-  <script src="js/theme-early.js"></script>
   <link rel="stylesheet" href="styles.css">
+  <script src="js/boot.js"></script>
   <script src="js/app.js" type="module"></script>
 </head>
 <body>
-  <!-- Экран блокировки: пока ключ данных не открыт отпечатком, остальное приложение
-       не начинает работу. Отмена не закрывает приложение, а оставляет кнопку повтора. -->
-  <div class="lock" id="lock" role="dialog" aria-modal="true" aria-labelledby="lock-title" hidden>
-    <div class="lock-body">
-      <h1 class="title" id="lock-title" data-i18n="lock.title"></h1>
-      <p class="meta" data-i18n="lock.hint"></p>
-      <p class="error" id="lock-error" role="alert"></p>
-      <button class="button button-primary wide" id="lock-retry" type="button" data-i18n="lock.open"></button>
-      <button class="button button-danger wide" id="lock-reset" type="button" data-i18n="lock.reset" hidden></button>
-    </div>
+  <svg class="svg-defs" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="feather-fill" x1="14" y1="58" x2="50" y2="10" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#4F90DE"/>
+        <stop offset="0.55" stop-color="#8BBEFF"/>
+        <stop offset="1" stop-color="#EDF6FF"/>
+      </linearGradient>
+      <mask id="feather-cut">
+        <path d="M48.2 9.4c-12.4.6-22.6 9.2-27.6 22.4-1.8 4.6-3.4 9.4-5 13.6l9.4-2.4c14.2-4 24.6-14.8 27.6-28.6.3-1.7.4-5.2-4.4-5Z" fill="white"/>
+        <g fill="black">
+          <rect x="20.4" y="34.5" width="3" height="7" rx="1.5"/>
+          <rect x="25.6" y="25.7" width="3.2" height="13" rx="1.6"/>
+          <rect x="30.8" y="17.9" width="3.4" height="17" rx="1.7"/>
+          <rect x="36" y="16" width="3.2" height="12" rx="1.6"/>
+          <rect x="41.2" y="13.2" width="3" height="6" rx="1.5"/>
+        </g>
+      </mask>
+      <symbol id="feather-mark" viewBox="0 0 64 64">
+        <path d="M48.2 9.4c-12.4.6-22.6 9.2-27.6 22.4-1.8 4.6-3.4 9.4-5 13.6l9.4-2.4c14.2-4 24.6-14.8 27.6-28.6.3-1.7.4-5.2-4.4-5Z" fill="url(#feather-fill)" mask="url(#feather-cut)"/>
+        <path d="M17.4 44.6 11.6 54.8" stroke="url(#feather-fill)" stroke-width="1.9" stroke-linecap="round"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient__base"></div>
+    <div class="ambient__glow ambient__glow--one"></div>
+    <div class="ambient__glow ambient__glow--two"></div>
+    <div class="ambient__glow ambient__glow--three"></div>
+    <div class="ambient__sphere ambient__sphere--one"></div>
+    <div class="ambient__sphere ambient__sphere--two"></div>
+    <div class="ambient__sphere ambient__sphere--three"></div>
+    <div class="ambient__sphere ambient__sphere--four"></div>
+    <svg class="ambient__waves" viewBox="0 0 1440 900" preserveAspectRatio="none" focusable="false">
+      <g fill="none" stroke="rgba(139, 190, 255, 0.10)" stroke-width="1">
+        <path d="M-120 700C160 570 340 820 680 700S1140 520 1560 690"/>
+        <path d="M-120 742C160 612 340 862 680 742S1140 562 1560 732"/>
+        <path d="M-120 784C160 654 340 904 680 784S1140 604 1560 774"/>
+      </g>
+      <g fill="none" stroke="rgba(255, 255, 255, 0.045)" stroke-width="1">
+        <path d="M-80 250C220 130 430 340 760 230S1200 84 1560 214"/>
+        <path d="M-80 292C220 172 430 382 760 272S1200 126 1560 256"/>
+      </g>
+    </svg>
+    <div class="ambient__grain"></div>
+    <div class="ambient__vignette"></div>
   </div>
-  <dialog class="alert" id="lock-reset-confirm" aria-labelledby="lock-reset-text">
-    <p id="lock-reset-text" data-i18n="lock.reset_confirm"></p>
-    <div class="alert-actions">
-      <button class="button button-secondary" id="lock-reset-no" type="button" data-i18n="common.cancel"></button>
-      <button class="button button-danger" id="lock-reset-yes" type="button" data-i18n="lock.reset_do"></button>
-    </div>
-  </dialog>
+
   <main>
+    <!-- Первый запуск: короткая инструкция вместо входа. Всё работает на телефоне,
+         профиля и PIN нет; экран показывается один раз, «Продолжить» возвращает к нему
+         тогда, когда пользователь сам откроет инструкцию из настроек. -->
+    <section class="screen onboard-screen" id="screen-onboarding" aria-labelledby="onboard-title" hidden>
+      <div class="onboard-orbs" aria-hidden="true">
+        <span class="onboard-orb onboard-orb--one"></span>
+        <span class="onboard-orb onboard-orb--two"></span>
+        <span class="onboard-orb onboard-orb--three"></span>
+        <span class="onboard-orb onboard-orb--four"></span>
+      </div>
+      <div class="onboard-shell">
+        <div class="onboard-brand">
+          <span class="onboard-logo" aria-hidden="true">
+            <svg viewBox="0 0 64 64"><use href="#feather-mark"></use></svg>
+          </span>
+          <span class="onboard-brand__type">
+            <span class="brand__name">NIXYON</span>
+            <span class="brand__tagline">AUDIO INTELLIGENCE</span>
+          </span>
+        </div>
+        <div class="onboard-card">
+          <div class="onboard-copy">
+            <p class="eyebrow" data-i18n="onboard.eyebrow"></p>
+            <h1 class="title onboard-title" id="onboard-title" data-i18n="onboard.title"></h1>
+            <p class="onboard-note" data-i18n="onboard.copy"></p>
+          </div>
+          <ol class="onboard-steps">
+            <li class="onboard-step">
+              <span class="onboard-step__mark" aria-hidden="true">1</span>
+              <span class="onboard-step__body">
+                <span class="onboard-step__title" data-i18n="onboard.step_record_title"></span>
+                <span class="onboard-step__text" data-i18n="onboard.step_record_text"></span>
+              </span>
+            </li>
+            <li class="onboard-step">
+              <span class="onboard-step__mark" aria-hidden="true">2</span>
+              <span class="onboard-step__body">
+                <span class="onboard-step__title" data-i18n="onboard.step_text_title"></span>
+                <span class="onboard-step__text" data-i18n="onboard.step_text_text"></span>
+              </span>
+            </li>
+            <li class="onboard-step">
+              <span class="onboard-step__mark" aria-hidden="true">3</span>
+              <span class="onboard-step__body">
+                <span class="onboard-step__title" data-i18n="onboard.step_result_title"></span>
+                <span class="onboard-step__text" data-i18n="onboard.step_result_text"></span>
+              </span>
+            </li>
+          </ol>
+          <button class="button button-primary wide" id="onboard-continue" type="button" data-i18n="onboard.continue"></button>
+          <p class="onboard-fine" data-i18n="onboard.fine"></p>
+        </div>
+        <p class="privacy-hint">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          <span data-i18n="onboard.local_only"></span>
+        </p>
+      </div>
+    </section>
+
     <section class="screen" id="screen-home" aria-labelledby="home-title" hidden>
-      <header class="bar">
-        <h1 id="home-title" class="title">Nixyon</h1>
-        <button class="icon-button" id="open-settings" type="button" data-i18n-label="settings.open">
-          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-        </button>
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true">
+            <svg class="brand__logo" viewBox="0 0 64 64"><use href="#feather-mark"></use></svg>
+          </span>
+          <span class="brand__type">
+            <span class="brand__name">NIXYON</span>
+            <span class="brand__tagline">AUDIO INTELLIGENCE</span>
+          </span>
+        </div>
+        <div class="topbar__actions">
+          <span class="status-chip">
+            <span class="status-chip__dot" aria-hidden="true"></span>
+            <span data-i18n="home.local"></span>
+          </span>
+          <button class="icon-button icon-button--glass" id="open-settings" type="button" data-i18n-label="settings.open">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+          </button>
+        </div>
       </header>
 
-      <div class="notice info" id="models-missing" hidden>
-        <p data-i18n="models.missing"></p>
-        <button class="button button-primary" id="models-open" type="button" data-i18n="models.missing_download"></button>
+      <div class="hero">
+        <p class="eyebrow" data-i18n="home.eyebrow"></p>
+        <h1 id="home-title" class="hero-title" data-i18n="home.hero_title"></h1>
+        <p class="hero-copy" data-i18n="home.hero_subtitle"></p>
       </div>
 
-      <div class="group" id="count-group">
-        <h2 class="group-title" id="count-title" data-i18n="home.count_label"></h2>
+      <!-- Моделей речи нет: вместо записи и выбора файла видна только загрузка. -->
+      <div class="notice info" id="models-missing" hidden>
+        <span class="notice__icon" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg>
+        </span>
+        <div class="notice__body">
+          <p data-i18n="models.missing"></p>
+          <button class="button button-plain" id="models-open" type="button" data-i18n="models.missing_download"></button>
+        </div>
+      </div>
+
+      <section class="panel participants-panel" id="count-group" aria-labelledby="count-title">
+        <div class="panel__head">
+          <div class="panel__copy">
+            <h2 class="panel__title" id="count-title" data-i18n="home.count_label"></h2>
+            <p class="fine" data-i18n="home.count_hint"></p>
+          </div>
+          <span class="panel__mark" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M16 20v-1.7a3.3 3.3 0 0 0-3.3-3.3H6.3A3.3 3.3 0 0 0 3 18.3V20"/><circle cx="9.5" cy="7.5" r="3.5"/><path d="M17 11a3.5 3.5 0 0 0 0-7M21 20v-1.7a3.3 3.3 0 0 0-2.5-3.2"/></svg>
+          </span>
+        </div>
         <div class="count" role="group" aria-labelledby="count-title">
           <button class="chip" id="count-unknown" type="button" aria-pressed="true" data-i18n="home.count_unknown"></button>
           <div class="stepper">
@@ -56,18 +180,26 @@
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="recorder" id="recorder">
-        <div class="record-wrap">
-          <span class="level-ring" id="level-ring" aria-hidden="true"></span>
-          <button class="record" id="record" type="button" aria-describedby="record-label">
-            <svg class="icon icon-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
-            <svg class="icon icon-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
-          </button>
+      <section class="recorder" id="recorder">
+        <div class="record-stage">
+          <span class="record-orbit record-orbit--outer" aria-hidden="true"></span>
+          <span class="record-orbit record-orbit--inner" aria-hidden="true"></span>
+          <span class="record-glow" aria-hidden="true"></span>
+          <div class="record-wrap">
+            <span class="level-ring" id="level-ring" aria-hidden="true"></span>
+            <button class="record" id="record" type="button" aria-describedby="record-label">
+              <svg class="icon icon-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+              <svg class="icon icon-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2.5"/></svg>
+            </button>
+          </div>
         </div>
-        <p class="record-label" id="record-label" data-i18n="home.record"></p>
-        <p class="timer" id="timer" hidden></p>
+        <div class="record-copy">
+          <p class="record-label" id="record-label" data-i18n="home.record"></p>
+          <p class="record-hint" id="record-hint" data-i18n="home.record_hint"></p>
+          <p class="timer" id="timer" hidden></p>
+        </div>
         <button class="button button-secondary record-pause" id="record-pause" type="button" hidden>
           <svg class="icon icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>
           <svg class="icon icon-resume" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>
@@ -77,46 +209,86 @@
           <div class="live-lines"></div>
           <p class="live-note" data-i18n="live.draft"></p>
         </div>
-      </div>
+      </section>
 
-      <button class="button button-secondary wide" id="import" type="button" data-i18n="home.import"></button>
-
-      <button class="last card" id="open-voices" type="button">
-        <span class="last-file" data-i18n="home.voices"></span>
-        <span class="meta" id="voices-summary"></span>
+      <button class="button button-secondary wide button-with-icon" id="import" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg>
+        <span data-i18n="home.import"></span>
       </button>
 
-      <div class="notice" id="home-notice" role="status" hidden>
-        <p id="home-notice-text"></p>
-        <button class="button button-plain" id="open-app-settings" type="button" data-i18n="error.open_settings" hidden></button>
-        <button class="button button-plain" id="recovered-transcribe" type="button" data-i18n="recording.recovered_transcribe" hidden></button>
-      </div>
+      <button class="meeting-card" id="last" type="button" hidden>
+        <span class="meeting-card__icon" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+        </span>
+        <span class="meeting-card__body">
+          <span class="last-label" data-i18n="home.resume"></span>
+          <span class="last-file" id="last-file"></span>
+          <span class="meta" id="last-meta"></span>
+        </span>
+        <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
 
-      <div class="group">
+      <button class="link-card" id="open-voices" type="button">
+        <span class="link-card__icon" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+        </span>
+        <span class="link-card__body">
+          <span class="link-card__title" data-i18n="home.voices"></span>
+          <span class="meta" id="voices-summary"></span>
+        </span>
+        <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+
+      <section class="meetings" aria-labelledby="meetings-title">
         <h2 class="group-title" id="meetings-title" data-i18n="home.meetings"></h2>
         <div class="search meetings-search" role="search">
-          <input class="search-input" id="meetings-search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-i18n-label="home.search_label">
+          <div class="search-field">
+            <svg class="icon search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>
+            <input class="search-input" id="meetings-search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-i18n-label="home.search_label">
+          </div>
         </div>
         <div class="label-filter" id="label-filter" role="group" data-i18n-label="home.label_filter" hidden></div>
-        <ul class="card speakers" id="meetings-list" aria-labelledby="meetings-title" hidden></ul>
+        <ul class="card meetings-list" id="meetings-list" aria-labelledby="meetings-title" hidden></ul>
         <p class="meta meetings-empty" id="meetings-empty" data-i18n="home.meetings_empty" hidden></p>
         <p class="meta meetings-empty" id="meetings-filter-empty" data-i18n="home.meetings_filter_empty" hidden></p>
-        <ul class="card speakers" id="meeting-hits" aria-labelledby="meetings-title" hidden></ul>
-        <p class="meta meetings-empty" id="meeting-hits-note" aria-live="polite"></p>
+        <ul class="card meetings-list" id="meeting-hits" aria-labelledby="meetings-title" hidden></ul>
+        <p class="meta meeting-hits-note" id="meeting-hits-note" aria-live="polite"></p>
         <p class="error" id="meetings-error" role="alert"></p>
+      </section>
+
+      <div class="notice" id="home-notice" role="status" hidden>
+        <span class="notice__icon" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+        </span>
+        <div class="notice__body">
+          <p id="home-notice-text"></p>
+          <button class="button button-plain" id="open-app-settings" type="button" data-i18n="error.open_settings" hidden></button>
+          <button class="button button-plain" id="recovered-transcribe" type="button" data-i18n="recording.recovered_transcribe" hidden></button>
+        </div>
       </div>
 
-      <p class="hint" data-i18n="home.offline"></p>
+      <p class="privacy-hint">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        <span data-i18n="home.offline"></span>
+      </p>
     </section>
 
     <section class="screen" id="screen-processing" aria-labelledby="processing-phase" hidden>
       <div class="processing">
-        <h1 class="title" id="processing-phase"></h1>
+        <div class="processing-visual" aria-hidden="true">
+          <span class="processing-ring processing-ring--outer"></span>
+          <span class="processing-ring processing-ring--inner"></span>
+          <span class="processing-core">
+            <svg viewBox="0 0 40 40" fill="none"><path d="M11 22v-4M16 27V13M20 30V10M24 26V14M29 22v-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          </span>
+        </div>
+        <p class="eyebrow" data-i18n="processing.eyebrow"></p>
+        <h1 class="title processing-title" id="processing-phase"></h1>
         <div class="progress" id="progress" role="progressbar" aria-labelledby="processing-phase" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
           <span class="progress-fill" id="progress-fill"></span>
         </div>
-        <p class="meta" id="processing-time" aria-live="polite"></p>
-        <button class="button button-secondary wide" id="cancel" type="button" data-i18n="common.cancel"></button>
+        <p class="meta processing-time" id="processing-time" aria-live="polite"></p>
+        <button class="button button-secondary" id="cancel" type="button" data-i18n="common.cancel"></button>
         <div class="live" id="processing-live" hidden>
           <div class="live-lines"></div>
           <p class="live-note" data-i18n="live.draft_processing"></p>
@@ -131,37 +303,49 @@
           <span data-i18n="transcript.back"></span>
         </button>
         <div class="bar-actions">
-          <button class="button button-plain" id="open-rename" type="button" data-i18n="transcript.rename"></button>
-          <button class="button button-plain" id="open-labels" type="button" data-i18n="transcript.labels"></button>
-          <button class="button button-plain" id="open-export" type="button" data-i18n="export_sheet.button"></button>
+          <button class="button button-glass button-compact" id="open-rename" type="button" data-i18n="transcript.rename"></button>
+          <button class="button button-glass button-compact" id="open-labels" type="button" data-i18n="transcript.labels"></button>
+          <button class="button button-glass button-compact button-with-icon" id="open-export" type="button">
+            <span data-i18n="export_sheet.button"></span>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M5 16v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg>
+          </button>
         </div>
       </header>
-      <h1 class="title transcript-title" id="transcript-file"></h1>
-      <p class="meta" id="transcript-meta"></p>
+      <div class="transcript-hero">
+        <p class="eyebrow" data-i18n="transcript.eyebrow"></p>
+        <h1 class="title transcript-title" id="transcript-file"></h1>
+        <p class="meta" id="transcript-meta"></p>
+      </div>
       <p class="warning" id="transcript-warning" role="note" hidden data-i18n="transcript.clipping"></p>
-      <p class="meta" id="playback-note" role="status" hidden></p>
+      <p class="meta playback-note" id="playback-note" role="status" hidden></p>
       <h2 class="group-title" data-i18n="transcript.participants"></h2>
       <ul class="card speakers" id="speakers"></ul>
       <h2 class="group-title" id="timeline-title" data-i18n="timeline.title"></h2>
       <div class="card timeline">
         <div class="timeline-lanes" id="timeline-lanes"></div>
       </div>
-      <button class="button button-secondary wide" id="open-stats" type="button" data-i18n="stats.button"></button>
-      <button class="button button-secondary wide" id="open-fillers" type="button" data-i18n="fillers.open" hidden></button>
-      <button class="button button-secondary wide" id="open-summary" type="button" data-i18n="summary.button" hidden></button>
-      <button class="button button-secondary wide" id="open-names" type="button" data-i18n="names.button" hidden></button>
-      <button class="button button-danger wide" id="meeting-delete" type="button" data-i18n="meeting_delete.button"></button>
+      <div class="action-stack">
+        <button class="button button-secondary wide" id="open-stats" type="button" data-i18n="stats.button"></button>
+        <button class="button button-secondary wide" id="open-fillers" type="button" data-i18n="fillers.open" hidden></button>
+        <button class="button button-secondary wide" id="open-summary" type="button" data-i18n="summary.button" hidden></button>
+        <button class="button button-secondary wide" id="open-names" type="button" data-i18n="names.button" hidden></button>
+        <button class="button button-danger wide" id="meeting-delete" type="button" data-i18n="meeting_delete.button"></button>
+      </div>
       <p class="error" id="meeting-delete-error" role="alert"></p>
       <div class="search" role="search">
-        <input class="search-input" id="search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-i18n-label="search.label">
-        <button class="icon-button" id="search-prev" type="button" data-i18n-label="search.previous" disabled>
+        <div class="search-field">
+          <svg class="icon search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>
+          <input class="search-input" id="search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-i18n-label="search.label">
+        </div>
+        <button class="icon-button icon-button--glass" id="search-prev" type="button" data-i18n-label="search.previous" disabled>
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg>
         </button>
-        <button class="icon-button" id="search-next" type="button" data-i18n-label="search.next" disabled>
+        <button class="icon-button icon-button--glass" id="search-next" type="button" data-i18n-label="search.next" disabled>
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg>
         </button>
       </div>
       <p class="meta search-count" id="search-count" aria-live="polite"></p>
+      <h2 class="group-title" data-i18n="transcript.dialogue"></h2>
       <ol class="turns" id="turns"></ol>
       <div class="player" id="player" hidden>
         <div class="player-row">
@@ -188,17 +372,37 @@
           <span data-i18n="transcript.back"></span>
         </button>
       </header>
-      <h1 class="title" id="voices-title" data-i18n="voices.title"></h1>
-      <p class="meta" data-i18n="voices.hint"></p>
-      <ul class="card speakers" id="voices-list"></ul>
-      <p class="meta" id="voices-empty" data-i18n="voices.empty" hidden></p>
-      <button class="button button-primary wide" id="voice-add" type="button" data-i18n="voices.add"></button>
+      <div class="voices-hero">
+        <p class="eyebrow" data-i18n="voices.eyebrow"></p>
+        <h1 class="title" id="voices-title" data-i18n="voices.title"></h1>
+        <p class="hero-copy" data-i18n="voices.hint"></p>
+        <button class="button button-primary button-with-icon" id="voice-add" type="button">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          <span data-i18n="voices.add"></span>
+        </button>
+      </div>
+      <ul class="card speakers voices-list" id="voices-list"></ul>
+      <div class="empty-state" id="voices-empty" hidden>
+        <span class="empty-state__icon" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+        </span>
+        <p data-i18n="voices.empty"></p>
+      </div>
       <p class="error" id="voices-error" role="alert"></p>
     </section>
 
     <section class="screen" id="screen-models" aria-labelledby="models-title" hidden>
-      <h1 class="title" id="models-title" data-i18n="models.title"></h1>
-      <p class="meta" data-i18n="models.hint"></p>
+      <header class="bar">
+        <button class="back" id="models-back" type="button">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          <span data-i18n="transcript.back"></span>
+        </button>
+      </header>
+      <div class="models-hero">
+        <p class="eyebrow" data-i18n="models.eyebrow"></p>
+        <h1 class="title" id="models-title" data-i18n="models.title"></h1>
+        <p class="hero-copy" data-i18n="models.hint"></p>
+      </div>
       <ul class="card models" id="models-list"></ul>
       <p class="meta models-total" id="models-total" aria-live="polite"></p>
       <div class="models-progress" id="models-progress" hidden>
@@ -208,12 +412,13 @@
         </div>
       </div>
       <p class="error" id="models-error" role="alert"></p>
-      <div class="models-actions">
+      <div class="action-stack">
         <button class="button button-primary wide" id="models-download" type="button" data-i18n="models.download"></button>
         <button class="button button-secondary wide" id="models-cancel" type="button" data-i18n="models.cancel" hidden></button>
         <button class="button button-plain wide" id="models-later" type="button" data-i18n="models.later"></button>
       </div>
     </section>
+
     <section class="screen" id="screen-settings" aria-labelledby="settings-title" hidden>
       <header class="bar">
         <button class="back" id="settings-back" type="button">
@@ -221,61 +426,40 @@
           <span data-i18n="transcript.back"></span>
         </button>
       </header>
-      <h1 class="title" id="settings-title" data-i18n="settings.title"></h1>
-      <div>
-        <h2 class="group-title" id="theme-title" data-i18n="settings.theme"></h2>
-        <div class="card choices" role="radiogroup" aria-labelledby="theme-title">
-          <label class="choice"><input type="radio" name="theme" value="auto"><span data-i18n="settings.theme_auto"></span></label>
-          <label class="choice"><input type="radio" name="theme" value="light"><span data-i18n="settings.theme_light"></span></label>
-          <label class="choice"><input type="radio" name="theme" value="dark"><span data-i18n="settings.theme_dark"></span></label>
-        </div>
+      <div class="settings-hero">
+        <p class="eyebrow" data-i18n="settings.eyebrow"></p>
+        <h1 class="title" id="settings-title" data-i18n="settings.title"></h1>
       </div>
-      <div>
+
+      <section class="settings-block" aria-labelledby="language-title">
         <h2 class="group-title" id="language-title" data-i18n="settings.language"></h2>
-        <div class="card choices" role="radiogroup" aria-labelledby="language-title">
+        <div class="card choices choices--three" role="radiogroup" aria-labelledby="language-title">
           <label class="choice"><input type="radio" name="language" value="auto"><span data-i18n="settings.language_auto"></span></label>
           <label class="choice"><input type="radio" name="language" value="ru"><span data-i18n="settings.language_ru"></span></label>
           <label class="choice"><input type="radio" name="language" value="en"><span data-i18n="settings.language_en"></span></label>
         </div>
-      </div>
-      <div>
-        <h2 class="group-title" id="speech-language-title" data-i18n="settings.speech_language"></h2>
-        <div class="card choices" role="radiogroup" aria-labelledby="speech-language-title" aria-describedby="speech-language-hint">
-          <label class="choice"><input type="radio" name="speech-language" value="auto"><span data-i18n="settings.speech_language_auto"></span></label>
-          <label class="choice"><input type="radio" name="speech-language" value="ru"><span data-i18n="settings.speech_language_ru"></span></label>
-          <label class="choice"><input type="radio" name="speech-language" value="en"><span data-i18n="settings.speech_language_en"></span></label>
-        </div>
-        <p class="meta" id="speech-language-hint" data-i18n="settings.speech_language_hint"></p>
-      </div>
-      <div class="settings-biometric" id="settings-biometric-block" hidden>
-        <h2 class="group-title" id="settings-security-title" data-i18n="settings.security"></h2>
-        <div class="card" role="group" aria-labelledby="settings-security-title">
-          <label class="model-row">
-            <span data-i18n="settings.biometric"></span>
-            <input class="switch" type="checkbox" role="switch" id="settings-biometric">
-          </label>
-        </div>
-        <p class="meta settings-note" data-i18n="settings.biometric_hint"></p>
-        <p class="status" id="settings-biometric-status" role="status"></p>
-        <button class="button button-secondary wide" id="settings-biometric-open" type="button" data-i18n="settings.biometric_open" hidden></button>
-      </div>
-      <div class="settings-models" id="settings-models-block" hidden>
+      </section>
+
+      <section class="settings-block settings-models" id="settings-models-block" aria-labelledby="settings-models-title" hidden>
         <h2 class="group-title" id="settings-models-title" data-i18n="settings.models"></h2>
         <ul class="card models" id="settings-models" aria-labelledby="settings-models-title"></ul>
         <p class="meta settings-note" data-i18n="settings.models_hint"></p>
         <button class="button button-secondary wide" id="settings-models-download" type="button" data-i18n="models.missing_download" hidden></button>
         <p class="status" id="settings-models-status" role="status"></p>
-      </div>
-      <div class="settings-storage">
+      </section>
+
+      <section class="settings-block settings-storage" aria-labelledby="settings-storage-title">
         <h2 class="group-title" id="settings-storage-title" data-i18n="settings.storage"></h2>
         <ul class="card models" id="storage-list" aria-labelledby="settings-storage-title"></ul>
+        <p class="meta settings-note" data-i18n="settings.storage_hint"></p>
         <button class="button button-secondary wide" id="storage-clear-temporary" type="button" data-i18n="storage.clear_temporary"></button>
         <button class="button button-danger wide" id="storage-remove-audio" type="button" data-i18n="storage.remove_audio"></button>
         <p class="status" id="storage-status" role="status"></p>
-      </div>
-      <div class="settings-storage">
+      </section>
+
+      <section class="settings-block" aria-labelledby="audio-cleanup-title">
         <h2 class="group-title" id="audio-cleanup-title" data-i18n="settings.audio_cleanup"></h2>
-        <div class="card choices" role="radiogroup" aria-labelledby="audio-cleanup-title">
+        <div class="card choices choices--four" role="radiogroup" aria-labelledby="audio-cleanup-title">
           <label class="choice"><input type="radio" name="audio-cleanup" value="off"><span data-i18n="settings.audio_cleanup_off"></span></label>
           <label class="choice"><input type="radio" name="audio-cleanup" value="7"><span data-i18n="settings.audio_cleanup_7"></span></label>
           <label class="choice"><input type="radio" name="audio-cleanup" value="30"><span data-i18n="settings.audio_cleanup_30"></span></label>
@@ -283,27 +467,28 @@
         </div>
         <p class="meta settings-note" data-i18n="settings.audio_cleanup_hint"></p>
         <p class="status" id="audio-cleanup-status" role="status"></p>
-      </div>
-      <div class="settings-llm-gpu" id="settings-llm-gpu-block" hidden>
-        <h2 class="group-title" id="settings-llm-gpu-title" data-i18n="settings.acceleration"></h2>
-        <div class="card" role="group" aria-labelledby="settings-llm-gpu-title">
-          <label class="model-row">
-            <span data-i18n="settings.llm_gpu"></span>
-            <input class="switch" type="checkbox" role="switch" id="settings-llm-gpu">
-          </label>
-        </div>
-        <p class="meta settings-note" data-i18n="settings.llm_gpu_hint"></p>
-        <p class="status" id="settings-llm-gpu-status" role="status"></p>
-      </div>
-      <div class="sheet-group">
+      </section>
+
+      <section class="settings-block" aria-labelledby="hotwords-title">
+        <h2 class="group-title" id="hotwords-title" data-i18n="settings.hotwords"></h2>
         <label class="field">
-          <span data-i18n="settings.hotwords"></span>
+          <span class="visually-hidden" data-i18n="settings.hotwords"></span>
           <textarea id="hotwords" rows="5" autocomplete="off" spellcheck="false"></textarea>
         </label>
         <p class="meta" data-i18n="settings.hotwords_hint"></p>
         <button class="button button-secondary wide" id="hotwords-save" type="button" data-i18n="settings.hotwords_save"></button>
         <p class="status" id="hotwords-status" role="status"></p>
-      </div>
+      </section>
+
+      <section class="settings-block" aria-labelledby="guide-title">
+        <h2 class="group-title" id="guide-title" data-i18n="settings.guide"></h2>
+        <button class="button button-secondary wide" id="open-onboarding" type="button" data-i18n="onboard.open"></button>
+      </section>
+
+      <p class="privacy-hint">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        <span data-i18n="settings.about_local"></span>
+      </p>
     </section>
   </main>
 
@@ -364,8 +549,9 @@
         <h2 id="labels-sheet-title" data-i18n="labels.title"></h2>
         <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
       </div>
+      <p class="hint" data-i18n="labels.hint"></p>
       <p class="meta" id="labels-empty" data-i18n="labels.empty" hidden></p>
-      <ul class="card speakers" id="labels-list" aria-labelledby="labels-sheet-title" hidden></ul>
+      <ul class="card labels" id="labels-list" aria-labelledby="labels-sheet-title" hidden></ul>
       <label class="field">
         <span data-i18n="labels.new"></span>
         <input id="label-new" type="text" maxlength="40" autocomplete="off" enterkeyhint="done">
@@ -655,6 +841,5 @@
       <p class="status" id="export-status" role="status"></p>
     </form>
   </dialog>
-
 </body>
 </html>
