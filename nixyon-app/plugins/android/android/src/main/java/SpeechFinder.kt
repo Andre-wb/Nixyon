@@ -110,10 +110,7 @@ class SpeechFinder(private val models: SpeechModels) {
     }
 
     private fun hear(vad: Vad, samples: FloatArray, rate: Int) {
-        if (rate != SpeechModels.SAMPLE_RATE) {
-            throw AnalysisException(AnalysisException.ENGINE_FAILED, "шумоподавитель отдал $rate Гц вместо ${SpeechModels.SAMPLE_RATE}")
-        }
-        if (samples.isNotEmpty()) vad.acceptWaveform(samples)
+        if (DenoisedChunk.usable(samples.size, rate)) vad.acceptWaveform(samples)
     }
 
     private fun drain(vad: Vad, bounds: MutableList<Pair<Long, Long>>) {

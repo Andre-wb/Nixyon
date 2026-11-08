@@ -48,15 +48,18 @@ impl VadDenoiser {
         let vad = SherpaModels::new_vad(vad_config)?;
         let mut regions = Vec::new();
         let mut hear = |audio: sherpa_onnx::DenoisedAudio| -> Result<(), SherpaError> {
+            // На куске короче своего окна шумоподавитель ничего не отдаёт, и частота у
+            // пустого ответа 0. Сверяется только частота звука, который пришёл.
+            if audio.samples.is_empty() {
+                return Ok(());
+            }
             if audio.sample_rate != SAMPLE_RATE {
                 return Err(SherpaError::SampleRate {
                     expected: SAMPLE_RATE,
                     actual: audio.sample_rate,
                 });
             }
-            if !audio.samples.is_empty() {
-                vad.accept_waveform(&audio.samples);
-            }
+            vad.accept_waveform(&audio.samples);
             drain(&vad, &mut regions);
             Ok(())
         };
