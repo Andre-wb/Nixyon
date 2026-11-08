@@ -2259,13 +2259,13 @@ mark.hit.current {
 
 .player-speeds .chip,
 .player-options .chip {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 11px;
   font-size: 0.6875rem;
 }
 
 .player-speaker {
-  min-height: 40px;
+  min-height: 44px;
   max-width: 46%;
   padding: 0 10px;
   border: 1px solid var(--border);
@@ -2716,7 +2716,7 @@ dialog::backdrop {
   align-items: center;
   justify-content: space-between;
   gap: 4px var(--space-3);
-  min-height: 38px;
+  min-height: 44px;
   padding: 7px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.045);
 }
@@ -2811,7 +2811,7 @@ dialog::backdrop {
 }
 
 .label-filter .chip {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 14px;
   font-size: 0.75rem;
 }
@@ -3140,7 +3140,7 @@ label.model-row {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 40px;
+  min-height: 44px;
   margin: 0 -7px;
   padding: 0 7px;
   border: 0;
@@ -3201,7 +3201,7 @@ label.model-row {
 }
 
 .bar-actions .button-glass {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 11px;
   font-size: 0.6875rem;
 }
