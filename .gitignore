@@ -48,3 +48,6 @@ rustc-ice-*.txt
 /artifacts/demo/*.mov
 /artifacts/demo/*.mkv
 /artifacts/demo/*.wav
+
+# Служебные файлы macOS
+.DS_Store

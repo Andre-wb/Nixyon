@@ -5,10 +5,12 @@ import { initLabels } from "./labels.js";
 import { initMeetingTitle } from "./meeting-title.js";
 import { initMeetings } from "./meetings.js";
 import { initModels } from "./models.js";
+import { unlockApp } from "./lock.js";
 import { initOnboarding, onboardingSeen } from "./onboarding.js";
 import { initPlayer } from "./player.js";
 import { initProcessing } from "./processing.js";
 import { applyHotwords, applySetting, initSettings } from "./settings.js";
+import { applySpeechLanguage } from "./settings-speech.js";
 import { applyAudioCleanup, cleanOldAudio } from "./settings-storage.js";
 import { handleModalBack, show } from "./screens.js";
 import { initSearch } from "./search.js";
@@ -22,12 +24,15 @@ import { applyTheme } from "./theme.js";
 import { initVoices } from "./voices.js";
 
 async function start() {
-  // Входа нет: ключевые данные приложения не шифруются паролем, профиль не нужен.
-  // Первый запуск показывает короткую инструкцию, дальше сразу главный экран.
+  // Профиля нет. Если в настройках включён вход по отпечатку, хранилище открывается
+  // пальцем до всего остального. Первый запуск показывает короткую инструкцию, дальше
+  // сразу главный экран.
+  await unlockApp();
   const settings = await invoke("get_settings").catch(() => ({ language: "auto", theme: "auto" }));
   applyTheme();
   applySetting(settings.language);
   applyHotwords(settings.hotwords);
+  applySpeechLanguage(settings.speech_language);
   applyAudioCleanup(settings.audio_cleanup_days);
   // Очистка идёт в фоне: запуск её не ждёт.
   cleanOldAudio();
@@ -51,7 +56,7 @@ async function start() {
   const startScreen = onboardingSeen() ? "home" : "onboarding";
   history.replaceState(null, "", `#${startScreen}`);
   show(startScreen);
-  // The interface is alive: the startup guard in boot.js stops waiting.
+  // Интерфейс запустился: проверка запуска в boot.js больше не ждёт.
   document.documentElement.dataset.nixyonReady = "1";
   window.addEventListener("popstate", () => {
     if (handleModalBack()) return;

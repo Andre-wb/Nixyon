@@ -39,9 +39,9 @@ let ownBacks = 0;
 
 export function openModal(dialog) {
   dialog.showModal();
-  // Native dialog focus would land on the first button and paint a focus ring the
-  // moment a pointer opens the sheet. Focus the dialog itself instead; keyboard
-  // users reach the controls with Tab and keep a visible focus style there.
+  // Без этого фокус встал бы на первую кнопку и при открытии касанием сразу показал бы
+  // рамку фокуса. Фокус ставится на само окно; с клавиатуры кнопки доступны по Tab, и
+  // рамка фокуса там видна.
   if (!dialog.hasAttribute("tabindex")) dialog.setAttribute("tabindex", "-1");
   dialog.focus({ preventScroll: true });
   history.pushState({ modal: modals.length + 1 }, "", location.hash);

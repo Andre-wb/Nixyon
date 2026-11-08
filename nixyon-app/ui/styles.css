@@ -1,5 +1,5 @@
 /* ==========================================================================
-   NIXYON — Dark Ambient Futurism
+   NIXYON: Dark Ambient Futurism
    A single, atmospheric design language for every screen.
    ========================================================================== */
 
@@ -165,7 +165,7 @@ html {
 
 body {
   margin: 0;
-  /* 100vh keeps old WebViews (Chrome < 108) full height, 100dvh — modern ones. */
+  /* 100vh держит полную высоту в старых WebView (Chrome до 108), 100dvh в новых. */
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: hidden;
@@ -575,39 +575,6 @@ h3 {
   align-items: center;
   gap: var(--space-2);
   flex: none;
-}
-
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 32px;
-  padding: 0 11px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--glass);
-  color: var(--label-secondary);
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-}
-
-.status-chip__dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  box-shadow: 0 0 9px rgba(139, 190, 255, 0.8);
-  animation: status-pulse 3.6s ease-in-out infinite;
-}
-
-@keyframes status-pulse {
-  0%, 100% { opacity: 0.6; transform: scale(0.9); }
-  50% { opacity: 1; transform: scale(1.1); }
 }
 
 .bar {
@@ -1690,6 +1657,64 @@ h3 {
   opacity: 0.85;
 }
 
+/* Экран блокировки: закрывает всё приложение, пока хранилище не открыто отпечатком.
+   Фон сплошной, чтобы под ним не было видно встреч. */
+.lock {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding:
+    calc(env(safe-area-inset-top) + var(--space-5))
+    calc(env(safe-area-inset-right) + var(--space-5))
+    calc(env(safe-area-inset-bottom) + var(--space-5))
+    calc(env(safe-area-inset-left) + var(--space-5));
+  background: var(--bg);
+}
+
+.lock[hidden] {
+  display: none;
+}
+
+.lock-card {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+  width: min(100%, 360px);
+  padding: 24px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+  box-shadow:
+    0 30px 80px -34px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  text-align: center;
+  animation: onboard-card-in 520ms var(--ease-out) both;
+}
+
+.lock-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(139, 190, 255, 0.18);
+  border-radius: var(--radius-m);
+  background: rgba(87, 153, 232, 0.1);
+  color: var(--accent-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.lock-mark .icon {
+  width: 24px;
+  height: 24px;
+}
+
+.lock-card .error:empty {
+  display: none;
+}
+
 @keyframes onboard-card-in {
   from { opacity: 0; transform: translateY(18px) scale(0.99); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -2148,6 +2173,15 @@ mark.hit.current {
   cursor: pointer;
 }
 
+/* Пометка вместо текста у реплики без распознанных слов: голос слышен, слов нет. */
+.turn-unclear {
+  color: var(--label-secondary);
+  font-size: 0.9375rem;
+  font-style: italic;
+  line-height: 1.58;
+  cursor: pointer;
+}
+
 .word.playing {
   border-radius: 4px;
   background: rgba(87, 153, 232, 0.22);
@@ -2264,15 +2298,44 @@ mark.hit.current {
   font-size: 0.6875rem;
 }
 
-.player-speaker {
-  min-height: 44px;
+/* Выбор участника в плеере: кнопка-фишка с текущим выбором, список открывается листом. */
+.player-options .player-speaker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
   max-width: 46%;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.24);
-  color: var(--label);
-  font: 500 0.75rem / 1 var(--font);
+  padding: 0 8px 0 11px;
+}
+
+.player-options .player-speaker.is-chosen {
+  border-color: rgba(139, 190, 255, 0.35);
+  background:
+    linear-gradient(180deg, rgba(139, 190, 255, 0.13), rgba(87, 153, 232, 0.055));
+  color: var(--accent-soft);
+}
+
+.player-speaker__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-speaker .icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  opacity: 0.7;
+}
+
+.choices.choices--list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.player-speaker-option {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 body.has-player main {
@@ -3457,17 +3520,6 @@ label.model-row {
 }
 
 @media (max-width: 350px) {
-  .status-chip {
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    justify-content: center;
-  }
-
-  .status-chip span:last-child {
-    display: none;
-  }
-
   .hero-title {
     font-size: 1.95rem;
   }
@@ -3594,10 +3646,6 @@ label.model-row {
   .sheet,
   .alert {
     background: #20242A;
-  }
-
-  .status-chip {
-    border-color: var(--border-strong);
   }
 }
 

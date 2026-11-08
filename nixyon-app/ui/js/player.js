@@ -3,6 +3,7 @@ import { $ } from "./dom.js";
 import { clock } from "./format.js";
 import { K, locale, t } from "./i18n.js";
 import { playbackRanges } from "./playback-spans.js";
+import { initPlayerSpeaker, renderPlayerSpeaker } from "./player-speaker.js";
 import { onLanguageChange, onScreenChange } from "./screens.js";
 
 const SPEEDS = [0.75, 1, 1.5, 2];
@@ -127,12 +128,7 @@ function renderControls() {
     button.setAttribute("aria-pressed", String(Number(button.dataset.speed) === speed));
   }
   $("player-skip-silence").setAttribute("aria-pressed", String(skipSilence));
-  const select = $("player-speaker");
-  select.replaceChildren(
-    new Option(t(K.player_speaker_all), ""),
-    ...speakers.map((s) => new Option(s.name, String(s.id))),
-  );
-  select.value = speaker === null ? "" : String(speaker);
+  renderPlayerSpeaker(speakers, speaker);
 }
 
 function formatSpeed(value) {
@@ -300,7 +296,7 @@ export function initPlayer() {
   $("player-back").addEventListener("click", () => skip(-SKIP_SEC));
   $("player-forward").addEventListener("click", () => skip(SKIP_SEC));
   $("player-skip-silence").addEventListener("click", toggleSilence);
-  $("player-speaker").addEventListener("change", (event) => setSpeaker(event.target.value));
+  initPlayerSpeaker(setSpeaker);
   onScreenChange((name) => {
     if (name !== "transcript") closePlayer();
   });

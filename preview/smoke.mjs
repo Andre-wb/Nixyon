@@ -188,10 +188,14 @@ await step("плеер: пуск, перемотка, скорость, проп
 
 await step("выбор участника ограничивает воспроизведение",
   async () => {
-    await evaluate(`(() => { const s = document.querySelector("#player-speaker"); s.value = s.options[1].value; s.dispatchEvent(new Event("change", { bubbles: true })); return true; })()`);
+    await click("#player-speaker");
+    await sleep(400);
+    await click('#player-speaker-list input[name="player-speaker"]:not([value=""])');
     await sleep(400);
   },
-  async () => (await evaluate(`document.querySelector('#player-speaker').value`)) !== "",
+  async () =>
+    !(await visible("#player-speaker-sheet")) &&
+    (await evaluate(`document.querySelector('#player-speaker').classList.contains("is-chosen")`)),
 );
 
 await step("удаление встречи спрашивает подтверждение",

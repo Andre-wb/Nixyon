@@ -202,6 +202,18 @@ fn text_and_controls_have_enough_contrast_in_every_theme_mode() {
         ("--accent-fill", "--bg", NON_TEXT),
         ("--accent-fill", "--bg-elevated", NON_TEXT),
         ("--danger-fill", "--bg-elevated", NON_TEXT),
+        ("--emotion-joy", "--bg", NON_TEXT),
+        ("--emotion-sadness", "--bg", NON_TEXT),
+        ("--emotion-anger", "--bg", NON_TEXT),
+        ("--emotion-fear", "--bg", NON_TEXT),
+        ("--emotion-surprise", "--bg", NON_TEXT),
+        ("--emotion-disgust", "--bg", NON_TEXT),
+        ("--emotion-joy", "--bg-elevated", NON_TEXT),
+        ("--emotion-sadness", "--bg-elevated", NON_TEXT),
+        ("--emotion-anger", "--bg-elevated", NON_TEXT),
+        ("--emotion-fear", "--bg-elevated", NON_TEXT),
+        ("--emotion-surprise", "--bg-elevated", NON_TEXT),
+        ("--emotion-disgust", "--bg-elevated", NON_TEXT),
     ];
     let mut failures = Vec::new();
     for mode in modes() {
@@ -237,8 +249,8 @@ fn the_ambient_palette_is_the_same_in_every_system_mode() {
         tokens
     };
     for more in [false, true] {
-        // Nixyon has one visual environment. The old theme setting must not fork
-        // the palette between light, dark and auto system appearances.
+        // Палитра одна: прежнее значение темы не должно давать разные цвета при
+        // светлой, тёмной и автоматической теме системы.
         assert_eq!(tokens(Some("light"), true, more), tokens(None, false, more));
         assert_eq!(tokens(Some("dark"), false, more), tokens(None, true, more));
     }

@@ -59,6 +59,28 @@
     <div class="ambient__vignette"></div>
   </div>
 
+  <!-- Экран блокировки: пока ключ данных не открыт отпечатком, остальное приложение
+       не начинает работу. Отмена не закрывает приложение, а оставляет кнопку повтора. -->
+  <div class="lock" id="lock" role="dialog" aria-modal="true" aria-labelledby="lock-title" hidden>
+    <div class="lock-card">
+      <span class="lock-mark" aria-hidden="true">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      </span>
+      <h1 class="title" id="lock-title" data-i18n="lock.title"></h1>
+      <p class="meta" data-i18n="lock.hint"></p>
+      <p class="error" id="lock-error" role="alert"></p>
+      <button class="button button-primary wide" id="lock-retry" type="button" data-i18n="lock.open"></button>
+      <button class="button button-danger wide" id="lock-reset" type="button" data-i18n="lock.reset" hidden></button>
+    </div>
+  </div>
+  <dialog class="alert" id="lock-reset-confirm" aria-labelledby="lock-reset-text">
+    <p id="lock-reset-text" data-i18n="lock.reset_confirm"></p>
+    <div class="alert-actions">
+      <button class="button button-secondary" id="lock-reset-no" type="button" data-i18n="common.cancel"></button>
+      <button class="button button-danger" id="lock-reset-yes" type="button" data-i18n="lock.reset_do"></button>
+    </div>
+  </dialog>
+
   <main>
     <!-- Первый запуск: короткая инструкция вместо входа. Всё работает на телефоне,
          профиля и PIN нет; экран показывается один раз, «Продолжить» возвращает к нему
@@ -125,7 +147,7 @@
             <svg class="brand__logo" viewBox="0 0 64 64"><use href="#feather-mark"></use></svg>
           </span>
           <span class="brand__type">
-            <span class="brand__name">NIXYON</span>
+            <span class="brand__name" id="home-title">NIXYON</span>
           </span>
         </div>
         <div class="topbar__actions">
@@ -347,7 +369,11 @@
         </div>
         <div class="player-row player-options">
           <div class="player-speeds" id="player-speeds" role="group" data-i18n-label="player.speed"></div>
-          <select class="player-speaker" id="player-speaker" data-i18n-label="player.speaker_label"></select>
+          <button class="chip player-speaker" id="player-speaker" type="button" aria-haspopup="dialog">
+            <span class="visually-hidden" data-i18n="player.speaker_label"></span>
+            <span class="player-speaker__name" id="player-speaker-name"></span>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
+          </button>
           <button class="chip" id="player-skip-silence" type="button" aria-pressed="false" data-i18n="player.skip_silence"></button>
         </div>
       </div>
@@ -428,12 +454,35 @@
         </div>
       </section>
 
+      <section class="settings-block" aria-labelledby="speech-language-title">
+        <h2 class="group-title" id="speech-language-title" data-i18n="settings.speech_language"></h2>
+        <div class="card choices choices--three" role="radiogroup" aria-labelledby="speech-language-title" aria-describedby="speech-language-hint">
+          <label class="choice"><input type="radio" name="speech-language" value="auto"><span data-i18n="settings.speech_language_auto"></span></label>
+          <label class="choice"><input type="radio" name="speech-language" value="ru"><span data-i18n="settings.speech_language_ru"></span></label>
+          <label class="choice"><input type="radio" name="speech-language" value="en"><span data-i18n="settings.speech_language_en"></span></label>
+        </div>
+        <p class="meta settings-note" id="speech-language-hint" data-i18n="settings.speech_language_hint"></p>
+      </section>
+
       <section class="settings-block settings-models" id="settings-models-block" aria-labelledby="settings-models-title" hidden>
         <h2 class="group-title" id="settings-models-title" data-i18n="settings.models"></h2>
         <ul class="card models" id="settings-models" aria-labelledby="settings-models-title"></ul>
         <p class="meta settings-note" data-i18n="settings.models_hint"></p>
         <button class="button button-secondary wide" id="settings-models-download" type="button" data-i18n="models.missing_download" hidden></button>
         <p class="status" id="settings-models-status" role="status"></p>
+      </section>
+
+      <section class="settings-block" id="settings-biometric-block" aria-labelledby="settings-security-title" hidden>
+        <h2 class="group-title" id="settings-security-title" data-i18n="settings.security"></h2>
+        <div class="card" role="group" aria-labelledby="settings-security-title">
+          <label class="model-row">
+            <span class="model-name" data-i18n="settings.biometric"></span>
+            <input class="switch" type="checkbox" role="switch" id="settings-biometric">
+          </label>
+        </div>
+        <p class="meta settings-note" data-i18n="settings.biometric_hint"></p>
+        <p class="status" id="settings-biometric-status" role="status"></p>
+        <button class="button button-secondary wide" id="settings-biometric-open" type="button" data-i18n="settings.biometric_open" hidden></button>
       </section>
 
       <section class="settings-block settings-storage" aria-labelledby="settings-storage-title">
@@ -455,6 +504,18 @@
         </div>
         <p class="meta settings-note" data-i18n="settings.audio_cleanup_hint"></p>
         <p class="status" id="audio-cleanup-status" role="status"></p>
+      </section>
+
+      <section class="settings-block" id="settings-llm-gpu-block" aria-labelledby="settings-llm-gpu-title" hidden>
+        <h2 class="group-title" id="settings-llm-gpu-title" data-i18n="settings.acceleration"></h2>
+        <div class="card" role="group" aria-labelledby="settings-llm-gpu-title">
+          <label class="model-row">
+            <span class="model-name" data-i18n="settings.llm_gpu"></span>
+            <input class="switch" type="checkbox" role="switch" id="settings-llm-gpu">
+          </label>
+        </div>
+        <p class="meta settings-note" data-i18n="settings.llm_gpu_hint"></p>
+        <p class="status" id="settings-llm-gpu-status" role="status"></p>
       </section>
 
       <section class="settings-block" aria-labelledby="hotwords-title">
@@ -512,6 +573,16 @@
         <p class="hint" data-i18n="speaker.merge_hint"></p>
         <ul class="card speakers" id="merge-targets"></ul>
       </div>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="player-speaker-sheet" aria-labelledby="player-speaker-title">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="player-speaker-title" data-i18n="player.speaker_label"></h2>
+        <button class="button button-plain" type="submit" value="close" data-i18n="common.close"></button>
+      </div>
+      <div class="card choices choices--list" id="player-speaker-list" role="radiogroup" aria-labelledby="player-speaker-title"></div>
     </form>
   </dialog>
 

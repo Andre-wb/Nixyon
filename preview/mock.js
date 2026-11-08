@@ -239,6 +239,9 @@
     hotwords: ["Nixyon", "GigaAM"],
     audioCleanupDays: 30,
     modelsPromptSeen: true,
+    speechLanguage: "auto",
+    biometric: false,
+    llmGpu: false,
     modelsDisabled: [],
     meetings: new Map(clone([...archive])),
     labels: clone(LABELS),
@@ -287,6 +290,7 @@
       hotwords: [...state.hotwords],
       audio_cleanup_days: state.audioCleanupDays,
       models_prompt_seen: state.modelsPromptSeen,
+      speech_language: state.speechLanguage,
     };
   }
 
@@ -925,6 +929,23 @@
         return settings();
       case "set_theme":
         return settings();
+      case "set_speech_language":
+        state.speechLanguage = args.choice ?? state.speechLanguage;
+        return settings();
+      case "unlock_storage":
+        return null;
+      case "biometric_status":
+        return { enabled: state.biometric };
+      case "set_biometric":
+        state.biometric = Boolean(args.enabled);
+        return null;
+      case "open_biometric_settings":
+        return true;
+      case "llm_gpu_status":
+        return { built: true, enabled: state.llmGpu, device: null };
+      case "set_llm_gpu":
+        state.llmGpu = Boolean(args.enabled);
+        return null;
       case "set_hotwords": {
         state.hotwords = String(args.text ?? "")
           .split(/\r?\n/)

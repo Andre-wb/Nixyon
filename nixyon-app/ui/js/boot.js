@@ -1,7 +1,7 @@
-/* Startup guard: the interface is ES modules, so an old or disabled Android
-   System WebView parses nothing at all and shows a blank dark page. This file
-   is a classic script: it runs even when the modules never do, and explains
-   what to do instead of leaving an empty screen. */
+/* Проверка запуска: интерфейс собран из ES-модулей, и старый или выключенный Android
+   System WebView не разбирает их вовсе, оставляя пустую тёмную страницу. Этот файл
+   обычный скрипт: он работает, даже когда модули не запустились, и объясняет, что
+   делать, вместо пустого экрана. */
 (function () {
   "use strict";
 
@@ -82,7 +82,7 @@
   }
 
   window.setTimeout(showOverlay, TIMEOUT_MS);
-  // The modules may still finish after the guard fired (slow device): drop the message.
+  // На медленном телефоне модули могут догрузиться уже после сообщения: тогда оно убирается.
   window.setInterval(function () {
     if (isReady() && hasOverlay()) hideOverlay();
   }, 1000);
