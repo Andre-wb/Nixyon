@@ -157,7 +157,7 @@ class SpeakerNamesEval {
         for (m in meetings) {
             var tokens = 0
             var seconds = 0.0
-            val found = SpeakerNamer { system, user, maxTokens ->
+            val found = SpeakerNamer(SpeechLanguage.RU) { system, user, maxTokens ->
                 val reply = chat(server!!, system, user, maxTokens)
                 tokens = Regex(""""prompt_tokens"\s*:\s*(\d+)""").find(reply)?.groupValues?.get(1)?.toInt() ?: 0
                 val ms = Regex(""""(prompt_ms|predicted_ms)"\s*:\s*([\d.]+)""").findAll(reply).sumOf { it.groupValues[2].toDouble() }

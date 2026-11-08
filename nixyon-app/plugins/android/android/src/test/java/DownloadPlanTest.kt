@@ -41,8 +41,8 @@ class DownloadPlanTest {
     fun addingAnOptionalModelFetchesOnlyItsFilesAndKeepsWhatIsInstalled() {
         val installed = InstalledModels(installedSpeech(required + ModelRole.DENOISER), null)
         val plan = DownloadPlan.build(catalog, setOf(ModelPack.LIVE), installed, onDisk)
-        assertEquals(ModelRole.LIVE.toSet(), plan.items.mapNotNull { it.role }.toSet())
-        assertEquals(required + ModelRole.DENOISER + ModelRole.LIVE, plan.speechFiles?.keys)
+        assertEquals((ModelRole.LIVE + ModelRole.LIVE_EN).toSet(), plan.items.mapNotNull { it.role }.toSet())
+        assertEquals(required + ModelRole.DENOISER + ModelRole.LIVE + ModelRole.LIVE_EN, plan.speechFiles?.keys)
         assertNull(plan.llm)
     }
 

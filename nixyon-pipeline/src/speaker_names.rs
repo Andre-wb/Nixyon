@@ -47,8 +47,10 @@ pub fn clean_name(raw: &str) -> Option<String> {
     Some(name)
 }
 
-/// Имена по самопредставлению: «меня зовут Игорь», «зовут меня Анна», «моё имя Борис».
-/// Берётся первое представление каждого спикера. Итог: (номер спикера, имя).
+/// Имена по самопредставлению: «меня зовут Игорь», «зовут меня Анна», «моё имя Борис»,
+/// «my name is Anna», «name's Tom», «call me Kate». «I'm X» не берётся: «I'm Fine»,
+/// «I'm Sorry» с заглавной буквы дали бы ложные имена. Берётся первое представление
+/// каждого спикера. Итог: (номер спикера, имя).
 pub fn intro_names(turns: &[Turn]) -> Vec<(u32, String)> {
     let mut found: Vec<(u32, String)> = Vec::new();
     for turn in turns {
@@ -70,10 +72,14 @@ fn intro_in(text: &str) -> Option<String> {
         .collect();
     for i in 0..lower.len() {
         let next = lower.get(i + 1).map(String::as_str);
-        let skip = match (lower[i].as_str(), next) {
-            ("меня", Some("зовут")) | ("зовут", Some("меня")) | ("моё" | "мое", Some("имя")) => {
-                2
-            }
+        let third = lower.get(i + 2).map(String::as_str);
+        let skip = match (lower[i].as_str(), next, third) {
+            ("my", Some("name"), Some("is")) => 3,
+            ("меня", Some("зовут"), _)
+            | ("зовут", Some("меня"), _)
+            | ("моё" | "мое", Some("имя"), _)
+            | ("call", Some("me"), _) => 2,
+            ("name's" | "name’s", _, _) => 1,
             _ => continue,
         };
         let name = words[i + skip..]
@@ -197,6 +203,28 @@ mod tests {
             (1, 1.0, 2.0, "Меня зовут Вера."),
         ]);
         assert_eq!(intro_names(&t.turns), [(1, "Анна".to_string())]);
+    }
+
+    #[test]
+    fn english_self_introductions_give_names() {
+        for (text, expected) in [
+            ("Hi, my name is Anna.", "Anna"),
+            ("My name is Mary-Jane, nice to meet you", "Mary-Jane"),
+            ("Hello, name's Tom.", "Tom"),
+            ("Just call me Kate!", "Kate"),
+        ] {
+            let t = transcript(&[(1, 0.0, 1.0, text)]);
+            assert_eq!(intro_names(&t.turns), [(1, expected.to_string())], "{text}");
+        }
+        for text in [
+            "I'm Fine, thanks.",
+            "Call me back tomorrow.",
+            "My name is not important.",
+            "What is your name?",
+        ] {
+            let t = transcript(&[(1, 0.0, 1.0, text)]);
+            assert!(intro_names(&t.turns).is_empty(), "{text}");
+        }
     }
 
     #[test]

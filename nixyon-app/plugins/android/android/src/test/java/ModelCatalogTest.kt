@@ -10,7 +10,8 @@ class ModelCatalogTest {
     fun filesAreGroupedByPackAndSizesAddUp() {
         val catalog = catalog()
         assertEquals(ModelPack.entries, catalog.packs)
-        assertEquals(4, catalog.files(ModelPack.LIVE).size)
+        // Живой текст русской и английской речи качается одним пакетом.
+        assertEquals((ModelRole.LIVE + ModelRole.LIVE_EN).toSet(), catalog.files(ModelPack.LIVE).map { it.role }.toSet())
         assertEquals(listOf(ModelTarget.LLM), catalog.files(ModelPack.LLM).map { it.target })
         val speech = catalog.files(ModelPack.SPEECH)
         assertEquals(ModelRole.entries.filter { !it.optional }.toSet(), speech.map { it.role }.toSet())

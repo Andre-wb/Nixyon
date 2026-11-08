@@ -1,7 +1,8 @@
 package dev.demo.nixyon.speech
 
 // Роли файлов в models.json: по ним плагин находит нужный файл, не завися от имён.
-// Необязательные роли может не быть в наборе: без живой модели запись идёт без живого текста,
+// Необязательные роли может не быть в наборе: без живой модели запись идёт без живого текста
+// (без английской живой модели английская речь идёт без живого текста),
 // без шумоподавителя длинные куски VAD не режутся, без модели audEERING у спикеров нет метки
 // «ребёнок или взрослый», без GigaAM-Emo у реплик нет эмоции.
 enum class ModelRole(val key: String, val optional: Boolean = false) {
@@ -27,6 +28,11 @@ enum class ModelRole(val key: String, val optional: Boolean = false) {
     LIVE_DECODER("live_decoder", optional = true),
     LIVE_JOINER("live_joiner", optional = true),
     LIVE_TOKENS("live_tokens", optional = true),
+    // Kroko: живой текст английской речи.
+    LIVE_EN_ENCODER("live_en_encoder", optional = true),
+    LIVE_EN_DECODER("live_en_decoder", optional = true),
+    LIVE_EN_JOINER("live_en_joiner", optional = true),
+    LIVE_EN_TOKENS("live_en_tokens", optional = true),
     // GTCRN: шумоподавление только для VAD, чтобы резать длинные куски (SpeechFinder), распознавание
     // и модель голоса слушают запись. Входит в основной набор; замеры в SpeechFinder.
     DENOISER("denoiser", optional = true),
@@ -39,5 +45,13 @@ enum class ModelRole(val key: String, val optional: Boolean = false) {
     companion object {
         // Файлы живой модели: все вместе или ни одного.
         val LIVE = listOf(LIVE_ENCODER, LIVE_DECODER, LIVE_JOINER, LIVE_TOKENS)
+        val LIVE_EN = listOf(LIVE_EN_ENCODER, LIVE_EN_DECODER, LIVE_EN_JOINER, LIVE_EN_TOKENS)
+
+        // Файлы живой модели языка.
+        fun live(language: SpeechLanguage): List<ModelRole> =
+            when (language) {
+                SpeechLanguage.RU -> LIVE
+                SpeechLanguage.EN -> LIVE_EN
+            }
     }
 }

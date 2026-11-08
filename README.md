@@ -41,7 +41,10 @@ Nixyon расшифровывает записи встреч на русско�
 - **Импорт записи.** Системный выбор файла; Android раскодирует m4a, mp3, wav, ogg, opus
   и flac. Файл длиннее 3 часов не принимается.
 - **Живой текст во время записи.** Черновой текст от потоковой модели появляется, пока идёт
-  запись. Набор моделей без потоковой модели тоже допустим, тогда живого текста нет.
+  запись. Для русской и английской речи свои модели: при «Язык речи: Авто» текст начинается
+  русской моделью, а по первым 10 с громкого звука Whisper tiny определяет язык и при
+  английском переходит на английскую модель. Набор моделей без потоковой модели тоже
+  допустим, тогда живого текста нет.
 - **Подготовка звука.** Любой WAV переводится в 16 кГц моно с выравниванием громкости.
   Запись короче секунды и тишина не обрабатываются; о клиппинге приложение предупреждает,
   но запись обрабатывает.
@@ -58,6 +61,7 @@ Nixyon расшифровывает записи встреч на русско�
 - **Правка.** Переименовать спикера, слить двух спикеров в одного, исправить текст реплики,
   удалить реплику. Языковая модель может убрать слова-паразиты из выбранных реплик или из
   всего диалога: сначала показываются правки «было» и «стало», заменяются они по кнопке.
+  В английской встрече убираются только заминки (uh, um, er, hmm и подобные).
 - **Эмоции.** У каждой реплики метка тона голоса рядом с именем спикера: модель GigaAM-Emo
   ставит «Нейтрально», «Радость», «Грусть» или «Гнев», неуверенный ответ даёт «Эмоция?».
   По нажатию на метку эмоцию можно выбрать из списка, в том числе «Страх», «Удивление» и
@@ -485,6 +489,7 @@ Nixyon расшифровывает записи встреч на русско�
 | `segmentation` | `segmentation.onnx` | `speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2` (float32) |
 | `asr_bpe_vocab` | `asr-bpe.vocab` | строится из токенизатора GigaAM v3 ([ai-sage/GigaAM-v3](https://huggingface.co/ai-sage/GigaAM-v3), ревизия закреплена) |
 | `live_encoder`, `live_decoder`, `live_joiner`, `live_tokens` | `live-encoder.int8.onnx`, `live-decoder.onnx`, `live-joiner.int8.onnx`, `live-tokens.txt` | `asr-models/sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16.tar.bz2` |
+| `live_en_encoder`, `live_en_decoder`, `live_en_joiner`, `live_en_tokens` | `live-en-encoder.int8.onnx`, `live-en-decoder.int8.onnx`, `live-en-joiner.int8.onnx`, `live-en-tokens.txt` | `asr-models/sherpa-onnx-streaming-zipformer-en-kroko-2025-08-06.tar.bz2` |
 | `tagging_model`, `tagging_labels` | `tagging.int8.onnx`, `tagging-labels.csv` | `audio-tagging-models/sherpa-onnx-ced-tiny-audio-tagging-2024-04-19.tar.bz2` |
 | `redimnet2` | `redimnet2-b6.onnx` | жёсткая ссылка (или копия) на `models/ort/redimnet2-b6.onnx` |
 | `denoiser` | `denoiser.onnx` | `speech-enhancement-models/gtcrn_simple.onnx`: шумоподавление GTCRN для второго VAD, которым режутся куски VAD от 15 с |
@@ -502,12 +507,13 @@ Nixyon расшифровывает записи встреч на русско�
 - Роли на ноутбуке ([`nixyon-sherpa/src/manifest.rs`](nixyon-sherpa/src/manifest.rs)):
   обязательные `vad`, `asr_encoder`, `asr_decoder`, `asr_joiner`, `asr_tokens`,
   `embedding`, четыре роли `asr_en_*` и две `lid_*`; необязательные `segmentation` и `asr_bpe_vocab`; потоковая модель задаётся
-  четырьмя ролями `live_*`, а фильтр музыки двумя ролями `tagging_*`, целиком или не
+  четырьмя ролями `live_*` (английская четырьмя `live_en_*`), а фильтр музыки двумя ролями `tagging_*`, целиком или не
   задаётся вовсе. Роль `redimnet2` ноутбук не читает. Путь роли: простое имя файла без
   папок.
 - Роли на телефоне ([`ModelRole.kt`](nixyon-app/plugins/android/android/src/main/java/ModelRole.kt)):
   обязательны те же двенадцать и ещё `redimnet2`, `segmentation` и `asr_bpe_vocab`;
-  необязательны четыре роли `live_*` (все вместе), `denoiser`, `age_gender` и `emotion`. Роли
+  необязательны четыре роли `live_*` и четыре `live_en_*` (каждая четвёрка вместе, обе в
+  пакете «Живой текст»), `denoiser`, `age_gender` и `emotion`. Роли
   `tagging_*` телефон не читает.
 
 Как приложение находит модели
@@ -532,7 +538,8 @@ SHA-256, и сверяет скачанное с каталогом.
 - При первом запуске открывается экран «Скачайте модели». Обязательный набор
   распознавания (около 320 МБ) отмечен всегда, необязательные модели можно снять:
   языковая модель для протокола встречи (2,3 ГБ), модель эмоций (257 МБ), модель возраста и
-  пола (129 МБ), живой текст (29 МБ), шумодав (0,5 МБ). Сразу отмечены все.
+  пола (129 МБ), живой текст на русском и английском (100 МБ), шумодав (0,5 МБ). Сразу
+  отмечены все.
 - «Не сейчас» закрывает экран, и сам он больше не открывается. Пока набор распознавания не
   скачан, на главном экране вместо записи и выбора файла плашка «Скачать модели».
 - Если телефон не в Wi-Fi, перед загрузкой приложение спрашивает про мобильную сеть.
@@ -875,7 +882,7 @@ cd nixyon-app/src-tauri/gen/android
   - нейросегментация и наложения;
   - число спикеров и точность на диалогах `ru2`, `ru4`, `ru6`, `real3`;
   - DER не больше 0,25;
-  - живой текст: WER не больше 0,12;
+  - живой текст: WER не больше 0,12 на `ru2` и на `en2`;
   - края речи на клипах Common Voice из [`nixyon-eval/tests/data`](nixyon-eval/tests/data);
   - библиотека голосов по «прошлым встречам» `prior6a` и `prior6b`;
   - режим сочетаний `eval --combo` даёт ту же расшифровку, что отдельный прогон каждого
@@ -1263,6 +1270,7 @@ scripts/llm-meeting-eval.sh <llama-server> <папка результатов> <
 | Sortformer 4spk-v2 (выгрузки DimQ1) | не сверена, в репозитории не указана | [DimQ1/sortformer-4spk-v2-onnx-int8-cpu](https://huggingface.co/DimQ1/sortformer-4spk-v2-onnx-int8-cpu) |
 | T-one (необязательная, для `stream_eval`) | Apache-2.0 (файл `LICENSE` в архиве) | [релизы sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases) |
 | Parakeet TDT 0.6B v3, входит в APK | CC BY 4.0 (README в архиве sherpa-onnx и карточка модели) | [nvidia/parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) |
+| Потоковая zipformer Kroko `en-kroko-2025-08-06`: живой текст английской речи | CC-BY-SA у моделей сообщества Kroko ([Banafo/Kroko-ASR](https://huggingface.co/Banafo/Kroko-ASR)); README в архиве ссылается на эту страницу | [релизы sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases) |
 | Whisper tiny, входит в APK: определение языка | MIT | [openai/whisper](https://github.com/openai/whisper), [релизы sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases) |
 | GTCRN (`gtcrn_simple.onnx`), входит в APK: второй VAD для длинных кусков | MIT (файл `LICENSE` в репозитории авторов); что файл релиза sherpa-onnx выгружен из этой модели, по документации sherpa-onnx не сверено | [Xiaobin-Rong/gtcrn](https://github.com/Xiaobin-Rong/gtcrn), [релизы sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases) |
 | Qwen3.5-4B GGUF (unsloth) | Apache-2.0 | [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) |

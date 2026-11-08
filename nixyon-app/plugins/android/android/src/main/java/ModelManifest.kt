@@ -15,7 +15,11 @@ class ModelManifest(val version: String, val files: Map<ModelRole, ModelFile>) {
     fun file(role: ModelRole): ModelFile = files.getValue(role)
 
     val hasLiveModel: Boolean
-        get() = ModelRole.LIVE.all { it in files }
+        get() = liveLanguages.isNotEmpty()
+
+    // Языки, для которых в наборе есть живая модель.
+    val liveLanguages: Set<SpeechLanguage>
+        get() = SpeechLanguage.entries.filter { language -> ModelRole.live(language).all { it in files } }.toSet()
 
     val hasDenoiser: Boolean
         get() = ModelRole.DENOISER in files
@@ -36,9 +40,12 @@ class ModelManifest(val version: String, val files: Map<ModelRole, ModelFile>) {
                     }
                     filesJson.has(role.key)
                 }
-                val live = ModelRole.LIVE.count { it in present }
-                if (live != 0 && live != ModelRole.LIVE.size) {
-                    throw ModelsException(ModelsException.BAD_MANIFEST, "у живой модели есть не все файлы")
+                for (language in SpeechLanguage.entries) {
+                    val roles = ModelRole.live(language)
+                    val live = roles.count { it in present }
+                    if (live != 0 && live != roles.size) {
+                        throw ModelsException(ModelsException.BAD_MANIFEST, "у живой модели ${language.code} есть не все файлы")
+                    }
                 }
                 val files = present.associateWith { role ->
                     val entry = filesJson.getJSONObject(role.key)

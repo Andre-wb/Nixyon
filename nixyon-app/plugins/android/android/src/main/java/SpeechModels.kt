@@ -28,8 +28,8 @@ import com.k2fsa.sherpa.onnx.VadModelConfig
 // (SpeechEngine.unload), следующий разбор загрузит их заново.
 // Vad и шумоподавитель хранят состояние потока, поэтому здесь только их конфиги: на каждую
 // обработку создаётся свой экземпляр. recognizers: распознаватель одного языка за раз, сразу
-// грузится русский. live: потоковая модель для живого текста, null,
-// если её нет в наборе. denoiserConfig: шумоподавление для VAD, null, если его нет в наборе.
+// грузится русский. live: потоковые модели живого текста по языкам, null,
+// если ни одной нет в наборе. denoiserConfig: шумоподавление для VAD, null, если его нет в наборе.
 class SpeechModels private constructor(
     val located: LocatedModels,
     val vadConfig: VadModelConfig,
@@ -37,7 +37,7 @@ class SpeechModels private constructor(
     val voice: VoiceModel,
     val diarizer: OfflineSpeakerDiarization,
     val powerset: PowersetModel,
-    val live: OnlineRecognizer?,
+    val live: LiveRecognizers?,
     private val denoiserConfig: OfflineSpeechDenoiserModelConfig?,
 ) {
     // Новый поток шумоподавления на одну обработку; null без шумоподавителя в наборе.
@@ -115,7 +115,13 @@ class SpeechModels private constructor(
                 // перекрытия голосов.
                 val powerset = PowersetModel.open(source, manifest.file(ModelRole.SEGMENTATION), threads)
                     .also { loaded.add(it::close) }
-                val live = if (manifest.hasLiveModel) OnlineRecognizer(source.assetManager, liveConfig(located)) else null
+                val live = if (manifest.hasLiveModel) {
+                    LiveRecognizers(manifest.liveLanguages) { language ->
+                        OnlineRecognizer(source.assetManager, liveConfig(located, language))
+                    }
+                } else {
+                    null
+                }
                 return SpeechModels(located, vadConfig, recognizers, voice, diarizer, powerset, live, denoiserConfig)
             } catch (e: Throwable) {
                 loaded.asReversed().forEach { release -> runCatching(release) }
@@ -214,18 +220,19 @@ class SpeechModels private constructor(
             )
         }
 
-        private fun liveConfig(located: LocatedModels): OnlineRecognizerConfig {
+        private fun liveConfig(located: LocatedModels, language: SpeechLanguage): OnlineRecognizerConfig {
             val source = located.source
             val manifest = located.manifest
+            val (encoder, decoder, joiner, tokens) = ModelRole.live(language)
             return OnlineRecognizerConfig(
                 featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
                 modelConfig = OnlineModelConfig(
                     transducer = OnlineTransducerModelConfig(
-                        encoder = source.pathOf(manifest.file(ModelRole.LIVE_ENCODER)),
-                        decoder = source.pathOf(manifest.file(ModelRole.LIVE_DECODER)),
-                        joiner = source.pathOf(manifest.file(ModelRole.LIVE_JOINER)),
+                        encoder = source.pathOf(manifest.file(encoder)),
+                        decoder = source.pathOf(manifest.file(decoder)),
+                        joiner = source.pathOf(manifest.file(joiner)),
                     ),
-                    tokens = source.pathOf(manifest.file(ModelRole.LIVE_TOKENS)),
+                    tokens = source.pathOf(manifest.file(tokens)),
                     numThreads = LIVE_THREADS,
                 ),
                 enableEndpoint = true,

@@ -95,6 +95,13 @@ const BPE_VOCAB_KEY: &str = "asr_bpe_vocab";
 /// Необязательная потоковая модель для живого текста: четыре файла Zipformer вместе или
 /// ни одного.
 const LIVE_KEYS: [&str; 4] = ["live_encoder", "live_decoder", "live_joiner", "live_tokens"];
+/// Необязательная потоковая модель английской речи: так же четыре файла или ни одного.
+const LIVE_EN_KEYS: [&str; 4] = [
+    "live_en_encoder",
+    "live_en_decoder",
+    "live_en_joiner",
+    "live_en_tokens",
+];
 /// Необязательное распознавание звуков (речь, музыка): модель и список классов вместе
 /// или ни одного.
 const TAGGING_KEYS: [&str; 2] = ["tagging_model", "tagging_labels"];
@@ -111,6 +118,7 @@ pub struct ModelManifest {
     segmentation: Option<String>,
     bpe_vocab: Option<String>,
     live: Option<[String; 4]>,
+    live_en: Option<[String; 4]>,
     tagging: Option<[String; 2]>,
     denoiser: Option<String>,
 }
@@ -145,6 +153,11 @@ impl ModelManifest {
             .map(|file| checked(BPE_VOCAB_KEY, file))
             .transpose()?;
         let live = all_or_none(&raw.files, &LIVE_KEYS, "у живой модели есть не все файлы")?;
+        let live_en = all_or_none(
+            &raw.files,
+            &LIVE_EN_KEYS,
+            "у английской живой модели есть не все файлы",
+        )?;
         let tagging = all_or_none(
             &raw.files,
             &TAGGING_KEYS,
@@ -162,6 +175,7 @@ impl ModelManifest {
             segmentation,
             bpe_vocab,
             live,
+            live_en,
             tagging,
             denoiser,
         })
@@ -188,10 +202,13 @@ impl ModelManifest {
         self.optional(self.bpe_vocab.as_deref())
     }
 
-    /// Потоковая модель для живого текста, если она есть в наборе.
-    pub fn live_model(&self) -> Option<StreamModel> {
-        let [encoder, decoder, joiner, tokens] =
-            self.live.as_ref()?.clone().map(|n| self.dir.join(n));
+    /// Потоковая модель живого текста на этом языке, если она есть в наборе.
+    pub fn live_model(&self, language: SpeechLanguage) -> Option<StreamModel> {
+        let files = match language {
+            SpeechLanguage::Ru => self.live.as_ref(),
+            SpeechLanguage::En => self.live_en.as_ref(),
+        };
+        let [encoder, decoder, joiner, tokens] = files?.clone().map(|n| self.dir.join(n));
         Some(StreamModel::Zipformer {
             encoder,
             decoder,
@@ -384,14 +401,27 @@ mod tests {
     #[test]
     fn live_model_is_optional_and_needs_all_four_files() {
         let without = ModelManifest::parse(Path::new("/m"), &manifest_json("vad.onnx")).unwrap();
-        assert_eq!(without.live_model(), None);
+        assert_eq!(without.live_model(SpeechLanguage::Ru), None);
         let with = ModelManifest::parse(Path::new("/m"), &with_live(&LIVE_KEYS)).unwrap();
-        let live = with.live_model().unwrap();
+        assert_eq!(with.live_model(SpeechLanguage::En), None);
+        let live = with.live_model(SpeechLanguage::Ru).unwrap();
         assert_eq!(live.name(), "zipformer");
         assert_eq!(live.files()[0], Path::new("/m/live_encoder.onnx"));
         assert_eq!(live.files()[3], Path::new("/m/live_tokens.onnx"));
         let err = ModelManifest::parse(Path::new("/m"), &with_live(&LIVE_KEYS[..3])).unwrap_err();
         assert!(err.to_string().contains("не все файлы"), "{err}");
+    }
+
+    #[test]
+    fn english_live_model_is_optional_and_needs_all_four_files() {
+        let with = ModelManifest::parse(Path::new("/m"), &with_live(&LIVE_EN_KEYS)).unwrap();
+        assert_eq!(with.live_model(SpeechLanguage::Ru), None);
+        let live = with.live_model(SpeechLanguage::En).unwrap();
+        assert_eq!(live.files()[0], Path::new("/m/live_en_encoder.onnx"));
+        assert_eq!(live.files()[3], Path::new("/m/live_en_tokens.onnx"));
+        let err =
+            ModelManifest::parse(Path::new("/m"), &with_live(&LIVE_EN_KEYS[1..])).unwrap_err();
+        assert!(err.to_string().contains("английской"), "{err}");
     }
 
     #[test]

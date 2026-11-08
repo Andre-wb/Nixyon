@@ -8,11 +8,6 @@ export function applySpeechLanguage(value) {
   choice = value ?? "auto";
 }
 
-// Живой текст слушает русская модель: при выбранном английском он показал бы кашу.
-export function liveTextShown() {
-  return choice !== "en";
-}
-
 export function renderSettingsSpeech() {
   for (const radio of document.querySelectorAll('input[name="speech-language"]')) {
     radio.checked = radio.value === choice;

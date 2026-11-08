@@ -48,6 +48,18 @@ class ModelManifestTest {
     }
 
     @Test
+    fun englishLiveModelIsOptionalWholeAndInTheLivePack() {
+        val both = ModelManifest.parse(manifest(required + ModelRole.LIVE + ModelRole.LIVE_EN))
+        assertEquals(setOf(SpeechLanguage.RU, SpeechLanguage.EN), both.liveLanguages)
+        assertEquals(setOf(SpeechLanguage.RU), ModelManifest.parse(manifest(required + ModelRole.LIVE)).liveLanguages)
+        val englishOnly = ModelManifest.parse(manifest(required + ModelRole.LIVE_EN))
+        assertEquals(setOf(SpeechLanguage.EN), englishOnly.liveLanguages)
+        assertTrue(englishOnly.hasLiveModel)
+        assertEquals(ModelsException.BAD_MANIFEST, rejected(manifest(required + ModelRole.LIVE + ModelRole.LIVE_EN_JOINER)))
+        assertTrue(ModelRole.LIVE_EN.all { it.optional && ModelPack.of(it) == ModelPack.LIVE })
+    }
+
+    @Test
     fun pathsOutsideTheModelsFolderAreRejected() {
         for (bad in listOf("", "../vad.onnx", "sub/vad.onnx", "sub\\\\vad.onnx", ".vad")) {
             assertEquals(bad, ModelsException.BAD_MANIFEST, rejected(manifest(required) { if (it == ModelRole.VAD) bad else "${it.key}.onnx" }))

@@ -42,6 +42,7 @@ pub async fn suggest_speaker_names<R: Runtime>(
     let reply = app
         .speech()
         .suggest_speaker_names(SpeakerNamesRequest {
+            language: transcript.language,
             speakers,
             turns,
             on_progress: Channel::new(move |body| {

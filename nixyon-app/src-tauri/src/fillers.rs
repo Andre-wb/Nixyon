@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use nixyon_android::{SpeechExt, SummaryRequest};
-use nixyon_core::Turn;
+use nixyon_core::{SpeechLanguage, Turn};
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Runtime, State};
@@ -20,10 +20,10 @@ use crate::transcription::CommandError;
 
 const UNKNOWN_TURN: &str = "unknown_turn";
 
-/// Слова, которые убираются, если ничего не значат. Многословные записаны через пробел.
-/// Заминки записаны во всех частых написаниях, «типо» так пишет распознавание. Слова,
-/// которые часто несут смысл («так», «да», «вообще», «слушай», «в принципе»), сюда не
-/// входят: этот список разрешает модели вычёркивать.
+/// Слова, которые убираются из русской речи, если ничего не значат. Многословные записаны
+/// через пробел. Заминки записаны во всех частых написаниях, «типо» так пишет
+/// распознавание. Слова, которые часто несут смысл («так», «да», «вообще», «слушай»,
+/// «в принципе»), сюда не входят: этот список разрешает модели вычёркивать.
 const FILLERS: &[&str] = &[
     "э",
     "ээ",
@@ -46,13 +46,19 @@ const FILLERS: &[&str] = &[
     "в общем-то",
 ];
 
+/// Для английской речи только заминки во всех частых написаниях: «like», «you know»,
+/// «so», «well», «basically» часто несут смысл и не вычёркиваются.
+const FILLERS_EN: &[&str] = &[
+    "uh", "uhh", "uhm", "um", "umm", "er", "erm", "ah", "ahh", "hmm", "hm", "mm", "mmm",
+];
+
 /// Фраза длиннее этого не идёт в модель: её ответ должен оставаться в лимите.
 const MAX_TURN_CHARS: usize = 1500;
 /// Предел длины ответа на одну фразу. Ответ не длиннее фразы: русский текст в 2000 знаков
 /// занимает около 600 токенов модели.
 const MAX_TOKENS: u32 = 1024;
 
-/// Инструкция модели. Русская при любом языке интерфейса, как и остальные инструкции.
+/// Инструкция модели для русской встречи, при любом языке интерфейса.
 const SYSTEM: &str = "Ты убираешь слова-паразиты из реплик разговора. Слова-паразиты: \
 «э», «эээ», «эм», «ммм», «ну», «вот», «типа», «типо», «короче», «значит», «собственно», \
 «как бы», «так сказать», «это самое», «в общем», «в общем-то», если они ничего не значат. Убирай их только там, где они ничего не \
@@ -60,6 +66,35 @@ const SYSTEM: &str = "Ты убираешь слова-паразиты из р�
 препинания. Каждая реплика дана строкой «номер: текст». Ответь теми же строками «номер: \
 текст» с очищенным текстом, без пояснений. Если паразитов в реплике нет, повтори её как \
 есть.";
+
+/// Инструкция для английской встречи: перевод русской, список заминок из `FILLERS_EN`.
+const SYSTEM_EN: &str = "You remove filler sounds from the lines of a conversation. Filler \
+sounds: \"uh\", \"um\", \"er\", \"erm\", \"ah\", \"hmm\", \"mm\". Remove only them. Do not add \
+new words, do not rephrase, do not change the meaning, keep the language and punctuation. \
+Each line is given as \"number: text\". Answer with the same lines \"number: text\" with the \
+cleaned text, without explanations. If a line has no filler sounds, repeat it as is.";
+
+/// Слова-паразиты и инструкция модели на языке встречи.
+#[derive(Debug, Clone, Copy)]
+struct Fillers {
+    words: &'static [&'static str],
+    system: &'static str,
+}
+
+impl Fillers {
+    fn of(language: SpeechLanguage) -> Self {
+        match language {
+            SpeechLanguage::Ru => Self {
+                words: FILLERS,
+                system: SYSTEM,
+            },
+            SpeechLanguage::En => Self {
+                words: FILLERS_EN,
+                system: SYSTEM_EN,
+            },
+        }
+    }
+}
 
 /// Ход работы: сколько фраз модель уже обработала из скольких.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -114,10 +149,11 @@ pub async fn remove_filler_words<R: Runtime>(
         .begin()
         .ok_or_else(|| CommandError::new(CommandError::BUSY))?;
     let store = crate::vault::storage(&app).await?.store;
-    let plan = tauri::async_runtime::spawn_blocking(move || {
+    let (language, fillers, plan) = tauri::async_runtime::spawn_blocking(move || {
         let (_, transcript) = crate::meetings::load(&store, &meeting)?;
         let turns = select(&transcript.turns, ids.as_deref())?;
-        Ok::<_, CommandError>(plan(&turns))
+        let fillers = Fillers::of(transcript.language);
+        Ok::<_, CommandError>((transcript.language, fillers, plan(fillers, &turns)))
     })
     .await
     .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))??;
@@ -139,11 +175,10 @@ pub async fn remove_filler_words<R: Runtime>(
         let reply = app
             .speech()
             .summarize(SummaryRequest {
-                system: SYSTEM.to_owned(),
+                system: fillers.system.to_owned(),
                 user: batch_prompt(batch),
                 max_tokens: MAX_TOKENS,
-                // Инструкция русская, ответ ждём по-русски.
-                language: nixyon_core::SpeechLanguage::Ru,
+                language,
                 on_progress: Channel::new(|_: InvokeResponseBody| Ok(())),
             })
             .await
@@ -151,7 +186,7 @@ pub async fn remove_filler_words<R: Runtime>(
         if slot.cancel.is_cancelled() {
             return Err(CommandError::new(CommandError::CANCELLED));
         }
-        let parsed = changes_from(batch, &reply.text);
+        let parsed = changes_from(fillers, batch, &reply.text);
         let answered = u32::try_from(batch.len())
             .unwrap_or(u32::MAX)
             .saturating_sub(parsed.unanswered);
@@ -189,14 +224,14 @@ struct Plan {
     skipped: u32,
 }
 
-fn plan(turns: &[Turn]) -> Plan {
+fn plan(fillers: Fillers, turns: &[Turn]) -> Plan {
     let mut p = Plan {
         batches: Vec::new(),
         deletions: Vec::new(),
         skipped: 0,
     };
-    for turn in turns.iter().filter(|t| has_filler(&t.text)) {
-        if only_fillers(&turn.text) {
+    for turn in turns.iter().filter(|t| has_filler(fillers, &t.text)) {
+        if only_fillers(fillers, &turn.text) {
             p.deletions.push(FillerChange {
                 id: turn.id,
                 before: turn.text.clone(),
@@ -213,10 +248,10 @@ fn plan(turns: &[Turn]) -> Plan {
 }
 
 /// Во фразе нет ничего, кроме слов-паразитов и знаков.
-fn only_fillers(text: &str) -> bool {
+fn only_fillers(fillers: Fillers, text: &str) -> bool {
     let all = words(text);
     let before: Vec<&str> = all.split(' ').collect();
-    !all.is_empty() && only_fillers_removed(&before, &[])
+    !all.is_empty() && only_fillers_removed(fillers, &before, &[])
 }
 
 /// Слова в нижнем регистре через пробел: сравнение не зависит от знаков и регистра.
@@ -230,13 +265,13 @@ fn words(text: &str) -> String {
 }
 
 /// Паразиты разбиты на слова так же, как текст: «в общем-то» сравнивается как «в общем то».
-fn filler_words() -> Vec<String> {
-    FILLERS.iter().map(|f| words(f)).collect()
+fn filler_words(fillers: Fillers) -> Vec<String> {
+    fillers.words.iter().map(|f| words(f)).collect()
 }
 
-fn has_filler(text: &str) -> bool {
+fn has_filler(fillers: Fillers, text: &str) -> bool {
     let padded = format!(" {} ", words(text));
-    filler_words()
+    filler_words(fillers)
         .iter()
         .any(|f| padded.contains(&format!(" {f} ")))
 }
@@ -255,7 +290,7 @@ fn batch_prompt(batch: &[(u32, String)]) -> String {
 /// Разбор ответа: строка «номер: текст» на каждую фразу пачки. Фраза с отвергнутым
 /// ответом правки не получает, остаётся как была. Фраза без строки тоже остаётся как была
 /// и считается в `unanswered`.
-fn changes_from(batch: &[(u32, String)], raw: &str) -> BatchReply {
+fn changes_from(fillers: Fillers, batch: &[(u32, String)], raw: &str) -> BatchReply {
     let Some(body) = answer::clean_answer(raw) else {
         return BatchReply {
             changes: Vec::new(),
@@ -276,7 +311,7 @@ fn changes_from(batch: &[(u32, String)], raw: &str) -> BatchReply {
             reply.unanswered += 1;
             continue;
         };
-        if let Some(after) = clean_turn(before, line)
+        if let Some(after) = clean_turn(fillers, before, line)
             && after != squash(before)
         {
             reply.changes.push(FillerChange {
@@ -297,7 +332,7 @@ fn squash(text: &str) -> String {
 /// Ответ модели на одну фразу. Принимается, только если его слова получаются из слов
 /// фразы вычёркиванием слов-паразитов целиком, без перестановок и без других вычеркнутых
 /// слов. Знаки препинания и регистр берутся из ответа.
-fn clean_turn(before: &str, reply: &str) -> Option<String> {
+fn clean_turn(fillers: Fillers, before: &str, reply: &str) -> Option<String> {
     let text: String = squash(reply).chars().filter(|c| !c.is_control()).collect();
     let text = unquote(text.trim());
     let original = words(before);
@@ -307,14 +342,14 @@ fn clean_turn(before: &str, reply: &str) -> Option<String> {
     }
     let before_words: Vec<&str> = original.split(' ').collect();
     let after_words: Vec<&str> = cleaned.split(' ').collect();
-    only_fillers_removed(&before_words, &after_words).then(|| text.to_owned())
+    only_fillers_removed(fillers, &before_words, &after_words).then(|| text.to_owned())
 }
 
 /// Можно ли получить `after` из `before`, вычёркивая только слова-паразиты. Перебор
 /// таблицей «сколько слов фразы и ответа уже сопоставлено»: жадный проход ошибается, когда
 /// паразит совпадает с обычным словом рядом («как бы как»).
-fn only_fillers_removed(before: &[&str], after: &[&str]) -> bool {
-    let joined = filler_words();
+fn only_fillers_removed(fillers: Fillers, before: &[&str], after: &[&str]) -> bool {
+    let joined = filler_words(fillers);
     let fillers: Vec<Vec<&str>> = joined.iter().map(|f| f.split(' ').collect()).collect();
     let width = after.len() + 1;
     let mut reached = vec![false; (before.len() + 1) * width];
@@ -341,6 +376,11 @@ fn only_fillers_removed(before: &[&str], after: &[&str]) -> bool {
 mod tests {
     use super::*;
 
+    const RU: Fillers = Fillers {
+        words: FILLERS,
+        system: SYSTEM,
+    };
+
     fn turn(id: u32, text: &str) -> Turn {
         Turn {
             id,
@@ -356,11 +396,11 @@ mod tests {
 
     #[test]
     fn finds_fillers_as_whole_words_in_any_case() {
-        assert!(has_filler("Ну, вот мы и пришли."));
-        assert!(has_filler("Это, эм, не так."));
-        assert!(has_filler("Мы, как бы, уже готовы"));
-        assert!(!has_filler("Нужно было вернуться"));
-        assert!(!has_filler("Вотум и номер"));
+        assert!(has_filler(RU, "Ну, вот мы и пришли."));
+        assert!(has_filler(RU, "Это, эм, не так."));
+        assert!(has_filler(RU, "Мы, как бы, уже готовы"));
+        assert!(!has_filler(RU, "Нужно было вернуться"));
+        assert!(!has_filler(RU, "Вотум и номер"));
     }
 
     #[test]
@@ -372,7 +412,7 @@ mod tests {
             turn(3, &long),
             turn(4, "Значит, да."),
         ];
-        let p = plan(&turns);
+        let p = plan(RU, &turns);
         assert_eq!(p.skipped, 1);
         let ids: Vec<u32> = p.batches.iter().flatten().map(|(id, _)| *id).collect();
         assert_eq!(ids, [2, 4]);
@@ -381,7 +421,7 @@ mod tests {
     #[test]
     fn each_phrase_goes_to_the_model_alone() {
         let turns: Vec<Turn> = (1..=5).map(|id| turn(id, "Ну, мы пришли.")).collect();
-        let p = plan(&turns);
+        let p = plan(RU, &turns);
         assert_eq!(p.batches.len(), 5);
         assert!(p.batches.iter().all(|b| b.len() == 1));
     }
@@ -394,7 +434,7 @@ mod tests {
             turn(3, "Типо"),
             turn(4, "Ну, мы пришли."),
         ];
-        let p = plan(&turns);
+        let p = plan(RU, &turns);
         let deleted: Vec<u32> = p.deletions.iter().map(|c| c.id).collect();
         assert_eq!(deleted, [1, 2, 3]);
         assert!(p.deletions.iter().all(|c| c.delete && c.after.is_empty()));
@@ -404,18 +444,18 @@ mod tests {
 
     #[test]
     fn speech_recognition_spellings_and_hesitations_count_as_fillers() {
-        assert!(has_filler("Мы типо пришли."));
-        assert!(has_filler("Эээ, я не знаю."));
-        assert!(has_filler("Ммм, может быть."));
-        assert!(has_filler("Собственно, всё."));
-        assert!(!has_filler("Пять м до двери."));
+        assert!(has_filler(RU, "Мы типо пришли."));
+        assert!(has_filler(RU, "Эээ, я не знаю."));
+        assert!(has_filler(RU, "Ммм, может быть."));
+        assert!(has_filler(RU, "Собственно, всё."));
+        assert!(!has_filler(RU, "Пять м до двери."));
     }
 
     #[test]
     fn hyphenated_filler_is_matched_like_the_text() {
-        assert!(only_fillers("В общем-то."));
+        assert!(only_fillers(RU, "В общем-то."));
         assert_eq!(
-            clean_turn("В общем-то, мы готовы.", "Мы готовы."),
+            clean_turn(RU, "В общем-то, мы готовы.", "Мы готовы."),
             Some("Мы готовы.".into())
         );
     }
@@ -441,7 +481,7 @@ mod tests {
             (12, "Вот, да.".to_owned()),
         ];
         let reply = "1: Это хорошо.\n2: Ну, привет.\nмусор";
-        let reply = changes_from(&batch, reply);
+        let reply = changes_from(RU, &batch, reply);
         assert_eq!(reply.unanswered, 1);
         assert_eq!(
             reply.changes,
@@ -456,40 +496,49 @@ mod tests {
 
     #[test]
     fn model_reply_that_invents_words_is_rejected() {
-        assert_eq!(clean_turn("Ну, привет.", "Здравствуй, привет."), None);
-        assert_eq!(clean_turn("Ну, привет.", "Привет."), Some("Привет.".into()));
+        assert_eq!(clean_turn(RU, "Ну, привет.", "Здравствуй, привет."), None);
+        assert_eq!(
+            clean_turn(RU, "Ну, привет.", "Привет."),
+            Some("Привет.".into())
+        );
     }
 
     #[test]
     fn model_reply_that_cuts_most_of_the_phrase_is_rejected() {
-        assert_eq!(clean_turn("ну вот мы и здесь", "мы"), None);
+        assert_eq!(clean_turn(RU, "ну вот мы и здесь", "мы"), None);
         assert_eq!(
-            clean_turn("ну вот мы и здесь", "мы и здесь"),
+            clean_turn(RU, "ну вот мы и здесь", "мы и здесь"),
             Some("мы и здесь".into())
         );
     }
 
     #[test]
     fn model_reply_that_drops_an_ordinary_word_is_rejected() {
-        assert_eq!(clean_turn("Ну, я не согласен.", "Я согласен."), None);
+        assert_eq!(clean_turn(RU, "Ну, я не согласен.", "Я согласен."), None);
         assert_eq!(
-            clean_turn("Ну, я не согласен.", "Я не согласен."),
+            clean_turn(RU, "Ну, я не согласен.", "Я не согласен."),
             Some("Я не согласен.".into())
         );
     }
 
     #[test]
     fn model_reply_that_reorders_words_is_rejected() {
-        assert_eq!(clean_turn("Ну, мы пришли домой.", "Домой мы пришли."), None);
+        assert_eq!(
+            clean_turn(RU, "Ну, мы пришли домой.", "Домой мы пришли."),
+            None
+        );
     }
 
     #[test]
     fn multiword_filler_is_removed_only_as_a_whole() {
         assert_eq!(
-            clean_turn("Мы, как бы, готовы.", "Мы готовы."),
+            clean_turn(RU, "Мы, как бы, готовы.", "Мы готовы."),
             Some("Мы готовы.".into())
         );
-        assert_eq!(clean_turn("Мы, как бы, готовы.", "Мы как готовы."), None);
+        assert_eq!(
+            clean_turn(RU, "Мы, как бы, готовы.", "Мы как готовы."),
+            None
+        );
     }
 
     #[test]
@@ -499,15 +548,51 @@ mod tests {
             (2, "Вот, нет.".to_owned()),
             (3, "Ну, может.".to_owned()),
         ];
-        let reply = changes_from(&batch, "1: Да.\n2: Нет.");
+        let reply = changes_from(RU, &batch, "1: Да.\n2: Нет.");
         assert_eq!(reply.changes.len(), 2);
         assert_eq!(reply.unanswered, 1);
-        assert_eq!(changes_from(&batch, "").unanswered, 3);
+        assert_eq!(changes_from(RU, &batch, "").unanswered, 3);
     }
 
     #[test]
     fn quotes_and_empty_answers_are_handled() {
-        assert_eq!(clean_turn("ну да", "«да»"), Some("да".into()));
-        assert_eq!(clean_turn("ну да", "  "), None);
+        assert_eq!(clean_turn(RU, "ну да", "«да»"), Some("да".into()));
+        assert_eq!(clean_turn(RU, "ну да", "  "), None);
+    }
+
+    #[test]
+    fn english_meeting_removes_only_hesitations() {
+        let en = Fillers::of(SpeechLanguage::En);
+        assert!(has_filler(en, "Um, I think so."));
+        assert!(has_filler(en, "We, uhh, agreed."));
+        assert!(!has_filler(en, "Like, you know, it was basically fine."));
+        assert!(!has_filler(en, "Ну, привет."));
+        assert!(!has_filler(RU, "Um, I think so."));
+        assert!(only_fillers(en, "Hmm..."));
+        assert_eq!(
+            clean_turn(en, "Um, I don't know.", "I don't know."),
+            Some("I don't know.".into())
+        );
+        assert_eq!(clean_turn(en, "Well, um, yes.", "Yes."), None);
+        assert!(
+            Fillers::of(SpeechLanguage::En)
+                .system
+                .starts_with("You remove")
+        );
+        assert!(
+            Fillers::of(SpeechLanguage::Ru)
+                .system
+                .starts_with("Ты убираешь")
+        );
+    }
+
+    #[test]
+    fn english_instruction_names_only_listed_hesitations() {
+        for quoted in SYSTEM_EN.split('"').skip(1).step_by(2) {
+            if quoted.contains(':') {
+                continue;
+            }
+            assert!(FILLERS_EN.contains(&quoted), "{quoted}");
+        }
     }
 }

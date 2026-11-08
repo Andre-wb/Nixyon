@@ -83,6 +83,8 @@ class RecordArgs {
     var notificationChannel: String = ""
     // Образец голоса: пишется отдельно от записей встреч.
     var sample: Boolean = false
+    // Язык речи для живого текста: "ru", "en" или null («Авто»).
+    var language: String? = null
 }
 
 @InvokeArg
@@ -137,6 +139,7 @@ class NamingTurnArgs {
 
 @InvokeArg
 class SpeakerNamesArgs {
+    lateinit var language: String
     var speakers: Array<NamingSpeakerArgs> = arrayOf()
     var turns: Array<NamingTurnArgs> = arrayOf()
     var onProgress: Channel? = null

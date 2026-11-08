@@ -5,7 +5,6 @@ import { K, t } from "./i18n.js";
 import { renderLive } from "./live.js";
 import { onModelsChange, openModels, speechReady } from "./models.js";
 import { showImport, transcribe } from "./processing.js";
-import { liveTextShown } from "./settings-speech.js";
 import { onLanguageChange, show } from "./screens.js";
 
 const MIN_SPEAKERS = 1;
@@ -109,7 +108,6 @@ function renderRecorder() {
 }
 
 function setLive(lines) {
-  if (!liveTextShown()) return;
   liveLines = lines;
   renderLive("home-live", lines);
 }

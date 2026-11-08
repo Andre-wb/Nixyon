@@ -265,7 +265,7 @@
   "settings.speech_language": "Speech language",
   "settings.speech_language_auto": "Auto",
   "settings.speech_language_en": "English",
-  "settings.speech_language_hint": "With Auto, each recording's language is detected from the recording itself. Live text while recording is available for Russian only.",
+  "settings.speech_language_hint": "With Auto, each recording's language is detected from the recording itself. Live text starts in Russian and switches to English after a few seconds of English speech.",
   "settings.speech_language_ru": "Русский",
   "settings.storage": "Storage on this phone",
   "settings.theme": "Theme",

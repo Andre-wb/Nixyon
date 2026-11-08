@@ -97,7 +97,7 @@ class SpeakerNamesTest {
         )
         assertNull(SpeakerNames.prompt(unnamed(1, 2, 3), t))
         var called = false
-        val found = SpeakerNamer { _, _, _ -> called = true; "" }.suggest(unnamed(1, 2, 3), t)
+        val found = SpeakerNamer(SpeechLanguage.RU) { _, _, _ -> called = true; "" }.suggest(unnamed(1, 2, 3), t)
         assertTrue(found.isEmpty())
         assertFalse(called)
     }
@@ -259,7 +259,7 @@ class SpeakerNamesTest {
     @Test
     fun theModelGetsThePromptAndItsAnswerIsChecked() {
         var asked: Triple<String, String, Int>? = null
-        val found = SpeakerNamer { system, user, maxTokens ->
+        val found = SpeakerNamer(SpeechLanguage.RU) { system, user, maxTokens ->
             asked = Triple(system, user, maxTokens)
             "Спикер 1: неизвестно\nСпикер 2: Борис\nСпикер 3: Ольга"
         }.suggest(unnamed(1, 2, 3), meeting)
@@ -287,5 +287,56 @@ class SpeakerNamesTest {
         // Пустых реплик во фрагментах нет, поэтому про Спикера 2 модель не спрашивали.
         assertEquals(listOf(1), prompt.asked)
         assertEquals(emptyList<NameSuggestion>(), SpeakerNames.parse("Спикер 2: Руслан", prompt, unnamed(1, 2, 3), t))
+    }
+
+    private val english = NamingWords.of(SpeechLanguage.EN)
+
+    private val englishMeeting = turns(
+        1 to "Good morning. Let's go through the plans for the week, we have half an hour.",
+        2 to "Morning. Bad news first: the app crashes on import on Monday builds.",
+        1 to "That's critical. Tom, can you take it? It has to be fixed by Friday.",
+        2 to "Sure, I'll take it.",
+        3 to "Hi, my name is Kate, I joined the team last week. Yes, I can help with testing.",
+    )
+
+    @Test
+    fun anEnglishMeetingIsAskedInEnglishAndTheAnswerIsReadInEnglish() {
+        val speakers = unnamed(1, 2, 3)
+        val prompt = SpeakerNames.prompt(speakers, englishMeeting, english)!!
+        assertEquals(NamingWords.SYSTEM_EN, prompt.system)
+        // «Monday» и «Friday» с большой буквы, но не имена: реплика 2 взята только как соседняя
+        // с обращением к Тому, её последнее предложение.
+        assertEquals(
+            "Transcript excerpts:\n" +
+                "Speaker 2: … Bad news first: the app crashes on import on Monday builds.\n" +
+                "Speaker 1: … Tom, can you take it? …\n" +
+                "Speaker 2: Sure, I'll take it.\n" +
+                "Speaker 3: Hi, my name is Kate, I joined the team last week. …\n" +
+                "\nSpeakers: Speaker 1, Speaker 2, Speaker 3.",
+            prompt.user,
+        )
+        val found = SpeakerNames.parse(
+            "Speaker 1: unknown\nSpeaker 2: Tom\nSpeaker 3: Kate",
+            prompt,
+            speakers,
+            englishMeeting,
+            english,
+        )
+        assertEquals(listOf(NameSuggestion(2, "Tom", 3), NameSuggestion(3, "Kate", 5)), found)
+    }
+
+    @Test
+    fun englishNamesAreComparedWholeExceptThePossessive() {
+        assertTrue(SpeakerNames.sameName("Anna", "Anna's", english))
+        assertTrue(SpeakerNames.sameName("Anna", "anna", english))
+        assertFalse(SpeakerNames.sameName("Anna", "Ann", english))
+        assertFalse(SpeakerNames.sameName("Dan", "Daniel", english))
+        assertTrue(SpeakerNames.sameName("Анна", "Анну"))
+    }
+
+    @Test
+    fun aRussianAnswerLabelIsNotReadInAnEnglishMeeting() {
+        val prompt = SpeakerNames.prompt(unnamed(1, 2, 3), englishMeeting, english)!!
+        assertEquals(emptyList<NameSuggestion>(), SpeakerNames.parse("Спикер 2: Tom", prompt, unnamed(1, 2, 3), englishMeeting, english))
     }
 }

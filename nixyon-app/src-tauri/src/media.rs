@@ -28,7 +28,7 @@ pub(crate) fn plugin_error(e: nixyon_android::Error) -> CommandError {
 }
 
 /// Начинает запись. В канал идут уровень громкости 10 раз в секунду, живой текст при
-/// каждом его изменении (если в наборе есть живая модель) и событие остановки, если запись остановилась сама (предел, место, звонок, сворачивание без
+/// каждом его изменении (если в наборе есть живая модель языка речи из настроек) и событие остановки, если запись остановилась сама (предел, место, звонок, сворачивание без
 /// foreground service). `notification_title` и `notification_channel`: тексты
 /// уведомления о записи на языке интерфейса. `sample`: запись образца голоса, она не
 /// заменяет запись последней встречи.
@@ -41,10 +41,17 @@ pub async fn start_recording<R: Runtime>(
     sample: Option<bool>,
 ) -> Result<u32, CommandError> {
     // Подготовка хранилища удаляет недописанные записи: она должна пройти до начала новой.
-    crate::vault::storage(&app).await?;
+    let store = crate::vault::storage(&app).await?.store;
+    // Язык речи из настроек; None: «Авто», живой текст сам перейдёт на английский.
+    let language = tauri::async_runtime::spawn_blocking(move || {
+        crate::settings::load(&store).speech_language.fixed()
+    })
+    .await
+    .map_err(|e| CommandError::logged(CommandError::STORAGE_FAILED, e))?;
     let started = app
         .speech()
         .start_recording(RecordRequest {
+            language,
             notification_title,
             notification_channel,
             sample: sample.unwrap_or(false),

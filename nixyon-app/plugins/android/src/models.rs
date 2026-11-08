@@ -186,6 +186,8 @@ pub struct PauseRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecordRequest {
+    /// Язык речи для живого текста; None: «Авто», язык определяется по первым секундам речи.
+    pub language: Option<SpeechLanguage>,
     pub on_event: Channel<serde_json::Value>,
     /// Тексты уведомления о записи на языке интерфейса: заголовок и название канала.
     pub notification_title: String,
@@ -335,6 +337,8 @@ pub struct NamingTurn {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpeakerNamesRequest {
+    /// Язык встречи: на нём инструкция модели и слова, по которым ищутся имена.
+    pub language: SpeechLanguage,
     pub speakers: Vec<NamingSpeaker>,
     pub turns: Vec<NamingTurn>,
     pub on_progress: Channel<serde_json::Value>,

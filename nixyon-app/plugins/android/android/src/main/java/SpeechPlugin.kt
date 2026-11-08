@@ -279,7 +279,9 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
             try {
                 val started = System.nanoTime()
                 val progress = progressTo(args.onProgress)
-                val namer = SpeakerNamer { system, user, maxTokens -> summarizer.summarize(system, user, maxTokens, progress) }
+                val language = SpeechLanguage.fromCode(args.language)
+                    ?: throw LlmException(LlmException.FAILED, "неизвестный язык встречи ${args.language}")
+                val namer = SpeakerNamer(language) { system, user, maxTokens -> summarizer.summarize(system, user, maxTokens, progress) }
                 val found = namer.suggest(
                     args.speakers.map { NamingSpeaker(it.id, it.name) },
                     args.turns.map { NamingTurn(it.id, it.speaker, it.text) },
@@ -502,7 +504,10 @@ class SpeechPlugin(private val activity: Activity) : Plugin(activity) {
                         args.onEvent?.send(recordingJson(result).also { it.put("type", "stopped") })
                     },
                     live = { rate ->
-                        engine.startLive(rate) { lines ->
+                        val language = args.language?.let { code ->
+                            SpeechLanguage.fromCode(code).also { if (it == null) Log.w(TAG, "неизвестный язык живого текста $code, как «Авто»") }
+                        }
+                        engine.startLive(rate, language) { lines ->
                             args.onEvent?.send(jsObject("type" to "live", "lines" to JSONArray(lines)))
                         }.also { liveText = it != null }
                     },

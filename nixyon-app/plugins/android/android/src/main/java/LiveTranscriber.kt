@@ -2,6 +2,7 @@ package dev.demo.nixyon.speech
 
 import android.util.Log
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
+import com.k2fsa.sherpa.onnx.OnlineStream
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
@@ -11,8 +12,13 @@ import java.util.concurrent.TimeUnit
 // Текст в лог не пишется: это содержание разговора.
 // onDone зовётся, когда поток живого текста закончился и распознаватель больше не трогает:
 // с этого момента модели речи можно отпускать (SpeechEngine.startLive).
+// language: модель какого языка слушает запись. detect: если задан, по первым секундам речи
+// (LiveLanguageClip) определяет язык; когда он английский, живой текст начинается заново
+// английской моделью, русские строки убираются.
 class LiveTranscriber(
-    private val recognizer: OnlineRecognizer,
+    private val recognizers: LiveRecognizers,
+    private val language: SpeechLanguage,
+    private val detect: ((FloatArray, Int) -> SpeechLanguage?)?,
     private val rate: Int,
     private val onDone: () -> Unit,
     private val onLines: (List<String>) -> Unit,
@@ -45,21 +51,38 @@ class LiveTranscriber(
     }
 
     private fun loop() {
-        val stream = recognizer.createStream("")
+        // stream: поток распознавания для finally, active: он же внутри цикла.
+        var stream: OnlineStream? = null
         val phrases = ArrayDeque<String>()
         var shown = emptyList<String>()
+        val clip = detect?.let { LiveLanguageClip(rate) }
         try {
+            var recognizer = recognizers.of(language) ?: return
+            var active = recognizer.createStream("").also { stream = it }
             while (!stopped) {
                 val chunk = queue.poll(POLL_MS, TimeUnit.MILLISECONDS) ?: continue
-                stream.acceptWaveform(chunk, rate)
-                while (recognizer.isReady(stream)) recognizer.decode(stream)
-                var current = recognizer.getResult(stream).text.trim()
-                if (recognizer.isEndpoint(stream)) {
+                val heard = clip?.add(chunk)
+                val canSwitch = language != SpeechLanguage.EN && SpeechLanguage.EN in recognizers.available
+                if (heard != null && canSwitch && detect?.invoke(heard, rate) == SpeechLanguage.EN) {
+                    active.release()
+                    stream = null
+                    val english = recognizers.of(SpeechLanguage.EN)
+                    if (english != null) {
+                        recognizer = english
+                        phrases.clear()
+                        Log.i(TAG, "живой текст перешёл на английскую модель")
+                    }
+                    active = recognizer.createStream("").also { stream = it }
+                }
+                active.acceptWaveform(chunk, rate)
+                while (recognizer.isReady(active)) recognizer.decode(active)
+                var current = recognizer.getResult(active).text.trim()
+                if (recognizer.isEndpoint(active)) {
                     if (current.isNotEmpty()) {
                         phrases.addLast(current)
                         if (phrases.size > KEPT_PHRASES) phrases.removeFirst()
                     }
-                    recognizer.reset(stream)
+                    recognizer.reset(active)
                     current = ""
                 }
                 val lines = if (current.isEmpty()) phrases.toList() else phrases.toList() + current
@@ -71,7 +94,7 @@ class LiveTranscriber(
         } catch (e: Throwable) {
             Log.e(TAG, "живой текст остановлен ошибкой распознавания", e)
         } finally {
-            stream.release()
+            stream?.release()
             onDone()
         }
     }

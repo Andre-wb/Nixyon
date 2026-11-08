@@ -265,7 +265,7 @@
   "settings.speech_language": "Язык речи",
   "settings.speech_language_auto": "Авто",
   "settings.speech_language_en": "English",
-  "settings.speech_language_hint": "В «Авто» язык каждой записи определяется по ней самой. Живой текст во время записи есть только для русского.",
+  "settings.speech_language_hint": "В «Авто» язык каждой записи определяется по ней самой. Живой текст начинается на русском и через несколько секунд английской речи переходит на английский.",
   "settings.speech_language_ru": "Русский",
   "settings.storage": "Место на телефоне",
   "settings.theme": "Тема",

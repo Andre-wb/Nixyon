@@ -24,7 +24,7 @@ BASE_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download"
 source "${ROOT}/scripts/model-mirror.sh"
 
 # Меняется при любой смене моделей: по нему приложение видит, что набор другой.
-VERSION="giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8+parakeet-tdt-0.6b-v3-int8+whisper-tiny-lid-int8"
+VERSION="giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8+parakeet-tdt-0.6b-v3-int8+whisper-tiny-lid-int8+streaming-zipformer-en-kroko-2025-08-06"
 # GigaAM v3 с пунктуацией: сразу даёт знаки препинания, заглавные буквы и числа цифрами.
 GIGAAM="sherpa-onnx-nemo-transducer-punct-giga-am-v3-russian-2025-12-16"
 # Нейросегментация: кто и когда говорит, включая наложения голосов.
@@ -32,6 +32,9 @@ SEGMENTATION="sherpa-onnx-pyannote-segmentation-3-0"
 # Потоковая модель для живого текста во время записи: лучшая по WER из потоковых русских
 # моделей sherpa-onnx на ru2, ru4, ru6.
 LIVE="sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16"
+# Живой текст английской речи: Kroko (Banafo, CC-BY-SA, веса в 8 битах), на en2, en4, en6
+# WER 21,4 % против 24,6 % у streaming-zipformer-en-2023-06-26 int8, меньше и быстрее.
+LIVE_EN="sherpa-onnx-streaming-zipformer-en-kroko-2025-08-06"
 # Словарь SentencePiece той же модели: из него строится bpe.vocab, по которому sherpa-onnx
 # разбивает горячие слова на токены. Части словаря совпадают с tokens.txt, это проверяется.
 TOKENIZER_URL="https://huggingface.co/ai-sage/GigaAM-v3/resolve/ec1dc1f01d0d627ab2c0d3acc1e235702300d95e/tokenizer.model"
@@ -74,6 +77,7 @@ DOWNLOADS=(
   "speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2"
   "speaker-segmentation-models/${SEGMENTATION}.tar.bz2 24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488"
   "asr-models/${LIVE}.tar.bz2 6ba68a01ff3c5445aaf2d61e9b97b026f1149dcc9049d11af3f44f55176341d8"
+  "asr-models/${LIVE_EN}.tar.bz2 c8676e5ff9ac2a85296e53ee0fd4d5fb1db6770e7a7647166eeafe349ade6834"
   "audio-tagging-models/${TAGGING}.tar.bz2 84baf315b57d61aa69480c4fee878dab54cbc7be3e877db334e65d8b087e23c3"
   # Шумоподавление GTCRN для второго VAD: им режутся длинные куски VAD в шуме.
   "speech-enhancement-models/gtcrn_simple.onnx e77603ac0c23dac3227dd2d7135b3a585cbee2679048aecfa886657d3ae1b534"
@@ -150,6 +154,10 @@ ROLES=(
   "live_decoder live-decoder.onnx"
   "live_joiner live-joiner.int8.onnx"
   "live_tokens live-tokens.txt"
+  "live_en_encoder live-en-encoder.int8.onnx"
+  "live_en_decoder live-en-decoder.int8.onnx"
+  "live_en_joiner live-en-joiner.int8.onnx"
+  "live_en_tokens live-en-tokens.txt"
   "tagging_model tagging.int8.onnx"
   "tagging_labels tagging-labels.csv"
   "redimnet2 redimnet2-b6.onnx"
@@ -345,6 +353,12 @@ tar -xjf "${CACHE}/${LIVE}.tar.bz2" -C "${CACHE}" \
   "${LIVE}/joiner.int8.onnx" \
   "${LIVE}/tokens.txt"
 
+tar -xjf "${CACHE}/${LIVE_EN}.tar.bz2" -C "${CACHE}" \
+  "${LIVE_EN}/encoder.onnx" \
+  "${LIVE_EN}/decoder.onnx" \
+  "${LIVE_EN}/joiner.onnx" \
+  "${LIVE_EN}/tokens.txt"
+
 tar -xjf "${CACHE}/${TAGGING}.tar.bz2" -C "${CACHE}" \
   "${TAGGING}/model.int8.onnx" \
   "${TAGGING}/class_labels_indices.csv"
@@ -365,6 +379,11 @@ cp "${CACHE}/${LIVE}/encoder.int8.onnx" "${MODELS}/live-encoder.int8.onnx"
 cp "${CACHE}/${LIVE}/decoder.onnx" "${MODELS}/live-decoder.onnx"
 cp "${CACHE}/${LIVE}/joiner.int8.onnx" "${MODELS}/live-joiner.int8.onnx"
 cp "${CACHE}/${LIVE}/tokens.txt" "${MODELS}/live-tokens.txt"
+# Файлы Kroko уже с весами в 8 битах, хотя в имени архива этого нет.
+cp "${CACHE}/${LIVE_EN}/encoder.onnx" "${MODELS}/live-en-encoder.int8.onnx"
+cp "${CACHE}/${LIVE_EN}/decoder.onnx" "${MODELS}/live-en-decoder.int8.onnx"
+cp "${CACHE}/${LIVE_EN}/joiner.onnx" "${MODELS}/live-en-joiner.int8.onnx"
+cp "${CACHE}/${LIVE_EN}/tokens.txt" "${MODELS}/live-en-tokens.txt"
 cp "${CACHE}/${TAGGING}/model.int8.onnx" "${MODELS}/tagging.int8.onnx"
 cp "${CACHE}/${TAGGING}/class_labels_indices.csv" "${MODELS}/tagging-labels.csv"
 cp "${CACHE}/gtcrn_simple.onnx" "${MODELS}/denoiser.onnx"

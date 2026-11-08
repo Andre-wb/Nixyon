@@ -31,10 +31,21 @@ class SpeechLanguageDetector(private val located: LocatedModels) {
         }
     }
 
-    private fun language(model: SpokenLanguageIdentification, samples: FloatArray): SpeechLanguage? {
+    // Язык одного отрезка звука любой частоты (поток распознавания сам переводит её в
+    // 16 кГц); null, если это не русский и не английский. Модель грузится на этот отрезок.
+    fun detectClip(samples: FloatArray, rate: Int): SpeechLanguage? {
+        val model = SpokenLanguageIdentification(located.source.assetManager, config())
+        try {
+            return language(model, samples, rate)
+        } finally {
+            model.release()
+        }
+    }
+
+    private fun language(model: SpokenLanguageIdentification, samples: FloatArray, rate: Int = SpeechModels.SAMPLE_RATE): SpeechLanguage? {
         val stream = model.createStream()
         try {
-            stream.acceptWaveform(samples, SpeechModels.SAMPLE_RATE)
+            stream.acceptWaveform(samples, rate)
             return SpeechLanguage.fromCode(model.compute(stream))
         } finally {
             stream.release()

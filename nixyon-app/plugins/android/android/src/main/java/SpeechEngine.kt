@@ -134,15 +134,21 @@ class SpeechEngine(private val context: Context) {
     // Живой текст на одну запись, если модели уже загружены. Не ждёт загрузки: запись
     // начинается сразу, а без готовых моделей просто идёт без живого текста. Пока поток
     // живого текста не закончился, модели речи не отпускаются.
-    fun startLive(rate: Int, onLines: (List<String>) -> Unit): LiveTranscriber? {
+    // language: выбранный язык речи; null: «Авто», живой текст начинается русским и по
+    // первым секундам речи переходит на английский, если речь английская. Без живой модели
+    // нужного языка запись идёт без живого текста.
+    fun startLive(rate: Int, language: SpeechLanguage?, onLines: (List<String>) -> Unit): LiveTranscriber? {
         val hold = slot.hold() ?: return null
-        val recognizer = hold.models.live
-        if (recognizer == null) {
+        val recognizers = hold.models.live
+        val first = language ?: SpeechLanguage.RU
+        if (recognizers == null || first !in recognizers.available) {
             hold.done()
             return null
         }
+        val detector = SpeechLanguageDetector(hold.models.located)
+        val detect = if (language == null) detector::detectClip else null
         return try {
-            LiveTranscriber(recognizer, rate, hold::done, onLines)
+            LiveTranscriber(recognizers, first, detect, rate, hold::done, onLines)
         } catch (e: Throwable) {
             hold.done()
             throw e

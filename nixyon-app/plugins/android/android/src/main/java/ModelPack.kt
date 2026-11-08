@@ -18,7 +18,7 @@ enum class ModelPack(val key: String, val required: Boolean = false) {
         // необязательные каждая в свой.
         fun of(role: ModelRole): ModelPack =
             when (role) {
-                in ModelRole.LIVE -> LIVE
+                in ModelRole.LIVE, in ModelRole.LIVE_EN -> LIVE
                 ModelRole.DENOISER -> DENOISER
                 ModelRole.AGE_GENDER -> AGE
                 ModelRole.EMOTION -> EMOTION

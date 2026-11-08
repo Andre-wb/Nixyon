@@ -1,5 +1,5 @@
 {
-  "version": "giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8+parakeet-tdt-0.6b-v3-int8+whisper-tiny-lid-int8",
+  "version": "giga-am-v3-punct-ru-2025-12-16+silero-vad+campplus-zh-en-advanced-16k+pyannote-segmentation-3-0+bpe-vocab+streaming-zipformer-small-ru-vosk-int8-2025-08-16+ced-tiny-audio-tagging-2024-04-19+redimnet2-b6-vb2-vox2-lm+gtcrn-simple+age-gender-int8+gigaam-emo-nbits8+parakeet-tdt-0.6b-v3-int8+whisper-tiny-lid-int8+streaming-zipformer-en-kroko-2025-08-06",
   "files": {
     "vad": {
       "path": "vad.onnx",
@@ -60,6 +60,26 @@
       "path": "live-tokens.txt",
       "size": 6388,
       "sha256": "93bbbc0bae6b78c0bbb743d4aa9fded3bb5ff3aac5f0200e3a769a5a05e0fdf6"
+    },
+    "live_en_encoder": {
+      "path": "live-en-encoder.int8.onnx",
+      "size": 70092599,
+      "sha256": "d4881c57449d581e0770fd53fa66c2fdc6cd167d92ece7c715e603defc96d9d4"
+    },
+    "live_en_decoder": {
+      "path": "live-en-decoder.int8.onnx",
+      "size": 617488,
+      "sha256": "455ba38466fce8d5a57e7db68a323b684079ca4d9e1dd93a740d9b2429aae3b1"
+    },
+    "live_en_joiner": {
+      "path": "live-en-joiner.int8.onnx",
+      "size": 336817,
+      "sha256": "d406f616736350e2a7df3e39398b78eb2fc1a2ca6973a19d3853fa3227e25b52"
+    },
+    "live_en_tokens": {
+      "path": "live-en-tokens.txt",
+      "size": 6310,
+      "sha256": "396dbeb5f4858875690716084f54e90d339679d0ba3e6b5b584f3d7589254d2d"
     },
     "redimnet2": {
       "path": "redimnet2-b6.onnx",
