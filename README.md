@@ -13,6 +13,19 @@ Nixyon расшифровывает записи встреч на русско�
 
 Лицензия проекта не выбрана.
 
+## Отчётные материалы
+
+| Материал | Где |
+|---|---|
+| APK, полная и лёгкая | [nixyon.onyxar.org/apk](https://nixyon.onyxar.org/apk) |
+| Исходный код, установка и использование | [src/README.md](src/README.md) |
+| Архитектура и модели | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Формат результата | [docs/PROTOCOL.md](docs/PROTOCOL.md) |
+| Ограничения | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
+| Результаты тестов | [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md), [artifacts/test-results/results.csv](artifacts/test-results/results.csv) |
+| Демонстрация | [artifacts/demo](artifacts/demo) |
+| Переменные окружения | [config/example.env](config/example.env) |
+
 ## Содержание
 
 - [Возможности](#возможности)

@@ -1,0 +1,20 @@
+test_id,date,commit,tool,dataset,record,language,audio_seconds,speaker_count_mode,speakers_truth,speakers_found,wer_percent,cer_percent,der_percent,rtf,device,notes
+random50-all,2026-11-08,5d535e7,quality_eval,"50 случайных клипов: Common Voice 21, open_stt (звонки, YouTube, аудиокниги)",50 клипов,auto,161.7,auto,,,13.2,,,,сервер Nixyon Hub,"с исправлением шумоподавителя поверх 5d535e7; 14 движков, 58,8 с на 161,7 с звука; до исправления 2 клипа без текста и WER 17,4 %"
+random50-cv21,2026-11-08,5d535e7,quality_eval,Common Voice 21 ru (тестовая часть),17 случайных клипов,auto,77.9,auto,,,1.5,0.3,,2.168,сервер Nixyon Hub,"с исправлением шумоподавителя; RTF одного движка"
+random50-calls,2026-11-08,5d535e7,quality_eval,open_stt: звонки,19 случайных клипов,auto,47.4,auto,,,26.4,11.7,,3.564,сервер Nixyon Hub,"с исправлением шумоподавителя; без разговорных форм и междометий 17,9 %"
+random50-books,2026-11-08,5d535e7,quality_eval,open_stt: аудиокниги,10 случайных клипов,auto,25.0,auto,,,9.8,3.1,,3.726,сервер Nixyon Hub,с исправлением шумоподавителя; RTF одного движка
+random50-youtube,2026-11-08,5d535e7,quality_eval,open_stt: YouTube,4 случайных клипа,auto,11.5,auto,,,11.1,2.9,,2.582,сервер Nixyon Hub,с исправлением шумоподавителя; RTF одного движка
+dialog-en2,2026-11-08,18dd75e,eval,VoxForge EN,en2,auto,48.1,auto,2,2,4.0,,24.7,,ноутбук Apple M4,"язык определён верно; RTF по шести записям около 0,2"
+dialog-en4,2026-11-08,18dd75e,eval,VoxForge EN,en4,auto,95.7,auto,4,4,6.3,,18.3,,ноутбук Apple M4,язык определён верно
+dialog-en6,2026-11-08,18dd75e,eval,VoxForge EN,en6,auto,144.8,auto,6,6,6.2,,10.0,,ноутбук Apple M4,язык определён верно
+dialog-ru2,2026-11-08,18dd75e,eval,VoxForge RU,ru2,auto,66.5,auto,2,2,0.0,,26.3,,ноутбук Apple M4,язык определён верно
+dialog-ru4,2026-11-08,18dd75e,eval,VoxForge RU,ru4,auto,140.7,auto,4,4,6.4,,15.8,,ноутбук Apple M4,язык определён верно
+dialog-ru6,2026-11-08,18dd75e,eval,VoxForge RU,ru6,auto,214.4,auto,6,6,6.4,,11.8,,ноутбук Apple M4,язык определён верно
+dialogs-6,2026-11-07,,eval,проверочные диалоги,"ru2, ru4, ru6, ru4_fast, ru4_overlap, real3",ru,672.7,auto,,,,,17.2,,ноутбук Apple M4,"DER по шести записям вместе; перекрытия на ru4_overlap: полнота 26,7 %, точность 76,5 %"
+noise-14,2026-11-04,,eval,диалоги с шумом DEMAND,"ru2, ru4, ru6, ru4_fast, ru4_overlap и ru2, ru4, ru6 при ОСШ 20, 10, 5 дБ",ru,,auto,,,25.6,,23.8,,ноутбук Apple M4,"14 записей; число говорящих верно в 10 из 14; шумоподавитель GTCRN для кусков от 15 с"
+cv21-ru-test,2026-10-31,,quality_eval,Common Voice 21 ru (тестовая часть),"все 23 219 клипов",ru,118764,auto,,,3.0,1.3,,0.270,сервер Nixyon Hub,"RTF одного движка; 14 движков дали 51,4× реального времени"
+open-stt-calls,2026-11-04,3802f7e,quality_eval,open_stt: звонки,полный прогон,ru,,auto,,,21.3,,,,сервер Nixyon Hub,"без разговорных форм и междометий 17,6 %"
+open-stt-youtube,2026-11-04,3802f7e,quality_eval,open_stt: YouTube,полный прогон,ru,,auto,,,13.4,,,,сервер Nixyon Hub,"без разговорных форм и междометий 11,0 %"
+open-stt-books,2026-11-04,3802f7e,quality_eval,open_stt: аудиокниги,полный прогон,ru,,auto,,,10.9,,,,сервер Nixyon Hub,"без разговорных форм и междометий 10,3 %"
+cv21-ru-test-3802f7e,2026-11-04,3802f7e,quality_eval,Common Voice 21 ru (тестовая часть),полный прогон,ru,,auto,,,1.9,,,,сервер Nixyon Hub,
+android-emulator-579s,2026-11-03,,приложение,склейка ru6 ru4 prior6a,одна запись,ru,578.8,auto,,6,,,,0.51,"эмулятор Android arm64, 4 ядра, 6 ГБ","выпускная сборка; весь анализ около 297 с, из них эмбеддинги голоса 51 %; пик памяти процесса 1,38 ГБ"

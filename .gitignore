@@ -39,3 +39,12 @@ rustc-ice-*.txt
 # Локальный toolchain, браузерные профили проверки и промежуточные файлы APK
 /.android-build/
 /dist/*.idsig
+
+# Локальные настройки скриптов (образец в config/example.env)
+.env
+
+# Видео и звук демонстрации не хранятся в git
+/artifacts/demo/*.mp4
+/artifacts/demo/*.mov
+/artifacts/demo/*.mkv
+/artifacts/demo/*.wav
