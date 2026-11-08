@@ -3,9 +3,12 @@ import { $ } from "./dom.js";
 import { clock } from "./format.js";
 import { K, t } from "./i18n.js";
 import { renderLive } from "./live.js";
+import { meetingMeta, meetingTitle } from "./meeting-title.js";
+import { showMeeting } from "./meetings.js";
 import { onModelsChange, openModels, speechReady } from "./models.js";
 import { showImport, transcribe } from "./processing.js";
 import { onLanguageChange, show } from "./screens.js";
+import { lastMeetingId } from "./transcript.js";
 
 const MIN_SPEAKERS = 1;
 const MAX_SPEAKERS = 10;
@@ -29,6 +32,8 @@ let startedAt = 0;
 let pausedAt = 0;
 let pausedMs = 0;
 let timer = null;
+// Встреча в карточке «Последняя расшифровка»: метаданные из списка встреч.
+let last = null;
 // Запись, восстановленная после падения приложения, пока её не расшифровали.
 let recovered = null;
 
@@ -99,6 +104,7 @@ function renderRecorder() {
   $("screen-home").classList.toggle("recording", recording);
   $("screen-home").classList.toggle("paused", paused);
   $("record-label").textContent = t(recording ? K.home_stop : K.home_record);
+  $("record-hint").textContent = t(recording ? K.home_stop_hint : K.home_record_hint);
   $("record").setAttribute("aria-label", t(recording ? K.home_stop : K.home_record));
   $("timer").hidden = !recording;
   if (recording) $("timer").textContent = `${t(paused ? K.home_paused : K.home_recording)}, ${clock(elapsedMs() / 1000)}`;
@@ -216,6 +222,30 @@ async function importFile() {
   }
 }
 
+// Карточка «Продолжить»: встреча, которую открывали последней. Список встреч
+// перечитывается при каждом показе главного экрана и передаёт сюда весь архив.
+// Если ничего ещё не открывали, карточки нет: список ниже и так показывает всё.
+let lastList = [];
+
+export function setLast(meetings) {
+  lastList = Array.isArray(meetings) ? meetings : [];
+  const id = lastMeetingId();
+  last = lastList.find((meeting) => meeting.id === id) ?? null;
+  $("last").hidden = !last;
+  if (!last) return;
+  $("last-file").textContent = meetingTitle(last.title, last.id);
+  $("last-meta").textContent = meetingMeta(last.title, last.id, last.duration_sec);
+}
+
+async function openLast() {
+  if (!last) return;
+  try {
+    await showMeeting(last.id);
+  } catch (error) {
+    notice(errorText(error), { code: errorCode(error) });
+  }
+}
+
 export function failed(text, code) {
   show("home");
   if (text) notice(text, { code });
@@ -245,8 +275,12 @@ export function initHome() {
   $("open-app-settings").addEventListener("click", () => invoke("open_app_settings").catch(() => null));
   $("recovered-transcribe").addEventListener("click", transcribeRecovered);
   $("models-open").addEventListener("click", openModels);
+  $("last").addEventListener("click", openLast);
   onModelsChange(renderModels);
-  onLanguageChange(renderRecorder);
+  onLanguageChange(() => {
+    renderRecorder();
+    setLast(lastList);
+  });
   renderCount();
   renderRecorder();
   offerRecovered();

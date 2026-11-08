@@ -22,6 +22,9 @@ export function setLanguage(code) {
     node.setAttribute("aria-label", text);
     node.title = text;
   }
+  for (const node of document.querySelectorAll("[data-i18n-placeholder]")) {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
+  }
 }
 
 export function language() {

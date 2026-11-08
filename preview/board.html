@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nixyon — design board</title>
+  <style>
+    @font-face {
+      font-family: "Manrope";
+      font-style: normal;
+      font-weight: 400 800;
+      font-display: swap;
+      src: url("../nixyon-app/ui/fonts/manrope-cyrillic.woff2") format("woff2");
+      unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+    }
+    @font-face {
+      font-family: "Manrope";
+      font-style: normal;
+      font-weight: 400 800;
+      font-display: swap;
+      src: url("../nixyon-app/ui/fonts/manrope-latin.woff2") format("woff2");
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100vh;
+      padding: 54px 58px 38px;
+      background:
+        radial-gradient(ellipse 60% 45% at 15% -10%, rgba(46, 76, 112, 0.55), transparent 70%),
+        radial-gradient(ellipse 60% 45% at 108% 40%, rgba(34, 62, 98, 0.36), transparent 68%),
+        linear-gradient(160deg, #0d0f11, #101112 50%, #090a0c);
+      color: #e8ebf0;
+      font-family: "Manrope", "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+    .top {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 40px;
+      margin-bottom: 34px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .mark {
+      position: relative;
+      display: block;
+      width: 58px;
+      height: 58px;
+      flex: none;
+      border-radius: 19px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      object-fit: cover;
+      box-shadow: 0 0 40px rgba(87, 153, 232, 0.16);
+    }
+    .brand-name {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.34em;
+    }
+    .brand-sub {
+      margin-top: 4px;
+      color: #9299a5;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.24em;
+    }
+    h1 {
+      max-width: 730px;
+      margin: 0;
+      font-size: 48px;
+      line-height: 1.02;
+      letter-spacing: -0.045em;
+      text-align: right;
+    }
+    h1 span {
+      display: block;
+      color: #8bbeff;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.24em;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 28px 24px;
+    }
+    figure { margin: 0; }
+    .frame {
+      position: relative;
+      padding: 7px;
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      border-radius: 30px;
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012));
+      box-shadow: 0 30px 60px -36px rgba(0, 0, 0, 0.9);
+    }
+    .frame::after {
+      content: "";
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      width: 66px;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.5);
+      transform: translateX(-50%);
+    }
+    img {
+      display: block;
+      width: 100%;
+      height: 300px;
+      object-fit: cover;
+      object-position: top center;
+      border-radius: 24px;
+      background: #101112;
+    }
+    figcaption {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 11px 6px 0;
+      color: #9299a5;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    figcaption b {
+      color: #8bbeff;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+    }
+    .bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 30px;
+      margin-top: 30px;
+      padding-top: 22px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      color: #9299a5;
+      font-size: 11px;
+      letter-spacing: 0.03em;
+    }
+    .palette { display: flex; align-items: center; gap: 9px; }
+    .swatch {
+      width: 23px;
+      height: 23px;
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      border-radius: 7px;
+    }
+    .palette-label { margin-right: 8px; font-size: 9px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; }
+    .meta { text-align: right; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand">
+      <img class="mark" src="../artifacts/app-icon-rounded-1024.png" alt="">
+      <div>
+        <div class="brand-name">NIXYON</div>
+        <div class="brand-sub">AUDIO INTELLIGENCE</div>
+      </div>
+    </div>
+    <h1><span>Design system · 01</span>Dark Ambient Futurism</h1>
+  </div>
+
+  <div class="grid">
+    <figure>
+      <div class="frame"><img src="../artifacts/onboarding.png" alt=""></div>
+      <figcaption><b>01</b> Первый запуск / инструкция</figcaption>
+    </figure>
+    <figure>
+      <div class="frame"><img src="../artifacts/home.png" alt=""></div>
+      <figcaption><b>02</b> Home / запись и архив</figcaption>
+    </figure>
+    <figure>
+      <div class="frame"><img src="../artifacts/search.png" alt=""></div>
+      <figcaption><b>03</b> Search / поиск по встречам</figcaption>
+    </figure>
+    <figure>
+      <div class="frame"><img src="../artifacts/recording.png" alt=""></div>
+      <figcaption><b>04</b> Recording / focus mode</figcaption>
+    </figure>
+    <figure>
+      <div class="frame"><img src="../artifacts/transcript.png" alt=""></div>
+      <figcaption><b>05</b> Transcript / эмоции и плеер</figcaption>
+    </figure>
+    <figure>
+      <div class="frame"><img src="../artifacts/models.png" alt=""></div>
+      <figcaption><b>06</b> Models / модели на устройстве</figcaption>
+    </figure>
+    <figure>
+      <div class="frame"><img src="../artifacts/settings.png" alt=""></div>
+      <figcaption><b>07</b> Settings / место и язык</figcaption>
+    </figure>
+    <figure>
+      <div class="frame"><img src="../artifacts/voices.png" alt=""></div>
+      <figcaption><b>08</b> Voices / библиотека голосов</figcaption>
+    </figure>
+  </div>
+
+  <div class="bottom">
+    <div class="palette">
+      <span class="palette-label">Palette</span>
+      <span class="swatch" style="background:#101112"></span>
+      <span class="swatch" style="background:#20242A"></span>
+      <span class="swatch" style="background:#5799E8"></span>
+      <span class="swatch" style="background:#8BBEFF"></span>
+      <span class="swatch" style="background:#E8EBF0"></span>
+      <span class="swatch" style="background:#9299A5"></span>
+      <span class="swatch" style="background:#64B99B"></span>
+      <span class="swatch" style="background:#E87979"></span>
+    </div>
+    <div class="meta">Manrope · 8 dp grid · 48 dp targets · edge-to-edge Android<br>Ambient glass · reduced motion · WCAG AA</div>
+  </div>
+</body>
+</html>

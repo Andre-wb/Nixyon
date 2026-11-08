@@ -1,5 +1,6 @@
 import { errorText, invoke } from "./api.js";
 import { $, el } from "./dom.js";
+import { setLast } from "./home.js";
 import { K, t } from "./i18n.js";
 import { initLabelFilter, loadLabelFilter, matchesFilter } from "./label-filter.js";
 import { hasMeetingQuery, initMeetingSearch, rerunMeetingSearch } from "./meeting-search.js";
@@ -62,6 +63,8 @@ async function load() {
     meetings = [];
     $("meetings-error").textContent = errorText(error);
   }
+  // Карточка «Продолжить» на главном экране берёт из архива последнюю открытую встречу.
+  setLast(meetings);
   render();
   rerunMeetingSearch();
 }

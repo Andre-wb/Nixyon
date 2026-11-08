@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1024, height=1024">
+  <title>Nixyon icon</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 1024px; height: 1024px; margin: 0; overflow: hidden; background: transparent; }
+    .bg, .fg { position: absolute; inset: 0; }
+    .bg {
+      background:
+        radial-gradient(circle at 24% 18%, rgba(87, 153, 232, 0.34), transparent 34%),
+        radial-gradient(circle at 82% 86%, rgba(65, 118, 190, 0.22), transparent 38%),
+        radial-gradient(circle at 50% 45%, #1a2230 0, #10151c 38%, #0b0d10 72%, #090b0e 100%);
+    }
+    .bg::before {
+      content: "";
+      position: absolute;
+      inset: -160px;
+      border-radius: 50%;
+      border: 1px solid rgba(139, 190, 255, 0.08);
+      box-shadow: 0 0 120px rgba(87, 153, 232, 0.14), inset 0 0 120px rgba(87, 153, 232, 0.06);
+    }
+    .halo {
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 640px; height: 640px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: radial-gradient(circle at 34% 28%, rgba(255,255,255,.07), transparent 36%), rgba(255,255,255,.018);
+      box-shadow: inset 0 1px 1px rgba(255,255,255,.06), inset 0 -60px 110px rgba(0,0,0,.32), 0 0 80px rgba(87,153,232,.12);
+      transform: translate(-50%, -50%);
+    }
+    .feather {
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 790px; height: 790px;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 0 30px rgba(87, 153, 232, 0.4)) drop-shadow(0 18px 38px rgba(0, 0, 0, 0.35));
+    }
+    body[data-layer="foreground"] .bg { display: none; }
+    body[data-layer="background"] .fg { display: none; }
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="fg">
+    <div class="halo"></div>
+    <svg class="feather" viewBox="0 0 64 64" fill="none">
+      <defs>
+        <linearGradient id="body" x1="14" y1="58" x2="50" y2="10" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#4F90DE"/>
+          <stop offset="0.52" stop-color="#8BBEFF"/>
+          <stop offset="1" stop-color="#EDF6FF"/>
+        </linearGradient>
+        <mask id="cut">
+          <path d="M48.2 9.4c-12.4.6-22.6 9.2-27.6 22.4-1.8 4.6-3.4 9.4-5 13.6l9.4-2.4c14.2-4 24.6-14.8 27.6-28.6.3-1.7.4-5.2-4.4-5Z" fill="white"/>
+          <g fill="black">
+            <rect x="20.4" y="34.5" width="3.0" height="7.0" rx="1.5"/>
+            <rect x="25.6" y="25.7" width="3.2" height="13.0" rx="1.6"/>
+            <rect x="30.8" y="17.9" width="3.4" height="17.0" rx="1.7"/>
+            <rect x="36.0" y="16.0" width="3.2" height="12.0" rx="1.6"/>
+            <rect x="41.2" y="13.2" width="3.0" height="6.0" rx="1.5"/>
+          </g>
+        </mask>
+      </defs>
+      <path d="M48.2 9.4c-12.4.6-22.6 9.2-27.6 22.4-1.8 4.6-3.4 9.4-5 13.6l9.4-2.4c14.2-4 24.6-14.8 27.6-28.6.3-1.7.4-5.2-4.4-5Z" fill="url(#body)" mask="url(#cut)"/>
+      <path d="M17.4 44.6 11.6 54.8" stroke="url(#body)" stroke-width="1.9" stroke-linecap="round" fill="none"/>
+    </svg>
+  </div>
+  <script>
+    const layer = new URLSearchParams(location.search).get("layer");
+    document.body.dataset.layer = layer || "full";
+  </script>
+</body>
+</html>

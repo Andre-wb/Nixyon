@@ -1,0 +1,22 @@
+# Текстовые файлы — LF в репозитории, независимо от системы разработчика.
+* text=auto eol=lf
+
+# Скрипты для оболочки остаются исполняемыми.
+*.sh text eol=lf
+*.py text eol=lf
+
+# Бинарные файлы не трогаются при переносе строк.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.woff2 binary
+*.ttf binary
+*.apk binary
+*.zip binary
+*.gguf binary
+*.onnx binary
+*.keystore binary
+*.jks binary
